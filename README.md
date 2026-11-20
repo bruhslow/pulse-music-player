@@ -23,7 +23,16 @@ A sleek, lightweight music player client mod built for modern Minecraft with Lun
 - `/mp hud move` - Drag and position the in-game HUD
 
 ## Installation
+
+### Client Installation
 Drop `pulse-music-player-1.0.0+26.x.jar` into your Minecraft or Lunar Client `mods` folder. Requires Fabric Loader and Fabric API.
+
+### Server-Side Installation (Optional for High-Performance Multiplayer)
+Drop `pulse-music-player-server-1.0.0+26.x.jar` (or the universal client JAR) into your Fabric server's `mods/` directory.
+- Enables native, zero-latency server packet routing for synced listening rooms.
+- Server directly synchronizes audio track position, play/pause states, and room membership.
+- Delivers private room invites seamlessly without needing external cloud relays.
+- *Note: If a server does not have the mod installed, Pulse automatically falls back to seamless peer-to-peer cloud rooms!*
 
 ## Author
 Developed by **Slowbag**.
