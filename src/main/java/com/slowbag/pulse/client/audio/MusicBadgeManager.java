@@ -164,9 +164,7 @@ public class MusicBadgeManager {
         String playerName = player.getName().getString();
 
         if (isPlayerListening(playerName)) {
-            return Component.literal(getBeatingMusicPrefix())
-                    .append(original)
-                    .append(Component.literal(" §e🎶"));
+            return Component.literal(getBeatingMusicPrefix()).append(original);
         } else if (isModUser(playerName)) {
             return Component.literal("§8[§e⚡§8] ").append(original);
         }

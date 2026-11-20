@@ -231,6 +231,10 @@ public class AudioManager {
         }
     }
 
+    public synchronized void setPaused(boolean paused) {
+        togglePauseRemote(paused);
+    }
+
     private InputStream openHttpStreamWithRedirects(String urlStr) throws Exception {
         try {
             return openSingleHttpStream(urlStr);

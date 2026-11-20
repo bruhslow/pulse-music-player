@@ -113,6 +113,8 @@ public class PartyManager {
 
     private String roomName = null;
     private String roomPassword = null;
+    private volatile String roomCode = null;
+    private static final String CLOUD_REGISTRY_URL = "https://api.restful-api.dev/objects/ff808181a09d98f701a1fab14e550b66";
     private boolean isHost = false;
     private volatile String currentHost = null;
     private final Set<String> members = new LinkedHashSet<>();
@@ -378,7 +380,7 @@ public class PartyManager {
         }
     }
 
-    private String getPlayerName() {
+    public String getPlayerName() {
         try {
             if (Minecraft.getInstance().player != null) {
                 return Minecraft.getInstance().player.getName().getString();
@@ -387,140 +389,376 @@ public class PartyManager {
         return "Player";
     }
 
+    public String getRoomCode() {
+        return roomCode != null ? roomCode : "";
+    }
+
+    // ------------------------------------------------------------------------
+    // Cloud Room Code Registry Operations (api.restful-api.dev)
+    // ------------------------------------------------------------------------
+
+    private JsonObject fetchCloudRooms() {
+        try {
+            URL url = new URI(CLOUD_REGISTRY_URL).toURL();
+            HttpURLConnection conn = (HttpURLConnection) url.openConnection();
+            conn.setRequestMethod("GET");
+            conn.setRequestProperty("User-Agent", "PulseMusicPlayer/1.5.9");
+            conn.setConnectTimeout(4000);
+            conn.setReadTimeout(4000);
+            if (conn.getResponseCode() == 200) {
+                try (InputStreamReader isr = new InputStreamReader(conn.getInputStream(), StandardCharsets.UTF_8)) {
+                    JsonObject root = JsonParser.parseReader(isr).getAsJsonObject();
+                    if (root.has("data") && root.get("data").isJsonObject()) {
+                        JsonObject data = root.getAsJsonObject("data");
+                        if (data.has("rooms") && data.get("rooms").isJsonObject()) {
+                            return data.getAsJsonObject("rooms");
+                        }
+                    }
+                }
+            }
+        } catch (Throwable ignored) {}
+        return new JsonObject();
+    }
+
+    private void saveCloudRoom(String code, JsonObject roomObj) {
+        partyExecutor.submit(() -> {
+            try {
+                JsonObject rooms = fetchCloudRooms();
+                rooms.add(code, roomObj);
+
+                JsonObject data = new JsonObject();
+                data.add("rooms", rooms);
+
+                JsonObject payload = new JsonObject();
+                payload.addProperty("name", "pulse_master_registry");
+                payload.add("data", data);
+
+                URL url = new URI(CLOUD_REGISTRY_URL).toURL();
+                HttpURLConnection conn = (HttpURLConnection) url.openConnection();
+                conn.setRequestMethod("PUT");
+                conn.setRequestProperty("Content-Type", "application/json; charset=utf-8");
+                conn.setRequestProperty("User-Agent", "PulseMusicPlayer/1.5.9");
+                conn.setDoOutput(true);
+                conn.setConnectTimeout(4000);
+                conn.setReadTimeout(4000);
+                try (OutputStream os = conn.getOutputStream()) {
+                    os.write(payload.toString().getBytes(StandardCharsets.UTF_8));
+                }
+                conn.getResponseCode();
+            } catch (Throwable ignored) {}
+        });
+    }
+
+    private void removeCloudRoom(String code) {
+        partyExecutor.submit(() -> {
+            try {
+                JsonObject rooms = fetchCloudRooms();
+                if (rooms.has(code)) {
+                    rooms.remove(code);
+                    JsonObject data = new JsonObject();
+                    data.add("rooms", rooms);
+
+                    JsonObject payload = new JsonObject();
+                    payload.addProperty("name", "pulse_master_registry");
+                    payload.add("data", data);
+
+                    URL url = new URI(CLOUD_REGISTRY_URL).toURL();
+                    HttpURLConnection conn = (HttpURLConnection) url.openConnection();
+                    conn.setRequestMethod("PUT");
+                    conn.setRequestProperty("Content-Type", "application/json; charset=utf-8");
+                    conn.setRequestProperty("User-Agent", "PulseMusicPlayer/1.5.9");
+                    conn.setDoOutput(true);
+                    conn.setConnectTimeout(4000);
+                    conn.setReadTimeout(4000);
+                    try (OutputStream os = conn.getOutputStream()) {
+                        os.write(payload.toString().getBytes(StandardCharsets.UTF_8));
+                    }
+                    conn.getResponseCode();
+                }
+            } catch (Throwable ignored) {}
+        });
+    }
+
+    private void removeGuestFromCloudRoom(String code, String guestName) {
+        partyExecutor.submit(() -> {
+            try {
+                JsonObject rooms = fetchCloudRooms();
+                if (rooms.has(code)) {
+                    JsonObject r = rooms.getAsJsonObject(code);
+                    if (r.has("members") && r.get("members").isJsonArray()) {
+                        JsonArray oldArr = r.getAsJsonArray("members");
+                        JsonArray newArr = new JsonArray();
+                        for (JsonElement e : oldArr) {
+                            if (!e.getAsString().equalsIgnoreCase(guestName)) {
+                                newArr.add(e);
+                            }
+                        }
+                        r.add("members", newArr);
+                        saveCloudRoom(code, r);
+                    }
+                }
+            } catch (Throwable ignored) {}
+        });
+    }
+
+    public void publishHostRoomState() {
+        if (!isHost || roomCode == null) return;
+        AudioManager am = AudioManager.getInstance();
+        AudioTrack t = am.getCurrentTrack();
+
+        JsonObject r = new JsonObject();
+        r.addProperty("code", roomCode);
+        r.addProperty("roomName", roomName != null ? roomName : "Pulse Room");
+        r.addProperty("host", currentHost != null ? currentHost : getPlayerName());
+        r.addProperty("isPaused", am.isPaused() || !am.isPlaying());
+        r.addProperty("elapsed", am.getElapsedSeconds());
+        r.addProperty("lastHeartbeat", System.currentTimeMillis());
+
+        if (t != null) {
+            r.addProperty("trackTitle", t.getTitle());
+            r.addProperty("trackArtist", t.getArtist());
+            r.addProperty("trackUrl", t.getUrl());
+            r.addProperty("artworkUrl", t.getArtworkUrl() != null ? t.getArtworkUrl() : "");
+            r.addProperty("duration", t.getDurationSeconds());
+        }
+
+        JsonArray memArr = new JsonArray();
+        synchronized (this) {
+            for (String m : members) {
+                memArr.add(m);
+            }
+        }
+        r.add("members", memArr);
+
+        saveCloudRoom(roomCode, r);
+    }
+
+    private void syncFromRoomJson(JsonObject r) {
+        if (r.has("trackUrl") && !r.get("trackUrl").getAsString().isBlank()) {
+            String title = r.has("trackTitle") ? r.get("trackTitle").getAsString() : "Party Track";
+            String artist = r.has("trackArtist") ? r.get("trackArtist").getAsString() : "Host";
+            String url = r.get("trackUrl").getAsString();
+            String artwork = r.has("artworkUrl") ? r.get("artworkUrl").getAsString() : null;
+            long duration = r.has("duration") ? r.get("duration").getAsLong() : -1;
+            long hostElapsed = r.has("elapsed") ? r.get("elapsed").getAsLong() : 0;
+            boolean isPaused = r.has("isPaused") && r.get("isPaused").getAsBoolean();
+
+            AudioTrack current = AudioManager.getInstance().getCurrentTrack();
+            boolean isPlaying = AudioManager.getInstance().isPlaying();
+
+            if (current == null || !url.equals(current.getUrl())) {
+                AudioTrack syncTrack = new AudioTrack(title, artist, url, false, duration, "Room", artwork);
+                Minecraft.getInstance().execute(() -> {
+                    AudioManager.getInstance().playTrackInternal(syncTrack, false, Math.max(0, hostElapsed));
+                    if (isPaused) {
+                        AudioManager.getInstance().togglePauseRemote(true);
+                    }
+                });
+            } else {
+                long myElapsed = AudioManager.getInstance().getElapsedSeconds();
+                if (Math.abs(myElapsed - hostElapsed) > 4) {
+                    AudioTrack syncTrack = new AudioTrack(title, artist, url, false, duration, "Room", artwork);
+                    Minecraft.getInstance().execute(() -> {
+                        AudioManager.getInstance().playTrackInternal(syncTrack, false, Math.max(0, hostElapsed));
+                    });
+                }
+                if (AudioManager.getInstance().isPaused() != isPaused) {
+                    Minecraft.getInstance().execute(() -> {
+                        AudioManager.getInstance().togglePauseRemote(isPaused);
+                    });
+                }
+            }
+        }
+    }
+
+    private void startCloudHostLoop() {
+        this.roomListening = true;
+        partyExecutor.submit(() -> {
+            while (roomListening && isInRoom() && isHost) {
+                try {
+                    Thread.sleep(1500);
+                    if (!roomListening || !isInRoom() || !isHost) break;
+
+                    publishHostRoomState();
+
+                    // Check for new members from cloud
+                    if (roomCode != null) {
+                        JsonObject rooms = fetchCloudRooms();
+                        if (rooms.has(roomCode)) {
+                            JsonObject r = rooms.getAsJsonObject(roomCode);
+                            if (r.has("members") && r.get("members").isJsonArray()) {
+                                for (JsonElement e : r.getAsJsonArray("members")) {
+                                    String mem = e.getAsString();
+                                    boolean isNew = false;
+                                    synchronized (this) {
+                                        if (!members.contains(mem)) {
+                                            members.add(mem);
+                                            isNew = true;
+                                        }
+                                    }
+                                    if (isNew) {
+                                        Minecraft client = Minecraft.getInstance();
+                                        if (client.player != null) {
+                                            client.player.sendSystemMessage(Component.literal("§a[Pulse] 👥 §f" + mem + " §ajoined your room! 🎶"));
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                } catch (InterruptedException e) {
+                    break;
+                } catch (Throwable ignored) {}
+            }
+        });
+    }
+
+    private void startCloudGuestLoop(String code) {
+        this.roomListening = true;
+        partyExecutor.submit(() -> {
+            while (roomListening && isInRoom() && !isHost) {
+                try {
+                    Thread.sleep(1500);
+                    if (!roomListening || !isInRoom() || isHost) break;
+
+                    JsonObject rooms = fetchCloudRooms();
+                    if (rooms.has(code)) {
+                        JsonObject r = rooms.getAsJsonObject(code);
+                        if (r.has("members") && r.get("members").isJsonArray()) {
+                            synchronized (this) {
+                                members.clear();
+                                if (currentHost != null) members.add(currentHost);
+                                for (JsonElement e : r.getAsJsonArray("members")) {
+                                    members.add(e.getAsString());
+                                }
+                                members.add(getPlayerName());
+                            }
+                        }
+                        syncFromRoomJson(r);
+                    } else {
+                        // Room was disbanded by host
+                        Minecraft client = Minecraft.getInstance();
+                        if (client.player != null) {
+                            client.player.sendSystemMessage(Component.literal("§c[Pulse] The room was closed by the host."));
+                        }
+                        leaveRoomInternal(false);
+                        break;
+                    }
+                } catch (InterruptedException e) {
+                    break;
+                } catch (Throwable ignored) {}
+            }
+        });
+    }
+
     // ------------------------------------------------------------------------
     // Room Lifecycle Management
     // ------------------------------------------------------------------------
 
     public synchronized void createRoom(String name, String password) {
-        if (name == null || name.trim().isEmpty()) {
-            name = getPlayerName() + "'s Room";
-        }
-        name = name.trim();
-        String pass = (password != null) ? password.trim() : "";
-
         leaveRoomInternal(false);
 
-        this.roomName = name;
-        this.roomPassword = pass;
-        this.isHost = true;
-        this.currentHost = getPlayerName();
-        this.members.clear();
-        this.memberLastSeen.clear();
         String myName = getPlayerName();
+        if (name == null || name.trim().isEmpty()) {
+            name = myName + "'s Room";
+        }
+        name = name.trim();
+
+        // Generate clean 5-digit room code
+        this.roomCode = String.format("%05d", new java.util.Random().nextInt(90000) + 10000);
+        this.roomName = name;
+        this.roomPassword = "";
+        this.isHost = true;
+        this.currentHost = myName;
+        this.members.clear();
         this.members.add(myName);
+        this.memberLastSeen.clear();
         this.memberLastSeen.put(myName.toLowerCase(), System.currentTimeMillis());
+
+        // Publish to Cloud Registry immediately
+        publishHostRoomState();
 
         if (isServerNetworkingActive()) {
             JsonObject obj = new JsonObject();
             obj.addProperty("action", "create_room");
             obj.addProperty("room", name);
-            obj.addProperty("password", pass);
+            obj.addProperty("code", this.roomCode);
             ClientPlayNetworking.send(new PulseNetworkPayload(obj.toString()));
         }
 
-        startRoomListener(sanitizeTopic(name));
-        startHostHeartbeat();
-
-        // Broadcast room creation to directory
-        broadcastRoomPresence();
+        startCloudHostLoop();
 
         Minecraft client = Minecraft.getInstance();
         if (client.player != null) {
-            String tag = !pass.isEmpty() ? "§e[🔒 Password Protected]" : "§b[🔓 Public]";
-            client.player.sendSystemMessage(Component.literal("§a[Pulse] Created room '§f" + name + "§a' " + tag + "!"));
+            client.player.sendSystemMessage(Component.literal("§a[Pulse] Created private room! Room Code: §e§l" + this.roomCode + " §7(Share this code with friends to listen together)"));
         }
     }
 
-    public synchronized boolean joinRoom(String name, String password) {
-        if (name == null || name.trim().isEmpty()) return false;
-        name = name.trim();
-        if (name.startsWith("\"") && name.endsWith("\"") && name.length() > 1) {
-            name = name.substring(1, name.length() - 1).trim();
+    public synchronized boolean joinRoomByCode(String code) {
+        if (code == null || code.trim().isEmpty()) return false;
+        code = code.trim().toUpperCase();
+
+        leaveRoomInternal(false);
+        String myName = getPlayerName();
+
+        // 1. Check Cloud Registry for room code
+        JsonObject rooms = fetchCloudRooms();
+        if (rooms.has(code)) {
+            JsonObject r = rooms.getAsJsonObject(code);
+            this.roomCode = code;
+            this.roomName = r.has("roomName") ? r.get("roomName").getAsString() : "Room " + code;
+            this.currentHost = r.has("host") ? r.get("host").getAsString() : "Host";
+            this.isHost = myName.equalsIgnoreCase(this.currentHost);
+            this.members.clear();
+            this.members.add(this.currentHost);
+            this.members.add(myName);
+
+            if (r.has("members") && r.get("members").isJsonArray()) {
+                for (JsonElement e : r.getAsJsonArray("members")) {
+                    this.members.add(e.getAsString());
+                }
+            }
+
+            // Immediately register self in cloud room
+            if (!this.members.contains(myName)) {
+                this.members.add(myName);
+            }
+            saveCloudRoom(code, r);
+
+            // Sync audio track immediately
+            syncFromRoomJson(r);
+
+            // Start guest polling loop
+            startCloudGuestLoop(code);
+
+            Minecraft client = Minecraft.getInstance();
+            if (client.player != null) {
+                client.player.sendSystemMessage(Component.literal("§a[Pulse] 🎉 Connected to room §e#" + code + "§a! Enjoy music together ~ 🎶"));
+            }
+            return true;
         }
-        String pass = (password != null) ? password.trim() : "";
 
-        // If player was directly invited to this room, bypass password check!
-        boolean isInvited = invitedRooms.remove(name.toLowerCase()) || invitedRooms.remove(name.replace("\"", "").toLowerCase().trim());
-
+        // 2. Server Networking fallback if on same Fabric server
         if (isServerNetworkingActive()) {
             JsonObject obj = new JsonObject();
             obj.addProperty("action", "join_room");
-            obj.addProperty("room", name);
-            obj.addProperty("password", pass);
+            obj.addProperty("room", code);
+            obj.addProperty("code", code);
             ClientPlayNetworking.send(new PulseNetworkPayload(obj.toString()));
-        }
-
-        if (!isInvited) {
-            // Check if room in discovered list requires password
-            for (RoomEntry re : discoveredRooms) {
-                if (re.getName().equalsIgnoreCase(name)) {
-                    if (re.hasPassword() && !re.getPassword().isEmpty() && !re.getPassword().equals(pass)) {
-                        Minecraft client = Minecraft.getInstance();
-                        if (client.player != null) {
-                            client.player.sendSystemMessage(Component.literal("§c[Pulse] Incorrect password for room '" + name + "'!"));
-                        }
-                        return false;
-                    }
-                    break;
-                }
-            }
-        }
-
-        leaveRoomInternal(false);
-
-        this.roomName = name;
-        this.roomPassword = pass;
-        this.members.clear();
-        this.memberLastSeen.clear();
-
-        String myName = getPlayerName();
-        String hostRaw = "";
-        for (RoomEntry re : discoveredRooms) {
-            if (re.getName().equalsIgnoreCase(name)) {
-                if (re.getHost() != null && !re.getHost().isBlank()) {
-                    hostRaw = re.getHost().trim();
-                }
-                break;
-            }
-        }
-
-        if (!hostRaw.isEmpty() && hostRaw.equalsIgnoreCase(myName)) {
-            // Player is the host
-            this.isHost = true;
-            this.currentHost = myName;
-        } else {
+            this.roomCode = code;
+            this.roomName = "Room " + code;
             this.isHost = false;
-            this.currentHost = hostRaw.isEmpty() ? "Host" : hostRaw;
-        }
-        this.members.add(this.currentHost);
-        this.members.add(myName);
-        this.memberLastSeen.put(this.currentHost.toLowerCase(), System.currentTimeMillis());
-        this.memberLastSeen.put(myName.toLowerCase(), System.currentTimeMillis());
-
-        startRoomListener(sanitizeTopic(name));
-        if (this.isHost) {
-            startHostHeartbeat();
-        } else {
-            startMemberHeartbeat();
+            this.currentHost = "Host";
+            this.members.clear();
+            this.members.add(myName);
+            return true;
         }
 
-        // Send join packet to room
-        JsonObject msg = new JsonObject();
-        msg.addProperty("type", "join");
-        msg.addProperty("sender", myName);
-        sendNtfyMessage("pulse_room_" + sanitizeTopic(name), msg);
+        return false;
+    }
 
-        // Prompt host for immediate track & state sync
-        JsonObject req = new JsonObject();
-        req.addProperty("type", "request_sync");
-        req.addProperty("sender", myName);
-        sendNtfyMessage("pulse_room_" + sanitizeTopic(name), req);
-
-        Minecraft client = Minecraft.getInstance();
-        if (client.player != null) {
-            client.player.sendSystemMessage(Component.literal("§a[Pulse] Joined room '§f" + name + "§a'!"));
-        }
-        return true;
+    public synchronized boolean joinRoom(String name, String password) {
+        return joinRoomByCode(name);
     }
 
     public synchronized void leaveRoom() {
@@ -543,47 +781,30 @@ public class PartyManager {
     }
 
     private synchronized void leaveRoomInternal(boolean notifyUser) {
-        if (isServerNetworkingActive()) {
-            JsonObject obj = new JsonObject();
-            obj.addProperty("action", isHost ? "disband_room" : "leave_room");
-            obj.addProperty("room", roomName != null ? roomName : "");
-            ClientPlayNetworking.send(new PulseNetworkPayload(obj.toString()));
-        }
-        if (roomName != null) {
-            String topic = "pulse_room_" + sanitizeTopic(roomName);
-
-            if (isHost) {
-                // Host left: disband room for all listening members
-                JsonObject disband = new JsonObject();
-                disband.addProperty("type", "disband");
-                disband.addProperty("sender", getPlayerName());
-                disband.addProperty("room", roomName);
-                sendNtfyMessage(topic, disband);
-
-                // Send close to global directory
-                JsonObject close = new JsonObject();
-                close.addProperty("type", "room_close");
-                close.addProperty("name", roomName);
-                sendNtfyMessage("pulse_rooms_global", close);
+        this.roomListening = false;
+        if (this.roomCode != null) {
+            String code = this.roomCode;
+            if (this.isHost) {
+                removeCloudRoom(code);
             } else {
-                JsonObject msg = new JsonObject();
-                msg.addProperty("type", "leave");
-                msg.addProperty("sender", getPlayerName());
-                sendNtfyMessage(topic, msg);
+                removeGuestFromCloudRoom(code, getPlayerName());
             }
         }
 
-        final String leavingRoom = roomName;
-        if (leavingRoom != null) {
-            discoveredRooms.removeIf(r -> r.getName().equalsIgnoreCase(leavingRoom));
+        if (isServerNetworkingActive() && this.roomName != null) {
+            JsonObject obj = new JsonObject();
+            obj.addProperty("action", isHost ? "disband_room" : "leave_room");
+            obj.addProperty("room", roomName);
+            ClientPlayNetworking.send(new PulseNetworkPayload(obj.toString()));
         }
 
-        this.roomListening = false;
         this.roomName = null;
+        this.roomCode = null;
         this.roomPassword = null;
         this.isHost = false;
         this.currentHost = null;
         this.members.clear();
+        this.memberLastSeen.clear();
 
         if (notifyUser) {
             Minecraft client = Minecraft.getInstance();
@@ -644,12 +865,14 @@ public class PartyManager {
 
     public void broadcastTrackIfHost(AudioTrack track) {
         if (!isInRoom() || !isHost || track == null) return;
+        publishHostRoomState();
 
         JsonObject msg = new JsonObject();
         msg.addProperty("action", "track_sync");
         msg.addProperty("type", "track_sync");
         msg.addProperty("sender", getPlayerName());
         msg.addProperty("room", roomName);
+        msg.addProperty("code", roomCode != null ? roomCode : "");
         msg.addProperty("title", track.getTitle());
         msg.addProperty("artist", track.getArtist());
         msg.addProperty("url", track.getUrl());
@@ -664,36 +887,16 @@ public class PartyManager {
         if (isServerNetworkingActive()) {
             ClientPlayNetworking.send(new PulseNetworkPayload(msg.toString()));
         }
-
-        sendNtfyMessage("pulse_room_" + sanitizeTopic(roomName), msg);
-
-        // Also announce on server party channel so other mod users on this server are notified/auto-synced!
-        try {
-            JsonObject srvParty = new JsonObject();
-            srvParty.addProperty("type", "server_music_party");
-            srvParty.addProperty("host", getPlayerName());
-            srvParty.addProperty("room", roomName);
-            srvParty.addProperty("title", track.getTitle());
-            sendNtfyMessage("pulse_srv_" + getServerIdentifier(), srvParty);
-        } catch (Throwable ignored) {}
     }
 
     public void broadcastPauseIfHost(boolean isPaused) {
         if (!isInRoom() || !isHost) return;
-        JsonObject msg = new JsonObject();
-        msg.addProperty("type", "pause_sync");
-        msg.addProperty("sender", getPlayerName());
-        msg.addProperty("paused", isPaused);
-        sendNtfyMessage("pulse_room_" + sanitizeTopic(roomName), msg);
+        publishHostRoomState();
     }
 
     public void broadcastSeekIfHost(double ratio) {
         if (!isInRoom() || !isHost) return;
-        JsonObject msg = new JsonObject();
-        msg.addProperty("type", "seek_sync");
-        msg.addProperty("sender", getPlayerName());
-        msg.addProperty("ratio", ratio);
-        sendNtfyMessage("pulse_room_" + sanitizeTopic(roomName), msg);
+        publishHostRoomState();
     }
 
     public void requestSync() {

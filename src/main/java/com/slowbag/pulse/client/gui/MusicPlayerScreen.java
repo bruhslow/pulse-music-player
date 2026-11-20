@@ -70,6 +70,8 @@ public class MusicPlayerScreen extends Screen {
     private boolean isUrlFocused = false;
 
     // Rooms (Live Group Rooms | Operations) inputs & scrolling
+    private String joinRoomCodeInput = "";
+    private boolean isJoinRoomCodeFocused = false;
     private String newRoomName = "";
     private boolean isRoomNameFocused = false;
     private String newRoomPassword = "";
@@ -746,105 +748,82 @@ public class MusicPlayerScreen extends Screen {
             }
 
         } else if (selectedTab == 4) {
-            // Tab 4: Live Group Rooms | Operations
+            // Tab 4: Private Group Rooms (Synchronized listening across servers)
             if (!partyManager.isInRoom()) {
-                graphics.text(this.font, Component.literal("§f§l👥 Group Listening Rooms"), x + 10, y + 2, 0xFFFFFFFF, true);
+                graphics.text(this.font, Component.literal("§f§l🔑 Private Sync Rooms"), x + 10, y + 2, 0xFFFFFFFF, true);
+                graphics.text(this.font, Component.literal("§7Listen together synchronously across all servers with a 5-digit code!"), x + 10, y + 14, 0xFFA0988E, false);
 
-                // Refresh Button (Clean cream pill)
-                int refW = 54;
-                int refX = x + w - refW - 10;
-                boolean refHover = mouseX >= refX && mouseX <= refX + refW && mouseY >= y && mouseY <= y + 16;
-                graphics.fill(refX, y, refX + refW, y + 16, refHover ? 0xFFFFFFFF : 0xFFEFEBE4);
-                graphics.outline(refX, y, refW, 16, refHover ? 0xFFD97746 : 0x40000000);
-                drawCleanCenteredText(graphics, "Refresh", refX + refW / 2, y + 4, 0xFF000000);
+                // Section 1: Join Room with Code Card
+                int joinCardY = y + 28;
+                int joinCardH = 46;
+                graphics.fill(x + 10, joinCardY, x + w - 10, joinCardY + joinCardH, 0x18FFFFFF);
+                graphics.outline(x + 10, joinCardY, w - 20, joinCardH, 0x25FFFFFF);
+                graphics.text(this.font, Component.literal("§e✦ Join Room by Code:"), x + 16, joinCardY + 4, 0xFFFFFFFF, true);
 
-                // Create Room section anchored at bottom of card
-                int createSectionY = y + h - 42;
+                int codeBoxX = x + 16;
+                int codeBoxY = joinCardY + 18;
+                int joinBtnW = 68;
+                int codeBoxW = Math.max(80, w - 20 - 16 - joinBtnW - 8);
 
-                // Discovered Public Rooms List
-                List<PartyManager.RoomEntry> rooms = partyManager.getDiscoveredRooms();
-                int roomListY = y + 20;
-                int listAvailH = createSectionY - roomListY - 4;
-                int maxListItems = Math.max(3, listAvailH / 26);
+                // Code Input Box (curvy corners)
+                graphics.fill(codeBoxX + 2, codeBoxY, codeBoxX + codeBoxW - 2, codeBoxY + 20, 0x60000000);
+                graphics.fill(codeBoxX, codeBoxY + 2, codeBoxX + codeBoxW, codeBoxY + 18, 0x60000000);
+                int boxOutline = isJoinRoomCodeFocused ? 0xFFD97746 : 0x35FFFFFF;
+                graphics.outline(codeBoxX, codeBoxY, codeBoxW, 20, boxOutline);
 
-                if (rooms.isEmpty()) {
-                    graphics.fill(x + 10, roomListY, x + w - 10, roomListY + 24, 0x14FFFFFF);
-                    graphics.outline(x + 10, roomListY, w - 20, 24, 0x20FFFFFF);
-                    graphics.centeredText(this.font, Component.literal("§8Other custom rooms will appear here • Or click + Create below!"), x + w / 2, roomListY + 8, 0xFF8A8278);
+                if (joinRoomCodeInput.isEmpty()) {
+                    graphics.text(this.font, Component.literal(isJoinRoomCodeFocused ? "§7_" : "§8Enter 5-digit code (e.g. 84920)..."), codeBoxX + 6, codeBoxY + 6, 0xFFFFFFFF, false);
                 } else {
-                    int rStart = Math.min(roomScrollOffset, Math.max(0, rooms.size() - maxListItems));
-                    int rEnd = Math.min(rooms.size(), rStart + maxListItems);
-                    int curY = roomListY;
-
-                    for (int i = rStart; i < rEnd; i++) {
-                        PartyManager.RoomEntry re = rooms.get(i);
-                        boolean isHover = mouseX >= x + 10 && mouseX <= x + w - 10 && mouseY >= curY && mouseY <= curY + 22;
-                        graphics.fill(x + 10, curY, x + w - 10, curY + 22, isHover ? 0x30D97746 : 0x14FFFFFF);
-                        graphics.outline(x + 10, curY, w - 20, 22, isHover ? 0xFFD97746 : 0x25FFFFFF);
-
-                        String lock = re.hasPassword() ? "§e🔒 " : "§a● ";
-                        String tag = re.hasPassword() ? " §8[§eLocked§8]" : " §8[§aOpen§8]";
-                        graphics.text(this.font, Component.literal(lock + "§f§l" + truncate(re.getName(), 14) + tag), x + 16, curY + 3, 0xFFFFFFFF, true);
-                        graphics.text(this.font, Component.literal("§7Host: §f" + truncate(re.getHost(), 12) + " §8• §6" + re.getMemberCount() + " listening"), x + 16, curY + 12, 0xFFA0988E, false);
-
-                        // Pill "▶ Join" / "🔒 Join" button
-                        int joinBtnW = 46;
-                        int joinBtnX = x + w - joinBtnW - 14;
-                        boolean joinHover = mouseX >= joinBtnX && mouseX <= joinBtnX + joinBtnW && mouseY >= curY + 3 && mouseY <= curY + 19;
-                        graphics.fill(joinBtnX, curY + 3, joinBtnX + joinBtnW, curY + 19, joinHover ? 0xFFFFFFFF : 0xFFEFEBE4);
-                        graphics.outline(joinBtnX, curY + 3, joinBtnW, 16, joinHover ? 0xFFD97746 : 0x40000000);
-                        drawCleanCenteredText(graphics, re.hasPassword() ? "🔒 Join" : "▶ Join", joinBtnX + joinBtnW / 2, curY + 4, 0xFF000000);
-
-                        curY += 26;
-                    }
+                    String cursor = isJoinRoomCodeFocused && (System.currentTimeMillis() / 500 % 2 == 0) ? "§6_" : "";
+                    graphics.text(this.font, Component.literal("§f§l" + joinRoomCodeInput + cursor), codeBoxX + 6, codeBoxY + 6, 0xFFFFFFFF, false);
                 }
 
-                // Create Room section
-                graphics.fill(x + 10, createSectionY, x + w - 10, createSectionY + 1, 0x20FFFFFF);
-                graphics.text(this.font, Component.literal("§6✦ Create a Synchronized Room:"), x + 10, createSectionY + 4, 0xFFFFFFFF, true);
+                // Join Pill Button
+                int joinBtnX = codeBoxX + codeBoxW + 8;
+                drawGlassButton(graphics, joinBtnX, codeBoxY, joinBtnW, 20, "§f▶ Join", 0xFFD97746, mouseX, mouseY);
 
-                int nameBoxX = x + 10;
-                int nameBoxY = createSectionY + 16;
-                int availW = w - 20;
-                int createBtnW = 76;
-                int inputsW = availW - createBtnW - 12;
-                int nameBoxW = inputsW * 52 / 100;
-                int passBoxW = inputsW * 48 / 100;
+                // Section 2: Host Private Room Card
+                int hostCardY = joinCardY + joinCardH + 8;
+                int hostCardH = 46;
+                graphics.fill(x + 10, hostCardY, x + w - 10, hostCardY + hostCardH, 0x18FFFFFF);
+                graphics.outline(x + 10, hostCardY, w - 20, hostCardH, 0x25FFFFFF);
+                graphics.text(this.font, Component.literal("§6✧ Host Your Own Room:"), x + 16, hostCardY + 4, 0xFFFFFFFF, true);
+                graphics.text(this.font, Component.literal("§7Get a 5-digit code to share. Songs you play sync to all listeners."), x + 16, hostCardY + 16, 0xFFA0988E, false);
 
-                // Name Box
-                graphics.fill(nameBoxX, nameBoxY, nameBoxX + nameBoxW, nameBoxY + 18, 0x60000000);
-                graphics.outline(nameBoxX, nameBoxY, nameBoxW, 18, isRoomNameFocused ? 0xFFD97746 : 0x35FFFFFF);
-                String nameDisp = newRoomName.isEmpty() ? (isRoomNameFocused ? "" : "§8Room Name...") : newRoomName;
-                graphics.text(this.font, Component.literal(truncate(nameDisp, 14)), nameBoxX + 6, nameBoxY + 5, 0xFFFFFFFF, false);
-
-                // Password Box
-                int passBoxX = nameBoxX + nameBoxW + 6;
-                graphics.fill(passBoxX, nameBoxY, passBoxX + passBoxW, nameBoxY + 18, 0x60000000);
-                graphics.outline(passBoxX, nameBoxY, passBoxW, 18, isRoomPasswordFocused ? 0xFFD97746 : 0x35FFFFFF);
-                String passDisp = newRoomPassword.isEmpty() ? (isRoomPasswordFocused ? "" : "§8Password (opt)...") : newRoomPassword;
-                graphics.text(this.font, Component.literal(truncate(passDisp, 14)), passBoxX + 6, nameBoxY + 5, 0xFFFFFFFF, false);
-
-                // Warm bronze/terracotta "+ Create" Pill Button
-                int createBtnX = passBoxX + passBoxW + 6;
-                boolean createHover = mouseX >= createBtnX && mouseX <= createBtnX + createBtnW && mouseY >= nameBoxY && mouseY <= nameBoxY + 18;
-                graphics.fill(createBtnX, nameBoxY, createBtnX + createBtnW, nameBoxY + 18, createHover ? 0xFFE0783E : 0xFFD97746);
-                graphics.outline(createBtnX, nameBoxY, createBtnW, 18, createHover ? 0xFFFFFFFF : 0x40FFFFFF);
-                graphics.centeredText(this.font, Component.literal("§f+ Create"), createBtnX + createBtnW / 2, nameBoxY + 5, 0xFFFFFFFF);
+                // Host Create Button
+                int createBtnX = x + 16;
+                int createBtnY = hostCardY + 26;
+                int createBtnW = 110;
+                drawGlassButton(graphics, createBtnX, createBtnY, createBtnW, 16, "§f➕ Create Room", 0x30FFFFFF, mouseX, mouseY);
 
             } else {
                 // IN A ROOM VIEW: Clean, modern, distraction-free
                 int infoY = y + 2;
-                graphics.text(this.font, Component.literal("§6● §fRoom: §6§l" + partyManager.getRoomName() + " §8(Live Synced)"), x + 12, infoY, 0xFFD97746, true);
+                graphics.text(this.font, Component.literal("§6● §fRoom: §6§l" + partyManager.getRoomName()), x + 12, infoY, 0xFFD97746, true);
                 String roleTag = partyManager.isHost() ? "§e★ You are Host §7(Music you play syncs automatically to everyone)" : "§a✔ Connected & Synced §7(Listening to Host in real-time)";
                 graphics.text(this.font, Component.literal(roleTag), x + 12, infoY + 12, 0xFFA0988E, false);
 
+                // Big Room Code Highlight Banner
+                int codeBannerY = infoY + 25;
+                int codeBannerH = 26;
+                graphics.fill(x + 12, codeBannerY, x + w - 12, codeBannerY + codeBannerH, 0x25D97746);
+                graphics.outline(x + 12, codeBannerY, w - 24, codeBannerH, 0x80D97746);
+                String code = partyManager.getRoomCode();
+                graphics.text(this.font, Component.literal("§7Room Code: §6§l§n" + (code.isEmpty() ? "---" : code) + "§r §8(Share this code to let friends join)"), x + 18, codeBannerY + 9, 0xFFFFFFFF, false);
+
+                // Copy Code Pill Button
+                int copyBtnW = 76;
+                int copyBtnX = x + w - 12 - copyBtnW - 4;
+                int copyBtnY = codeBannerY + 4;
+                drawGlassButton(graphics, copyBtnX, copyBtnY, copyBtnW, 18, "§f📋 Copy", 0x30FFFFFF, mouseX, mouseY);
+
                 // Connected Listeners Box
-                int memY = infoY + 26;
+                int memY = codeBannerY + 32;
                 List<String> members = partyManager.getMembers();
                 graphics.text(this.font, Component.literal("§7Connected Listeners §f(" + members.size() + "):"), x + 12, memY, 0xFFFFFFFF, true);
                 memY += 12;
 
-                int dispMems = Math.min(members.size(), 6);
+                int dispMems = Math.min(members.size(), 4);
                 for (int i = 0; i < dispMems; i++) {
                     String mem = members.get(i);
                     boolean isHostMem = mem.contains("Host");
@@ -858,28 +837,17 @@ public class MusicPlayerScreen extends Screen {
                 // Sleek Action Buttons Row at bottom of Room card
                 int actionY = y + h - 22;
 
-                // Button 1: Copy Room Name (Cream Pill)
-                int copyBtnW = 74;
-                int copyBtnX = x + 12;
-                boolean copyHover = mouseX >= copyBtnX && mouseX <= copyBtnX + copyBtnW && mouseY >= actionY && mouseY <= actionY + 16;
-                graphics.fill(copyBtnX, actionY, copyBtnX + copyBtnW, actionY + 16, copyHover ? 0xFFFFFFFF : 0xFFEFEBE4);
-                graphics.outline(copyBtnX, actionY, copyBtnW, 16, copyHover ? 0xFFD97746 : 0x40000000);
-                graphics.centeredText(this.font, Component.literal("§0📋 Copy Name"), copyBtnX + copyBtnW / 2, actionY + 4, 0xFF000000);
-
-                // Button 2: If Member, Re-sync button (Amber Pill); If Host, Invite Tip
+                // Button 1: If Member, Re-sync button (Amber Pill); If Host, Tip
                 if (!partyManager.isHost()) {
                     int syncBtnW = 68;
-                    int syncBtnX = copyBtnX + copyBtnW + 6;
-                    boolean syncHover = mouseX >= syncBtnX && mouseX <= syncBtnX + syncBtnW && mouseY >= actionY && mouseY <= actionY + 16;
-                    graphics.fill(syncBtnX, actionY, syncBtnX + syncBtnW, actionY + 16, syncHover ? 0xFFE0783E : 0xFFD97746);
-                    graphics.outline(syncBtnX, actionY, syncBtnW, 16, 0x40FFFFFF);
-                    graphics.centeredText(this.font, Component.literal("§f🔄 Re-sync"), syncBtnX + syncBtnW / 2, actionY + 4, 0xFFFFFFFF);
+                    int syncBtnX = x + 12;
+                    drawGlassButton(graphics, syncBtnX, actionY, syncBtnW, 16, "§f🔄 Re-sync", 0xFFD97746, mouseX, mouseY);
                 } else {
-                    graphics.text(this.font, Component.literal("§8Invite: §7/mp room invite <name>"), copyBtnX + copyBtnW + 8, actionY + 4, 0xFFA0988E, false);
+                    graphics.text(this.font, Component.literal("§8Invite: §7Give your 5-digit code to friends!"), x + 14, actionY + 4, 0xFFA0988E, false);
                 }
 
-                // Button 3: Leave / Disband Button (Red Glass Pill)
-                int leaveBtnW = partyManager.isHost() ? 72 : 62;
+                // Button 2: Leave / Disband Button (Red Glass Pill)
+                int leaveBtnW = partyManager.isHost() ? 78 : 68;
                 int leaveBtnX = x + w - leaveBtnW - 12;
                 boolean leaveHover = mouseX >= leaveBtnX && mouseX <= leaveBtnX + leaveBtnW && mouseY >= actionY && mouseY <= actionY + 16;
                 graphics.fill(leaveBtnX, actionY, leaveBtnX + leaveBtnW, actionY + 16, leaveHover ? 0x90FF3344 : 0x30FF3344);
@@ -2050,100 +2018,101 @@ public class MusicPlayerScreen extends Screen {
                 int browserH = Math.max(145, Math.min(185, this.height - browserY - 8));
 
                 if (!partyManager.isInRoom()) {
-                    // Refresh Button (Clean cream pill)
-                    int refW = 54;
-                    int refX = startX + leftW - refW - 10;
-                    if (mx >= refX && mx <= refX + refW && my >= tabContentY && my <= tabContentY + 16) {
+                    int joinCardY = tabContentY + 28;
+                    int joinCardH = 46;
+                    int joinBtnW = 68;
+                    int codeBoxX = startX + 16;
+                    int codeBoxY = joinCardY + 18;
+                    int codeBoxW = Math.max(80, leftW - 20 - 16 - joinBtnW - 8);
+                    int joinBtnX = codeBoxX + codeBoxW + 8;
+
+                    // Click Code input box
+                    if (mx >= codeBoxX && mx <= codeBoxX + codeBoxW && my >= codeBoxY && my <= codeBoxY + 20) {
                         playClickSound();
-                        partyManager.refreshRooms();
+                        isJoinRoomCodeFocused = true;
+                        return true;
+                    } else if (mx >= startX && mx <= startX + leftW && my >= tabContentY && my <= tabContentY + browserH) {
+                        isJoinRoomCodeFocused = false;
+                    }
+
+                    // Click Join button
+                    if (mx >= joinBtnX && mx <= joinBtnX + joinBtnW && my >= codeBoxY && my <= codeBoxY + 20) {
+                        playClickSound();
+                        if (!joinRoomCodeInput.isBlank()) {
+                            String codeToJoin = joinRoomCodeInput.trim().toUpperCase();
+                            statusMessage = "§e⚡ Connecting to room: " + codeToJoin + "...";
+                            statusMessageTime = System.currentTimeMillis();
+                            new Thread(() -> {
+                                boolean ok = partyManager.joinRoomByCode(codeToJoin);
+                                if (ok) {
+                                    statusMessage = "§a🎉 Connected to room! Listening to host ~ 🎵";
+                                } else {
+                                    statusMessage = "§c✖ Room code '" + codeToJoin + "' not found or expired.";
+                                }
+                                statusMessageTime = System.currentTimeMillis();
+                            }, "JoinRoomThread").start();
+                        } else {
+                            statusMessage = "§ePlease enter a 5-digit room code first!";
+                            statusMessageTime = System.currentTimeMillis();
+                        }
                         return true;
                     }
 
-                    int createSectionY = tabContentY + (browserH - 28) - 42;
-
-                    List<PartyManager.RoomEntry> rooms = partyManager.getDiscoveredRooms();
-                    int roomListY = tabContentY + 20;
-                    int listAvailH = createSectionY - roomListY - 4;
-                    int maxListItems = Math.max(3, listAvailH / 26);
-                    int rStart = Math.min(roomScrollOffset, Math.max(0, rooms.size() - maxListItems));
-                    int rEnd = Math.min(rooms.size(), rStart + maxListItems);
-                    int curY = roomListY;
-
-                    for (int i = rStart; i < rEnd; i++) {
-                        PartyManager.RoomEntry re = rooms.get(i);
-                        // Click ANYWHERE on the room row OR the join button to join!
-                        if (mx >= startX + 10 && mx <= startX + leftW - 10 && my >= curY && my <= curY + 22) {
-                            playClickSound();
-                            if (!re.hasPassword() || re.getPassword() == null || re.getPassword().isEmpty()) {
-                                boolean ok = partyManager.joinRoom(re.getName(), "");
-                                if (ok) {
-                                    statusMessage = "§a🎉 Joined room '" + re.getName() + "'! ~ 🎶";
-                                    statusMessageTime = System.currentTimeMillis();
-                                }
-                            } else {
-                                passwordPromptRoom = re;
-                                promptPasswordText = "";
-                                passwordErrorMsg = "";
-                            }
-                            return true;
-                        }
-                        curY += 26;
-                    }
-                    int nameBoxX = startX + 10;
-                    int nameBoxY = createSectionY + 16;
-                    int availW = leftW - 20;
-                    int createBtnW = 76;
-                    int inputsW = availW - createBtnW - 12;
-                    int nameBoxW = inputsW * 52 / 100;
-                    int passBoxW = inputsW * 48 / 100;
-
-                    isRoomNameFocused = (mx >= nameBoxX && mx <= nameBoxX + nameBoxW && my >= nameBoxY && my <= nameBoxY + 18);
-
-                    int passBoxX = nameBoxX + nameBoxW + 6;
-                    isRoomPasswordFocused = (mx >= passBoxX && mx <= passBoxX + passBoxW && my >= nameBoxY && my <= nameBoxY + 18);
-
-                    int createBtnX = passBoxX + passBoxW + 6;
-                    if (mx >= createBtnX && mx <= createBtnX + createBtnW && my >= nameBoxY && my <= nameBoxY + 18) {
+                    // Host Card: Create Room button
+                    int hostCardY = joinCardY + joinCardH + 8;
+                    int createBtnX = startX + 16;
+                    int createBtnY = hostCardY + 26;
+                    int createBtnW = 110;
+                    int createBtnH = 16;
+                    if (mx >= createBtnX && mx <= createBtnX + createBtnW && my >= createBtnY && my <= createBtnY + createBtnH) {
                         playClickSound();
-                        if (!newRoomName.isBlank()) {
-                            partyManager.createRoom(newRoomName, newRoomPassword);
-                            statusMessage = "§a🏠 Room created! Welcome friends ~ 💖";
+                        statusMessage = "§e⚡ Creating private room...";
+                        statusMessageTime = System.currentTimeMillis();
+                        new Thread(() -> {
+                            partyManager.createRoom(partyManager.getPlayerName() + "'s Room", "");
+                            statusMessage = "§a🎉 Room created! Code: " + partyManager.getRoomCode() + " ~ 🎵";
                             statusMessageTime = System.currentTimeMillis();
-                            newRoomName = "";
-                            newRoomPassword = "";
-                        }
+                        }, "CreateRoomThread").start();
                         return true;
                     }
 
                 } else {
                     int actionY = tabContentY + (browserH - 28) - 22;
 
-                    // Button 1: Copy Room Name (Cream Pill)
-                    int copyBtnW = 74;
-                    int copyBtnX = startX + 12;
-                    if (mx >= copyBtnX && mx <= copyBtnX + copyBtnW && my >= actionY && my <= actionY + 16) {
+                    // Copy Code Button
+                    int codeBannerY = tabContentY + 2 + 25;
+                    int copyBtnW = 76;
+                    int copyBtnX = startX + leftW - 12 - copyBtnW - 4;
+                    int copyBtnY = codeBannerY + 4;
+                    int copyBtnH = 18;
+                    if (mx >= copyBtnX && mx <= copyBtnX + copyBtnW && my >= copyBtnY && my <= copyBtnY + copyBtnH) {
                         playClickSound();
-                        setClipboardString(partyManager.getRoomName());
-                        statusMessage = "§a📋 Copied room name: " + partyManager.getRoomName() + " to clipboard!";
+                        String c = partyManager.getRoomCode();
+                        if (!c.isEmpty()) {
+                            setClipboardString(c);
+                            statusMessage = "§a📋 Copied room code: " + c + " to clipboard! Share with friends!";
+                        } else {
+                            statusMessage = "§eNo room code available.";
+                        }
                         statusMessageTime = System.currentTimeMillis();
                         return true;
                     }
 
-                    // Button 2: If Member, Re-sync button (Amber Pill)
+                    // Button: If Member, Re-sync button (Amber Pill)
                     if (!partyManager.isHost()) {
                         int syncBtnW = 68;
-                        int syncBtnX = copyBtnX + copyBtnW + 6;
+                        int syncBtnX = startX + 12;
                         if (mx >= syncBtnX && mx <= syncBtnX + syncBtnW && my >= actionY && my <= actionY + 16) {
                             playClickSound();
                             partyManager.requestSync();
-                            statusMessage = "§a🔄 Sent sync request to host! 🎶";
+                            statusMessage = "§a🔄 Sent sync request to host! 🎵";
                             statusMessageTime = System.currentTimeMillis();
                             return true;
                         }
                     }
 
-                    // Button 3: Leave / Disband Button (Red Glass Pill)
-                    int leaveBtnW = partyManager.isHost() ? 72 : 62;
+                    // Leave / Disband Button (Red Glass Pill)
+                    int leaveBtnW = partyManager.isHost() ? 78 : 68;
                     int leaveBtnX = startX + leftW - leaveBtnW - 12;
                     if (mx >= leaveBtnX && mx <= leaveBtnX + leaveBtnW && my >= actionY && my <= actionY + 16) {
                         playClickSound();
@@ -2152,7 +2121,7 @@ public class MusicPlayerScreen extends Screen {
                             statusMessage = "§7Disbanded room. See you again! 💕";
                         } else {
                             partyManager.leaveRoom();
-                            statusMessage = "§7👋 Left the room! Hope to listen together again soon 💕";
+                            statusMessage = "§7Left the room. Hope to listen together again soon 💕";
                         }
                         statusMessageTime = System.currentTimeMillis();
                         return true;
@@ -2584,6 +2553,44 @@ public class MusicPlayerScreen extends Screen {
             }
         }
 
+        if (isJoinRoomCodeFocused) {
+            if (isPasteKey) {
+                playClickSound();
+                String clip = getClipboardString();
+                if (clip != null && !clip.isBlank()) {
+                    String clean = clip.trim().replaceAll("[^a-zA-Z0-9]", "");
+                    if (clean.length() > 8) clean = clean.substring(0, 8);
+                    joinRoomCodeInput = clean.toUpperCase();
+                    statusMessage = "§a📋 Pasted room code: " + joinRoomCodeInput;
+                    statusMessageTime = System.currentTimeMillis();
+                }
+                return true;
+            }
+            if (event.key() == GLFW.GLFW_KEY_BACKSPACE) {
+                if (!joinRoomCodeInput.isEmpty()) {
+                    joinRoomCodeInput = joinRoomCodeInput.substring(0, joinRoomCodeInput.length() - 1);
+                }
+                return true;
+            } else if (event.key() == GLFW.GLFW_KEY_ENTER || event.key() == GLFW.GLFW_KEY_KP_ENTER) {
+                if (!joinRoomCodeInput.isBlank()) {
+                    playClickSound();
+                    String codeToJoin = joinRoomCodeInput.trim().toUpperCase();
+                    statusMessage = "§e⚡ Connecting to room code: " + codeToJoin + "...";
+                    statusMessageTime = System.currentTimeMillis();
+                    new Thread(() -> {
+                        boolean ok = partyManager.joinRoomByCode(codeToJoin);
+                        if (ok) {
+                            statusMessage = "§a🎉 Connected to room! Listening to host ~ 🎵";
+                        } else {
+                            statusMessage = "§c✖ Room code '" + codeToJoin + "' not found or expired.";
+                        }
+                        statusMessageTime = System.currentTimeMillis();
+                    }, "JoinRoomThread").start();
+                }
+                return true;
+            }
+        }
+
         if (isRoomNameFocused) {
             if (event.key() == GLFW.GLFW_KEY_BACKSPACE && !newRoomName.isEmpty()) {
                 newRoomName = newRoomName.substring(0, newRoomName.length() - 1);
@@ -2629,6 +2636,11 @@ public class MusicPlayerScreen extends Screen {
         } else if (isUrlFocused || selectedTab == 3) {
             customUrl += ch;
             isUrlFocused = true;
+            return true;
+        } else if (isJoinRoomCodeFocused) {
+            if (Character.isLetterOrDigit(ch) && joinRoomCodeInput.length() < 8) {
+                joinRoomCodeInput += Character.toUpperCase(ch);
+            }
             return true;
         } else if (isRoomNameFocused) {
             if (newRoomName.length() < 24) {
