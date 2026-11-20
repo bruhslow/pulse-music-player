@@ -1,0 +1,1556 @@
+package com.slowbag.pulse.client.audio;
+
+import com.google.gson.JsonArray;
+import com.google.gson.JsonElement;
+import com.google.gson.JsonObject;
+import com.google.gson.JsonParser;
+import com.slowbag.pulse.MusicPlayerMod;
+import com.slowbag.pulse.network.PulseNetworkPayload;
+import net.fabricmc.fabric.api.client.networking.v1.ClientPlayNetworking;
+import net.minecraft.client.Minecraft;
+import net.minecraft.client.resources.sounds.SimpleSoundInstance;
+import net.minecraft.network.chat.ClickEvent;
+import net.minecraft.network.chat.Component;
+import net.minecraft.network.chat.HoverEvent;
+import net.minecraft.sounds.SoundEvents;
+
+import java.io.BufferedReader;
+import java.io.InputStreamReader;
+import java.io.OutputStream;
+import java.net.HttpURLConnection;
+import java.net.URI;
+import java.net.URL;
+import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.LinkedHashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+
+public class PartyManager {
+
+    static {
+        try {
+            if (System.getProperty("java.net.preferIPv6Addresses") == null) {
+                System.setProperty("java.net.preferIPv6Addresses", "system");
+            }
+        } catch (Throwable ignored) {}
+    }
+
+    private static final PartyManager INSTANCE = new PartyManager();
+    public static PartyManager getInstance() {
+        return INSTANCE;
+    }
+
+    public static class RoomEntry {
+        private final String name;
+        private final String host;
+        private final boolean hasPassword;
+        private final String password;
+        private int memberCount;
+        private volatile long lastSeen;
+
+        public RoomEntry(String name, String host, boolean hasPassword, String password, int memberCount) {
+            this.name = name;
+            this.host = host;
+            this.hasPassword = hasPassword;
+            this.password = password != null ? password : "";
+            this.memberCount = memberCount;
+            this.lastSeen = System.currentTimeMillis();
+        }
+
+        public String getName() {
+            return name;
+        }
+
+        public String getHost() {
+            return host;
+        }
+
+        public boolean hasPassword() {
+            return hasPassword;
+        }
+
+        public String getPassword() {
+            return password;
+        }
+
+        public int getMemberCount() {
+            return memberCount;
+        }
+
+        public void setMemberCount(int count) {
+            this.memberCount = count;
+        }
+
+        public long getLastSeen() {
+            return lastSeen;
+        }
+
+        public void touch() {
+            this.lastSeen = System.currentTimeMillis();
+        }
+
+        @Override
+        public boolean equals(Object o) {
+            if (this == o) return true;
+            if (o == null || getClass() != o.getClass()) return false;
+            RoomEntry r = (RoomEntry) o;
+            return name.equalsIgnoreCase(r.name);
+        }
+
+        @Override
+        public int hashCode() {
+            return name.toLowerCase().hashCode();
+        }
+    }
+
+    private String roomName = null;
+    private String roomPassword = null;
+    private boolean isHost = false;
+    private volatile String currentHost = null;
+    private final Set<String> members = new LinkedHashSet<>();
+    private final Map<String, Long> memberLastSeen = new ConcurrentHashMap<>();
+    private final Set<String> invitedRooms = Collections.synchronizedSet(new LinkedHashSet<>());
+    private final Set<String> processedInviteIds = Collections.synchronizedSet(new LinkedHashSet<>());
+    private final Set<String> seenRoomEventIds = Collections.synchronizedSet(new LinkedHashSet<>());
+    private final Set<String> seenDirEventIds = Collections.synchronizedSet(new LinkedHashSet<>());
+    private final Map<String, Long> serverModUsers = new ConcurrentHashMap<>();
+    private final Set<String> seenServerEventIds = Collections.synchronizedSet(new LinkedHashSet<>());
+    private volatile String activeServerPartyHost = null;
+    private volatile String activeServerPartyRoom = null;
+    private volatile String currentServerId = null;
+    private volatile boolean serverListening = false;
+    private volatile long lastInviteSoundTime = 0;
+    private final CopyOnWriteArrayList<RoomEntry> discoveredRooms = new CopyOnWriteArrayList<>();
+
+    private final ExecutorService partyExecutor = Executors.newCachedThreadPool(r -> {
+        Thread t = new Thread(r, "MusicPlayer-PartyThread");
+        t.setDaemon(true);
+        return t;
+    });
+
+    private volatile boolean roomListening = false;
+    private volatile boolean dirListening = false;
+    private volatile boolean inviteListening = false;
+
+    private volatile long lastRoomEventTime = 0;
+    private volatile long lastDirEventTime = 0;
+    private volatile long lastInviteEventTime = 0;
+
+    private PartyManager() {
+        // Start background discovery, personal invite, and server party listeners
+        startDirectoryListener();
+        startPersonalInviteListener();
+        startServerDiscoveryListener();
+    }
+
+    public void init() {
+        try {
+            ClientPlayNetworking.registerGlobalReceiver(PulseNetworkPayload.TYPE, (payload, context) -> {
+                String json = payload.json();
+                context.client().execute(() -> handleServerPacket(json));
+            });
+            MusicPlayerMod.LOGGER.info("[Music Player] Registered native client packet receiver.");
+        } catch (Throwable t) {
+            MusicPlayerMod.LOGGER.debug("[Music Player] Server networking not available or client-only: " + t.getMessage());
+        }
+        refreshRooms();
+    }
+
+    public boolean isServerNetworkingActive() {
+        try {
+            return ClientPlayNetworking.canSend(PulseNetworkPayload.TYPE);
+        } catch (Throwable t) {
+            return false;
+        }
+    }
+
+    public void handleServerPacket(String json) {
+        try {
+            JsonObject obj = JsonParser.parseString(json).getAsJsonObject();
+            String action = obj.has("action") ? obj.get("action").getAsString() : "";
+
+            switch (action) {
+                case "room_list" -> {
+                    if (obj.has("rooms")) {
+                        JsonArray arr = obj.getAsJsonArray("rooms");
+                        List<RoomEntry> list = new ArrayList<>();
+                        for (JsonElement el : arr) {
+                            JsonObject r = el.getAsJsonObject();
+                            String name = r.get("name").getAsString();
+                            String host = r.get("host").getAsString();
+                            int members = r.has("members") ? r.get("members").getAsInt() : 1;
+                            boolean locked = r.has("isLocked") && r.get("isLocked").getAsBoolean();
+                            list.add(new RoomEntry(name, host, locked, "", members));
+                        }
+                        this.discoveredRooms.clear();
+                        this.discoveredRooms.addAll(list);
+                    }
+                }
+                case "room_joined" -> {
+                    this.roomName = obj.get("room").getAsString();
+                    this.isHost = obj.has("isHost") && obj.get("isHost").getAsBoolean();
+                    String myName = getPlayerName();
+                    this.currentHost = obj.has("host") ? obj.get("host").getAsString() : (isHost ? myName : "Host");
+                    if (obj.has("members")) {
+                        this.members.clear();
+                        for (com.google.gson.JsonElement el : obj.getAsJsonArray("members")) {
+                            String mClean = el.getAsString().replaceAll("\\s*\\(Host\\)", "").trim();
+                            if (!mClean.isEmpty()) this.members.add(mClean);
+                        }
+                    }
+                    Minecraft client = Minecraft.getInstance();
+                    if (client.player != null) {
+                        client.player.sendSystemMessage(Component.literal("§a[Pulse] Joined room '§f" + roomName + "§a'!"));
+                    }
+                }
+                case "members_updated" -> {
+                    if (obj.has("members")) {
+                        this.members.clear();
+                        for (com.google.gson.JsonElement el : obj.getAsJsonArray("members")) {
+                            String mClean = el.getAsString().replaceAll("\\s*\\(Host\\)", "").trim();
+                            if (!mClean.isEmpty()) this.members.add(mClean);
+                        }
+                    }
+                }
+                case "invite_received" -> {
+                    String sender = obj.get("host").getAsString();
+                    String room = obj.get("room").getAsString();
+                    String pass = obj.has("password") ? obj.get("password").getAsString() : "";
+                    displayInvite(sender, room, pass);
+                }
+                case "track_sync" -> {
+                    if (!isHost) {
+                        handleTrackSyncPacket(obj);
+                    }
+                }
+                case "room_disbanded" -> {
+                    this.isHost = false;
+                    this.roomName = null;
+                    this.currentHost = null;
+                    Minecraft client = Minecraft.getInstance();
+                    if (client.player != null) {
+                        client.player.sendSystemMessage(Component.literal("§c[Pulse] The room was disbanded by the host."));
+                    }
+                }
+                case "member_joined" -> {
+                    String player = obj.get("player").getAsString();
+                    String pClean = player.replaceAll("\\s*\\(Host\\)", "").trim();
+                    if (!pClean.isEmpty()) this.members.add(pClean);
+                    Minecraft client = Minecraft.getInstance();
+                    if (client.player != null) {
+                        client.player.sendSystemMessage(Component.literal("§a[Pulse] §f" + player + " §ajoined the room!"));
+                    }
+                }
+                case "feedback" -> {
+                    String msg = obj.get("message").getAsString();
+                    Minecraft client = Minecraft.getInstance();
+                    if (client.player != null) {
+                        client.player.sendSystemMessage(Component.literal(msg));
+                    }
+                }
+                case "error" -> {
+                    String msg = obj.get("message").getAsString();
+                    Minecraft client = Minecraft.getInstance();
+                    if (client.player != null) {
+                        client.player.sendSystemMessage(Component.literal("§c[Pulse] " + msg));
+                    }
+                }
+            }
+        } catch (Throwable t) {
+            MusicPlayerMod.LOGGER.debug("[Music Player] Error parsing server packet: " + t.getMessage());
+        }
+    }
+
+    private void handleTrackSyncPacket(JsonObject obj) {
+        try {
+            String title = obj.get("title").getAsString();
+            String artist = obj.get("artist").getAsString();
+            String url = obj.get("url").getAsString();
+            String category = obj.has("category") ? obj.get("category").getAsString() : "Music";
+            long duration = obj.has("duration") ? obj.get("duration").getAsLong() : -1;
+            long elapsed = obj.has("elapsed") ? obj.get("elapsed").getAsLong() : 0;
+            String artwork = obj.has("artwork") ? obj.get("artwork").getAsString() : null;
+            boolean isPaused = obj.has("isPaused") && obj.get("isPaused").getAsBoolean();
+
+            AudioTrack syncTrack = new AudioTrack(title, artist, url, false, duration, category, artwork);
+            AudioManager am = AudioManager.getInstance();
+            AudioTrack current = am.getCurrentTrack();
+
+            if (current == null || !current.getUrl().equals(url)) {
+                am.playTrackInternal(syncTrack, false, elapsed);
+            } else {
+                long myElapsed = am.getElapsedSeconds();
+                if (Math.abs(myElapsed - elapsed) > 3) {
+                    am.playTrackInternal(syncTrack, false, elapsed);
+                }
+            }
+
+            if (isPaused && !am.isPaused()) {
+                am.togglePause();
+            } else if (!isPaused && am.isPaused()) {
+                am.togglePause();
+            }
+        } catch (Throwable t) {
+            MusicPlayerMod.LOGGER.debug("[Music Player] Error handling sync: " + t.getMessage());
+        }
+    }
+
+    public static String sanitizeTopic(String name) {
+        if (name == null) return "lobby";
+        String clean = name.trim().toLowerCase().replaceAll("[^a-z0-9_]", "_");
+        while (clean.contains("__")) clean = clean.replace("__", "_");
+        return clean.isEmpty() ? "lobby" : clean;
+    }
+
+    public String getServerIdentifier() {
+        try {
+            Minecraft mc = Minecraft.getInstance();
+            if (mc.getCurrentServer() != null && mc.getCurrentServer().ip != null) {
+                return sanitizeTopic(mc.getCurrentServer().ip);
+            }
+            if (mc.hasSingleplayerServer()) {
+                return "local_world";
+            }
+        } catch (Throwable ignored) {}
+        return "global_lobby";
+    }
+
+    public String getServerDisplayName() {
+        try {
+            Minecraft mc = Minecraft.getInstance();
+            if (mc.getCurrentServer() != null) {
+                String name = mc.getCurrentServer().name;
+                return (name != null && !name.isBlank()) ? name : mc.getCurrentServer().ip;
+            }
+            if (mc.hasSingleplayerServer()) return "Local World";
+        } catch (Throwable ignored) {}
+        return "Multiplayer";
+    }
+
+    public List<String> getServerModUsers() {
+        long now = System.currentTimeMillis();
+        serverModUsers.entrySet().removeIf(e -> (now - e.getValue() > 30000));
+        return new ArrayList<>(serverModUsers.keySet());
+    }
+
+    public String getActiveServerPartyHost() {
+        return activeServerPartyHost;
+    }
+
+    public String getActiveServerPartyRoom() {
+        return activeServerPartyRoom;
+    }
+
+    public synchronized void joinServerParty() {
+        String srvName = getServerDisplayName();
+        String targetRoom = (activeServerPartyRoom != null && !activeServerPartyRoom.isBlank())
+                ? activeServerPartyRoom
+                : "Server Party (" + srvName + ")";
+
+        boolean ok = joinRoom(targetRoom, "");
+        if (!ok || !isInRoom()) {
+            createRoom(targetRoom, "");
+        }
+        inviteAllServerModUsers();
+    }
+
+    public void inviteAllServerModUsers() {
+        List<String> users = getServerModUsers();
+        String me = getPlayerName();
+        int count = 0;
+        for (String u : users) {
+            if (!u.equalsIgnoreCase(me)) {
+                invitePlayer(u);
+                count++;
+            }
+        }
+        Minecraft client = Minecraft.getInstance();
+        if (client != null && client.player != null && count > 0) {
+            client.player.sendSystemMessage(Component.literal("§a[Pulse] 💌 Sent private party invite to " + count + " player(s) with the mod on this server!"));
+        }
+    }
+
+    private String getPlayerName() {
+        try {
+            if (Minecraft.getInstance().player != null) {
+                return Minecraft.getInstance().player.getName().getString();
+            }
+        } catch (Throwable ignored) {}
+        return "Player";
+    }
+
+    // ------------------------------------------------------------------------
+    // Room Lifecycle Management
+    // ------------------------------------------------------------------------
+
+    public synchronized void createRoom(String name, String password) {
+        if (name == null || name.trim().isEmpty()) {
+            name = getPlayerName() + "'s Room";
+        }
+        name = name.trim();
+        String pass = (password != null) ? password.trim() : "";
+
+        leaveRoomInternal(false);
+
+        this.roomName = name;
+        this.roomPassword = pass;
+        this.isHost = true;
+        this.currentHost = getPlayerName();
+        this.members.clear();
+        this.memberLastSeen.clear();
+        String myName = getPlayerName();
+        this.members.add(myName);
+        this.memberLastSeen.put(myName.toLowerCase(), System.currentTimeMillis());
+
+        if (isServerNetworkingActive()) {
+            JsonObject obj = new JsonObject();
+            obj.addProperty("action", "create_room");
+            obj.addProperty("room", name);
+            obj.addProperty("password", pass);
+            ClientPlayNetworking.send(new PulseNetworkPayload(obj.toString()));
+        }
+
+        startRoomListener(sanitizeTopic(name));
+        startHostHeartbeat();
+
+        // Broadcast room creation to directory
+        broadcastRoomPresence();
+
+        Minecraft client = Minecraft.getInstance();
+        if (client.player != null) {
+            String tag = !pass.isEmpty() ? "§e[🔒 Password Protected]" : "§b[🔓 Public]";
+            client.player.sendSystemMessage(Component.literal("§a[Pulse] Created room '§f" + name + "§a' " + tag + "!"));
+        }
+    }
+
+    public synchronized boolean joinRoom(String name, String password) {
+        if (name == null || name.trim().isEmpty()) return false;
+        name = name.trim();
+        if (name.startsWith("\"") && name.endsWith("\"") && name.length() > 1) {
+            name = name.substring(1, name.length() - 1).trim();
+        }
+        String pass = (password != null) ? password.trim() : "";
+
+        // If player was directly invited to this room, bypass password check!
+        boolean isInvited = invitedRooms.remove(name.toLowerCase()) || invitedRooms.remove(name.replace("\"", "").toLowerCase().trim());
+
+        if (isServerNetworkingActive()) {
+            JsonObject obj = new JsonObject();
+            obj.addProperty("action", "join_room");
+            obj.addProperty("room", name);
+            obj.addProperty("password", pass);
+            ClientPlayNetworking.send(new PulseNetworkPayload(obj.toString()));
+        }
+
+        if (!isInvited) {
+            // Check if room in discovered list requires password
+            for (RoomEntry re : discoveredRooms) {
+                if (re.getName().equalsIgnoreCase(name)) {
+                    if (re.hasPassword() && !re.getPassword().isEmpty() && !re.getPassword().equals(pass)) {
+                        Minecraft client = Minecraft.getInstance();
+                        if (client.player != null) {
+                            client.player.sendSystemMessage(Component.literal("§c[Pulse] Incorrect password for room '" + name + "'!"));
+                        }
+                        return false;
+                    }
+                    break;
+                }
+            }
+        }
+
+        leaveRoomInternal(false);
+
+        this.roomName = name;
+        this.roomPassword = pass;
+        this.members.clear();
+        this.memberLastSeen.clear();
+
+        String myName = getPlayerName();
+        String hostRaw = "";
+        for (RoomEntry re : discoveredRooms) {
+            if (re.getName().equalsIgnoreCase(name)) {
+                if (re.getHost() != null && !re.getHost().isBlank()) {
+                    hostRaw = re.getHost().trim();
+                }
+                break;
+            }
+        }
+
+        if (!hostRaw.isEmpty() && hostRaw.equalsIgnoreCase(myName)) {
+            // Player is the host
+            this.isHost = true;
+            this.currentHost = myName;
+        } else {
+            this.isHost = false;
+            this.currentHost = hostRaw.isEmpty() ? "Host" : hostRaw;
+        }
+        this.members.add(this.currentHost);
+        this.members.add(myName);
+        this.memberLastSeen.put(this.currentHost.toLowerCase(), System.currentTimeMillis());
+        this.memberLastSeen.put(myName.toLowerCase(), System.currentTimeMillis());
+
+        startRoomListener(sanitizeTopic(name));
+        if (this.isHost) {
+            startHostHeartbeat();
+        } else {
+            startMemberHeartbeat();
+        }
+
+        // Send join packet to room
+        JsonObject msg = new JsonObject();
+        msg.addProperty("type", "join");
+        msg.addProperty("sender", myName);
+        sendNtfyMessage("pulse_room_" + sanitizeTopic(name), msg);
+
+        // Prompt host for immediate track & state sync
+        JsonObject req = new JsonObject();
+        req.addProperty("type", "request_sync");
+        req.addProperty("sender", myName);
+        sendNtfyMessage("pulse_room_" + sanitizeTopic(name), req);
+
+        Minecraft client = Minecraft.getInstance();
+        if (client.player != null) {
+            client.player.sendSystemMessage(Component.literal("§a[Pulse] Joined room '§f" + name + "§a'!"));
+        }
+        return true;
+    }
+
+    public synchronized void leaveRoom() {
+        leaveRoomInternal(true);
+    }
+
+    public synchronized void disbandRoom() {
+        if (!isInRoom()) return;
+        Minecraft client = Minecraft.getInstance();
+        if (!isHost) {
+            if (client != null && client.player != null) {
+                client.player.sendSystemMessage(Component.literal("§c[Pulse] Only the room host can disband this room."));
+            }
+            return;
+        }
+        if (client != null && client.player != null) {
+            client.player.sendSystemMessage(Component.literal("§c[Pulse] Room '" + roomName + "' has been disbanded."));
+        }
+        leaveRoomInternal(false);
+    }
+
+    private synchronized void leaveRoomInternal(boolean notifyUser) {
+        if (isServerNetworkingActive()) {
+            JsonObject obj = new JsonObject();
+            obj.addProperty("action", isHost ? "disband_room" : "leave_room");
+            obj.addProperty("room", roomName != null ? roomName : "");
+            ClientPlayNetworking.send(new PulseNetworkPayload(obj.toString()));
+        }
+        if (roomName != null) {
+            String topic = "pulse_room_" + sanitizeTopic(roomName);
+
+            if (isHost) {
+                // Host left: disband room for all listening members
+                JsonObject disband = new JsonObject();
+                disband.addProperty("type", "disband");
+                disband.addProperty("sender", getPlayerName());
+                disband.addProperty("room", roomName);
+                sendNtfyMessage(topic, disband);
+
+                // Send close to global directory
+                JsonObject close = new JsonObject();
+                close.addProperty("type", "room_close");
+                close.addProperty("name", roomName);
+                sendNtfyMessage("pulse_rooms_global", close);
+            } else {
+                JsonObject msg = new JsonObject();
+                msg.addProperty("type", "leave");
+                msg.addProperty("sender", getPlayerName());
+                sendNtfyMessage(topic, msg);
+            }
+        }
+
+        final String leavingRoom = roomName;
+        if (leavingRoom != null) {
+            discoveredRooms.removeIf(r -> r.getName().equalsIgnoreCase(leavingRoom));
+        }
+
+        this.roomListening = false;
+        this.roomName = null;
+        this.roomPassword = null;
+        this.isHost = false;
+        this.currentHost = null;
+        this.members.clear();
+
+        if (notifyUser) {
+            Minecraft client = Minecraft.getInstance();
+            if (client.player != null) {
+                client.player.sendSystemMessage(Component.literal("§7[Pulse] Left room."));
+            }
+        }
+    }
+
+    // ------------------------------------------------------------------------
+    // Inviting Players (/musicplayer room invite <player>)
+    // ------------------------------------------------------------------------
+
+    public void invitePlayer(String targetPlayer) {
+        Minecraft client = Minecraft.getInstance();
+        if (client == null || client.player == null) return;
+
+        if (!isInRoom()) {
+            client.player.sendSystemMessage(Component.literal("§c[Pulse] You are not in a room right now."));
+            return;
+        }
+
+        if (!isHost) {
+            client.player.sendSystemMessage(Component.literal("§c[Pulse] Only the room host can invite players!"));
+            return;
+        }
+
+        final String target = targetPlayer.trim();
+        final String room = this.roomName;
+        final String pass = (this.roomPassword != null) ? this.roomPassword : "";
+        final String myName = getPlayerName();
+
+        if (isServerNetworkingActive()) {
+            JsonObject obj = new JsonObject();
+            obj.addProperty("action", "invite");
+            obj.addProperty("room", room);
+            obj.addProperty("target", target);
+            ClientPlayNetworking.send(new PulseNetworkPayload(obj.toString()));
+            return;
+        }
+
+        // Direct private invite delivered secretly to the player's client (never sent to global chat)
+        JsonObject invite = new JsonObject();
+        invite.addProperty("type", "invite");
+        invite.addProperty("sender", myName);
+        invite.addProperty("room", room);
+        invite.addProperty("hasPassword", !pass.isEmpty());
+        invite.addProperty("password", pass);
+
+        sendNtfyMessage("pulse_invite_" + target.toLowerCase(), invite);
+
+        client.player.sendSystemMessage(Component.literal("§a[Pulse] Sent private room invite to §f" + target + "§a!"));
+    }
+
+    // ------------------------------------------------------------------------
+    // Broadcasts (Host -> Room)
+    // ------------------------------------------------------------------------
+
+    public void broadcastTrackIfHost(AudioTrack track) {
+        if (!isInRoom() || !isHost || track == null) return;
+
+        JsonObject msg = new JsonObject();
+        msg.addProperty("action", "track_sync");
+        msg.addProperty("type", "track_sync");
+        msg.addProperty("sender", getPlayerName());
+        msg.addProperty("room", roomName);
+        msg.addProperty("title", track.getTitle());
+        msg.addProperty("artist", track.getArtist());
+        msg.addProperty("url", track.getUrl());
+        msg.addProperty("category", track.getCategory());
+        msg.addProperty("duration", track.getDurationSeconds());
+        msg.addProperty("elapsed", AudioManager.getInstance().getElapsedSeconds());
+        msg.addProperty("isPaused", AudioManager.getInstance().isPaused());
+        if (track.getArtworkUrl() != null) {
+            msg.addProperty("artwork", track.getArtworkUrl());
+        }
+
+        if (isServerNetworkingActive()) {
+            ClientPlayNetworking.send(new PulseNetworkPayload(msg.toString()));
+        }
+
+        sendNtfyMessage("pulse_room_" + sanitizeTopic(roomName), msg);
+
+        // Also announce on server party channel so other mod users on this server are notified/auto-synced!
+        try {
+            JsonObject srvParty = new JsonObject();
+            srvParty.addProperty("type", "server_music_party");
+            srvParty.addProperty("host", getPlayerName());
+            srvParty.addProperty("room", roomName);
+            srvParty.addProperty("title", track.getTitle());
+            sendNtfyMessage("pulse_srv_" + getServerIdentifier(), srvParty);
+        } catch (Throwable ignored) {}
+    }
+
+    public void broadcastPauseIfHost(boolean isPaused) {
+        if (!isInRoom() || !isHost) return;
+        JsonObject msg = new JsonObject();
+        msg.addProperty("type", "pause_sync");
+        msg.addProperty("sender", getPlayerName());
+        msg.addProperty("paused", isPaused);
+        sendNtfyMessage("pulse_room_" + sanitizeTopic(roomName), msg);
+    }
+
+    public void broadcastSeekIfHost(double ratio) {
+        if (!isInRoom() || !isHost) return;
+        JsonObject msg = new JsonObject();
+        msg.addProperty("type", "seek_sync");
+        msg.addProperty("sender", getPlayerName());
+        msg.addProperty("ratio", ratio);
+        sendNtfyMessage("pulse_room_" + sanitizeTopic(roomName), msg);
+    }
+
+    public void requestSync() {
+        if (!isInRoom()) return;
+        JsonObject req = new JsonObject();
+        req.addProperty("type", "request_sync");
+        req.addProperty("sender", getPlayerName());
+        sendNtfyMessage("pulse_room_" + sanitizeTopic(roomName), req);
+    }
+
+    private void broadcastRoomPresence() {
+        if (!isInRoom() || !isHost) return;
+        JsonObject msg = new JsonObject();
+        msg.addProperty("type", "room_presence");
+        msg.addProperty("name", roomName);
+        msg.addProperty("host", getPlayerName());
+        msg.addProperty("hasPassword", roomPassword != null && !roomPassword.isEmpty());
+        msg.addProperty("password", roomPassword != null ? roomPassword : "");
+        msg.addProperty("members", members.size());
+        msg.addProperty("time", System.currentTimeMillis() / 1000);
+        sendNtfyMessage("pulse_rooms_global", msg);
+    }
+
+    private void startHostHeartbeat() {
+        partyExecutor.submit(() -> {
+            while (roomListening && isInRoom() && isHost) {
+                try {
+                    Thread.sleep(3500);
+                    if (!roomListening || !isInRoom() || !isHost) break;
+
+                    String myName = getPlayerName();
+                    long now = System.currentTimeMillis();
+
+                    // Prune inactive members who haven't pinged in 22 seconds
+                    synchronized (PartyManager.this) {
+                        members.removeIf(m -> {
+                            if (m.equalsIgnoreCase(myName) || m.equalsIgnoreCase(currentHost)) return false;
+                            Long lastSeen = memberLastSeen.get(m.toLowerCase());
+                            return (lastSeen == null || (now - lastSeen > 22000));
+                        });
+                    }
+
+                    // 1. Broadcast presence to global directory
+                    broadcastRoomPresence();
+
+                    // 2. Broadcast heartbeat to room members with active track info
+                    JsonObject hb = new JsonObject();
+                    hb.addProperty("type", "host_heartbeat");
+                    hb.addProperty("host", myName);
+
+                    JsonArray mArr = new JsonArray();
+                    synchronized (PartyManager.this) {
+                        for (String m : members) {
+                            mArr.add(m);
+                        }
+                    }
+                    hb.add("members", mArr);
+
+                    AudioTrack cur = AudioManager.getInstance().getCurrentTrack();
+                    if (cur != null && AudioManager.getInstance().isPlaying()) {
+                        JsonObject tObj = new JsonObject();
+                        tObj.addProperty("title", cur.getTitle());
+                        tObj.addProperty("artist", cur.getArtist());
+                        tObj.addProperty("url", cur.getUrl());
+                        tObj.addProperty("category", cur.getCategory());
+                        tObj.addProperty("duration", cur.getDurationSeconds());
+                        tObj.addProperty("elapsed", AudioManager.getInstance().getElapsedSeconds());
+                        tObj.addProperty("isPaused", AudioManager.getInstance().isPaused());
+                        if (cur.getArtworkUrl() != null) {
+                            tObj.addProperty("artwork", cur.getArtworkUrl());
+                        }
+                        hb.add("track", tObj);
+                    }
+
+                    sendNtfyMessage("pulse_room_" + sanitizeTopic(roomName), hb);
+                } catch (InterruptedException e) {
+                    break;
+                } catch (Throwable ignored) {}
+            }
+        });
+    }
+
+    private void startMemberHeartbeat() {
+        partyExecutor.submit(() -> {
+            while (roomListening && isInRoom() && !isHost) {
+                try {
+                    Thread.sleep(4000);
+                    if (!roomListening || !isInRoom() || isHost) break;
+
+                    JsonObject ping = new JsonObject();
+                    ping.addProperty("type", "member_ping");
+                    ping.addProperty("sender", getPlayerName());
+                    sendNtfyMessage("pulse_room_" + sanitizeTopic(roomName), ping);
+                } catch (InterruptedException e) {
+                    break;
+                } catch (Throwable ignored) {}
+            }
+        });
+    }
+
+    // ------------------------------------------------------------------------
+    // Room Listener Loop (Active Room Messages)
+    // ------------------------------------------------------------------------
+
+    private void startRoomListener(String topicSuffix) {
+        this.roomListening = true;
+        this.seenRoomEventIds.clear();
+
+        partyExecutor.submit(() -> {
+            String topic = "pulse_room_" + topicSuffix;
+            while (roomListening && isInRoom()) {
+                try {
+                    URL url = new URI("https://ntfy.sh/" + topic + "/json?since=30s").toURL();
+                    HttpURLConnection conn = (HttpURLConnection) url.openConnection();
+                    conn.setRequestProperty("User-Agent", "PulseMusicPlayer/2.6");
+                    conn.setConnectTimeout(10000);
+                    conn.setReadTimeout(55000);
+
+                    if (conn.getResponseCode() == 200) {
+                        try (BufferedReader reader = new BufferedReader(new InputStreamReader(conn.getInputStream(), StandardCharsets.UTF_8))) {
+                            String line;
+                            while (roomListening && isInRoom() && (line = reader.readLine()) != null) {
+                                if (line.isBlank()) continue;
+                                try {
+                                    JsonObject event = JsonParser.parseString(line).getAsJsonObject();
+                                    String id = event.has("id") ? event.get("id").getAsString() : null;
+                                    if (id != null && !seenRoomEventIds.add(id)) {
+                                        continue;
+                                    }
+                                    if (seenRoomEventIds.size() > 300) {
+                                        seenRoomEventIds.clear();
+                                    }
+                                    if (event.has("message")) {
+                                        handleRoomPayload(event.get("message").getAsString());
+                                    }
+                                } catch (Throwable ignored) {}
+                            }
+                        }
+                    }
+                    Thread.sleep(1000);
+                } catch (InterruptedException e) {
+                    break;
+                } catch (Throwable ignored) {
+                    try {
+                        Thread.sleep(2000);
+                    } catch (InterruptedException ignored2) {
+                        break;
+                    }
+                }
+            }
+        });
+    }
+
+    public synchronized void broadcastMembersSync() {
+        if (!isInRoom() || !isHost) return;
+        JsonObject sync = new JsonObject();
+        sync.addProperty("type", "members_sync");
+        sync.addProperty("host", currentHost != null ? currentHost : getPlayerName());
+        com.google.gson.JsonArray arr = new com.google.gson.JsonArray();
+        for (String m : members) {
+            arr.add(m);
+        }
+        sync.add("members", arr);
+        sendNtfyMessage("pulse_room_" + sanitizeTopic(roomName), sync);
+    }
+
+    private void handleRoomPayload(String rawJson) {
+        try {
+            JsonObject obj = JsonParser.parseString(rawJson).getAsJsonObject();
+            String type = obj.has("type") ? obj.get("type").getAsString() : "";
+            String sender = obj.has("sender") ? obj.get("sender").getAsString() : "Player";
+            String myName = getPlayerName();
+
+            if ("disband".equals(type)) {
+                Minecraft client = Minecraft.getInstance();
+                if (client != null && client.player != null) {
+                    client.player.sendSystemMessage(Component.literal("§c[Pulse] The room was disbanded because the host left."));
+                }
+                leaveRoomInternal(false);
+                return;
+            }
+
+            if ("member_ping".equals(type) || "join".equals(type)) {
+                if (!sender.equalsIgnoreCase(myName)) {
+                    boolean newlyAdded = false;
+                    synchronized (this) {
+                        memberLastSeen.put(sender.toLowerCase(), System.currentTimeMillis());
+                        boolean exists = false;
+                        for (String m : members) {
+                            if (m.equalsIgnoreCase(sender)) {
+                                exists = true;
+                                break;
+                            }
+                        }
+                        if (!exists) {
+                            members.add(sender);
+                            newlyAdded = true;
+                        }
+                    }
+
+                    if (isHost) {
+                        if (newlyAdded || "join".equals(type)) {
+                            Minecraft client = Minecraft.getInstance();
+                            if (client != null && client.player != null) {
+                                client.player.sendSystemMessage(Component.literal("§a[Pulse] 👥 §f" + sender + " §ajoined your room! 🎶"));
+                            }
+                            AudioTrack current = AudioManager.getInstance().getCurrentTrack();
+                            if (current != null) {
+                                broadcastTrackIfHost(current);
+                            }
+                            broadcastPauseIfHost(AudioManager.getInstance().isPaused());
+                            broadcastRoomPresence();
+                            broadcastMembersSync();
+                        }
+                    }
+                }
+                return;
+            }
+
+            if ("host_heartbeat".equals(type) && !isHost) {
+                if (obj.has("host")) {
+                    currentHost = obj.get("host").getAsString();
+                }
+                if (obj.has("members")) {
+                    JsonArray arr = obj.getAsJsonArray("members");
+                    synchronized (this) {
+                        members.clear();
+                        for (JsonElement e : arr) {
+                            members.add(e.getAsString());
+                        }
+                        members.add(myName);
+                        if (currentHost != null) members.add(currentHost);
+                    }
+                }
+                if (obj.has("track")) {
+                    JsonObject tObj = obj.getAsJsonObject("track");
+                    String title = tObj.has("title") ? tObj.get("title").getAsString() : "Party Track";
+                    String artist = tObj.has("artist") ? tObj.get("artist").getAsString() : "Host";
+                    String url = tObj.has("url") ? tObj.get("url").getAsString() : null;
+                    String category = tObj.has("category") ? tObj.get("category").getAsString() : "Room";
+                    String artwork = tObj.has("artwork") ? tObj.get("artwork").getAsString() : null;
+                    long duration = tObj.has("duration") ? tObj.get("duration").getAsLong() : -1;
+                    long hostElapsed = tObj.has("elapsed") ? tObj.get("elapsed").getAsLong() : 0;
+                    boolean hostPaused = tObj.has("isPaused") && tObj.get("isPaused").getAsBoolean();
+
+                    if (url != null && !url.isBlank()) {
+                        AudioTrack current = AudioManager.getInstance().getCurrentTrack();
+                        boolean isPlaying = AudioManager.getInstance().isPlaying();
+                        boolean isPaused = AudioManager.getInstance().isPaused();
+
+                        if (current == null || !url.equals(current.getUrl())) {
+                            AudioTrack syncTrack = new AudioTrack(title, artist, url, false, duration, category, artwork);
+                            Minecraft.getInstance().execute(() -> {
+                                AudioManager.getInstance().playTrackInternal(syncTrack, false, Math.max(0, hostElapsed));
+                            });
+                        } else {
+                            long myElapsed = AudioManager.getInstance().getElapsedSeconds();
+                            if (Math.abs(myElapsed - hostElapsed) > 4) {
+                                AudioTrack syncTrack = new AudioTrack(title, artist, url, false, duration, category, artwork);
+                                Minecraft.getInstance().execute(() -> {
+                                    AudioManager.getInstance().playTrackInternal(syncTrack, false, Math.max(0, hostElapsed));
+                                });
+                            }
+                        }
+
+                        if (hostPaused != isPaused) {
+                            Minecraft.getInstance().execute(() -> {
+                                AudioManager.getInstance().togglePauseRemote(hostPaused);
+                            });
+                        }
+                    }
+                }
+                return;
+            }
+
+            if ("members_sync".equals(type) && !isHost) {
+                if (obj.has("host")) {
+                    currentHost = obj.get("host").getAsString();
+                }
+                if (obj.has("members")) {
+                    com.google.gson.JsonArray arr = obj.getAsJsonArray("members");
+                    synchronized (this) {
+                        members.clear();
+                        for (com.google.gson.JsonElement e : arr) {
+                            members.add(e.getAsString());
+                        }
+                        members.add(myName);
+                        if (currentHost != null) members.add(currentHost);
+                    }
+                }
+                return;
+            }
+
+            if ("request_sync".equals(type) && isHost) {
+                AudioTrack current = AudioManager.getInstance().getCurrentTrack();
+                if (current != null) {
+                    broadcastTrackIfHost(current);
+                }
+                broadcastPauseIfHost(AudioManager.getInstance().isPaused());
+                broadcastMembersSync();
+                broadcastRoomPresence();
+                return;
+            } else if ("leave".equals(type)) {
+                synchronized (this) {
+                    members.remove(sender);
+                }
+                if (isHost) {
+                    broadcastRoomPresence();
+                    broadcastMembersSync();
+                }
+            } else if ("track_sync".equals(type) && !isHost) {
+                String title = obj.has("title") ? obj.get("title").getAsString() : "Party Track";
+                String artist = obj.has("artist") ? obj.get("artist").getAsString() : "Host";
+                String url = obj.has("url") ? obj.get("url").getAsString() : null;
+                String category = obj.has("category") ? obj.get("category").getAsString() : "Room";
+                String artwork = obj.has("artwork") ? obj.get("artwork").getAsString() : null;
+                long duration = obj.has("duration") ? obj.get("duration").getAsLong() : -1;
+                long hostElapsed = obj.has("elapsed") ? obj.get("elapsed").getAsLong() : 0;
+
+                if (url != null && !url.isBlank()) {
+                    AudioTrack current = AudioManager.getInstance().getCurrentTrack();
+                    boolean isPlaying = AudioManager.getInstance().isPlaying();
+                    if (current != null && isPlaying && url.equals(current.getUrl())) {
+                        long myElapsed = AudioManager.getInstance().getElapsedSeconds();
+                        if (Math.abs(myElapsed - hostElapsed) <= 4) {
+                            // Already playing this song within 4 seconds of host - do NOT restart or stutter!
+                            return;
+                        }
+                    }
+
+                    AudioTrack syncTrack = new AudioTrack(title, artist, url, false, duration, category, artwork);
+                    Minecraft.getInstance().execute(() -> {
+                        AudioManager.getInstance().playTrackInternal(syncTrack, false, Math.max(0, hostElapsed));
+                    });
+                }
+            } else if ("seek_sync".equals(type) && !isHost) {
+                if (obj.has("ratio")) {
+                    double ratio = obj.get("ratio").getAsDouble();
+                    Minecraft.getInstance().execute(() -> {
+                        AudioManager.getInstance().seekToRemote(ratio);
+                    });
+                }
+            } else if ("pause_sync".equals(type) && !isHost) {
+                if (obj.has("paused")) {
+                    boolean paused = obj.get("paused").getAsBoolean();
+                    Minecraft.getInstance().execute(() -> {
+                        AudioManager.getInstance().togglePauseRemote(paused);
+                    });
+                }
+            }
+        } catch (Throwable ignored) {}
+    }
+
+    // ------------------------------------------------------------------------
+    // Room Directory Listener (Discovered Rooms for Room List)
+    // ------------------------------------------------------------------------
+
+    private void startDirectoryListener() {
+        if (dirListening) return;
+        this.dirListening = true;
+
+        partyExecutor.submit(() -> {
+            while (dirListening) {
+                try {
+                    // Live streaming of global room directory without replaying stale messages from yesterday
+                    URL url = new URI("https://ntfy.sh/pulse_rooms_global/json?since=now").toURL();
+                    HttpURLConnection conn = (HttpURLConnection) url.openConnection();
+                    conn.setRequestProperty("User-Agent", "PulseMusicPlayer/2.6");
+                    conn.setConnectTimeout(5000);
+                    conn.setReadTimeout(55000); // persistent stream connection
+
+                    if (conn.getResponseCode() == 200) {
+                        try (BufferedReader reader = new BufferedReader(new InputStreamReader(conn.getInputStream(), StandardCharsets.UTF_8))) {
+                            String line;
+                            while (dirListening && (line = reader.readLine()) != null) {
+                                if (line.isBlank()) continue;
+                                try {
+                                    JsonObject event = JsonParser.parseString(line).getAsJsonObject();
+                                    String id = event.has("id") ? event.get("id").getAsString() : null;
+                                    if (id != null && !seenDirEventIds.add(id)) {
+                                        continue;
+                                    }
+                                    if (seenDirEventIds.size() > 500) {
+                                        seenDirEventIds.clear();
+                                    }
+                                    if (event.has("time")) {
+                                        long eventTimeSec = event.get("time").getAsLong();
+                                        long curTimeSec = System.currentTimeMillis() / 1000;
+                                        if (curTimeSec - eventTimeSec > 30) {
+                                            continue; // Discard stale message from previous day/session
+                                        }
+                                    }
+                                    if (event.has("message")) {
+                                        handleDirectoryPayload(event.get("message").getAsString());
+                                    }
+                                } catch (Throwable ignored) {}
+                            }
+                        }
+                    }
+
+                    // Prune stale rooms older than 20s
+                    long now = System.currentTimeMillis();
+                    discoveredRooms.removeIf(r -> (now - r.getLastSeen() > 20000));
+
+                    Thread.sleep(1000);
+                } catch (InterruptedException e) {
+                    break;
+                } catch (Throwable ignored) {
+                    try {
+                        Thread.sleep(2000);
+                    } catch (InterruptedException ignored2) {
+                        break;
+                    }
+                }
+            }
+        });
+
+        // Periodic pruning of stale rooms
+        partyExecutor.submit(() -> {
+            while (dirListening) {
+                try {
+                    Thread.sleep(4000);
+                    long now = System.currentTimeMillis();
+                    discoveredRooms.removeIf(r -> (now - r.getLastSeen() > 20000));
+                } catch (InterruptedException e) {
+                    break;
+                } catch (Throwable ignored) {}
+            }
+        });
+    }
+
+    private void handleDirectoryPayload(String rawJson) {
+        try {
+            JsonObject obj = JsonParser.parseString(rawJson).getAsJsonObject();
+            String type = obj.has("type") ? obj.get("type").getAsString() : "";
+
+            if ("room_presence".equals(type)) {
+                String name = obj.has("name") ? obj.get("name").getAsString() : "Room";
+                String host = obj.has("host") ? obj.get("host").getAsString() : "Host";
+                boolean hasPass = obj.has("hasPassword") && obj.get("hasPassword").getAsBoolean();
+                String pass = obj.has("password") ? obj.get("password").getAsString() : "";
+                int count = obj.has("members") ? obj.get("members").getAsInt() : 1;
+
+                RoomEntry existing = null;
+                for (RoomEntry re : discoveredRooms) {
+                    if (re.getName().equalsIgnoreCase(name)) {
+                        existing = re;
+                        break;
+                    }
+                }
+
+                if (existing != null) {
+                    existing.touch();
+                    existing.setMemberCount(count);
+                } else {
+                    discoveredRooms.add(new RoomEntry(name, host, hasPass, pass, count));
+                }
+            } else if ("room_close".equals(type)) {
+                String name = obj.has("name") ? obj.get("name").getAsString() : "";
+                discoveredRooms.removeIf(r -> r.getName().equalsIgnoreCase(name));
+            } else if ("room_query".equals(type)) {
+                // Another player is looking for active rooms! If we are a host, announce ourselves right now
+                if (isInRoom() && isHost) {
+                    broadcastRoomPresence();
+                }
+            }
+        } catch (Throwable ignored) {}
+    }
+
+    public void refreshRooms() {
+        if (isServerNetworkingActive()) {
+            JsonObject obj = new JsonObject();
+            obj.addProperty("action", "query_rooms");
+            ClientPlayNetworking.send(new PulseNetworkPayload(obj.toString()));
+            return;
+        }
+
+        partyExecutor.submit(() -> {
+            try {
+                // 1. Send query probe so active hosts announce themselves immediately
+                JsonObject query = new JsonObject();
+                query.addProperty("type", "room_query");
+                query.addProperty("sender", getPlayerName());
+                sendNtfyMessage("pulse_rooms_global", query);
+
+                // 2. Poll only fresh announcements from the last 20 seconds
+                URL url = new URI("https://ntfy.sh/pulse_rooms_global/json?poll=1&since=20s").toURL();
+                HttpURLConnection conn = (HttpURLConnection) url.openConnection();
+                conn.setRequestProperty("User-Agent", "PulseMusicPlayer/2.6");
+                conn.setConnectTimeout(3000);
+                conn.setReadTimeout(4000);
+
+                if (conn.getResponseCode() == 200) {
+                    try (BufferedReader reader = new BufferedReader(new InputStreamReader(conn.getInputStream(), StandardCharsets.UTF_8))) {
+                        String line;
+                        while ((line = reader.readLine()) != null) {
+                            if (line.isBlank()) continue;
+                            try {
+                                JsonObject event = JsonParser.parseString(line).getAsJsonObject();
+                                if (event.has("time")) {
+                                    long eventTimeSec = event.get("time").getAsLong();
+                                    long curTimeSec = System.currentTimeMillis() / 1000;
+                                    if (curTimeSec - eventTimeSec > 20) {
+                                        continue;
+                                    }
+                                }
+                                if (event.has("message")) {
+                                    handleDirectoryPayload(event.get("message").getAsString());
+                                }
+                            } catch (Throwable ignored) {}
+                        }
+                    }
+                }
+            } catch (Throwable ignored) {}
+        });
+    }
+
+    // ------------------------------------------------------------------------
+    // Personal Invite Listener (/musicplayer room invite <player>)
+    // ------------------------------------------------------------------------
+
+    private void startPersonalInviteListener() {
+        if (inviteListening) return;
+        this.inviteListening = true;
+
+        partyExecutor.submit(() -> {
+            while (inviteListening) {
+                try {
+                    String myName = getPlayerName();
+                    if ("Player".equalsIgnoreCase(myName)) {
+                        Thread.sleep(2000);
+                        continue;
+                    }
+
+                    String topic = "pulse_invite_" + myName.toLowerCase().trim();
+                    URL url = new URI("https://ntfy.sh/" + topic + "/json?since=1m").toURL();
+                    HttpURLConnection conn = (HttpURLConnection) url.openConnection();
+                    conn.setRequestProperty("User-Agent", "PulseMusicPlayer/2.6");
+                    conn.setConnectTimeout(5000);
+                    conn.setReadTimeout(55000); // real-time streaming
+
+                    if (conn.getResponseCode() == 200) {
+                        try (BufferedReader reader = new BufferedReader(new InputStreamReader(conn.getInputStream(), StandardCharsets.UTF_8))) {
+                            String line;
+                            while (inviteListening && (line = reader.readLine()) != null) {
+                                if (line.isBlank()) continue;
+                                try {
+                                    JsonObject event = JsonParser.parseString(line).getAsJsonObject();
+                                    String id = event.has("id") ? event.get("id").getAsString() : null;
+                                    if (id != null && !processedInviteIds.add(id)) {
+                                        continue;
+                                    }
+                                    if (processedInviteIds.size() > 200) {
+                                        processedInviteIds.clear();
+                                    }
+                                    if (event.has("message")) {
+                                        handlePersonalInvite(event.get("message").getAsString());
+                                    }
+                                } catch (Throwable ignored) {}
+                            }
+                        }
+                    }
+                    Thread.sleep(1000);
+                } catch (InterruptedException e) {
+                    break;
+                } catch (Throwable ignored) {
+                    try {
+                        Thread.sleep(2000);
+                    } catch (InterruptedException ignored2) {
+                        break;
+                    }
+                }
+            }
+        });
+    }
+
+    private void handlePersonalInvite(String rawJson) {
+        try {
+            JsonObject obj = JsonParser.parseString(rawJson).getAsJsonObject();
+            String type = obj.has("type") ? obj.get("type").getAsString() : "";
+            if (!"invite".equals(type)) return;
+
+            String sender = obj.has("sender") ? obj.get("sender").getAsString() : "Player";
+            String room = obj.has("room") ? obj.get("room").getAsString() : "Party";
+            String pass = obj.has("password") ? obj.get("password").getAsString() : "";
+
+            displayInvite(sender, room, pass);
+        } catch (Throwable ignored) {}
+    }
+
+    public void displayInvite(String sender, String room, String pass) {
+        if (sender.equalsIgnoreCase(getPlayerName())) return;
+
+        // Automatically register invitation so clicking ACCEPT bypasses any room password
+        invitedRooms.add(room.toLowerCase().trim());
+        invitedRooms.add(room.replace("\"", "").toLowerCase().trim());
+
+        Minecraft client = Minecraft.getInstance();
+        if (client == null) return;
+
+        client.execute(() -> {
+            if (client.player == null) return;
+
+            String joinCmd = "/mp accept \"" + room + "\"";
+            String declineCmd = "/mp decline \"" + sender + "\"";
+
+            Component inviteMsg = Component.literal("§6§l∿ PULSE §8| §f" + sender + " §7invited you to join room §6\"" + room + "\"§7!  ")
+                    .append(Component.literal("§a§l[✔ Accept]")
+                            .withStyle(style -> style
+                                    .withColor(0x00FF88)
+                                    .withUnderlined(true)
+                                    .withBold(true)
+                                    .withClickEvent(new ClickEvent.RunCommand(joinCmd))
+                                    .withHoverEvent(new HoverEvent.ShowText(Component.literal("§aClick to accept and join room §f" + room + "§a!")))))
+                    .append(Component.literal(" §7 • "))
+                    .append(Component.literal("§c§l[✖ Decline]")
+                            .withStyle(style -> style
+                                    .withColor(0xFF5555)
+                                    .withUnderlined(true)
+                                    .withBold(true)
+                                    .withClickEvent(new ClickEvent.RunCommand(declineCmd))
+                                    .withHoverEvent(new HoverEvent.ShowText(Component.literal("§cClick to decline this invitation.")))));
+
+            client.player.sendSystemMessage(inviteMsg);
+
+            // Play notification sound only if toasts/notifications are enabled and outside cooldown
+            long now = System.currentTimeMillis();
+            if (SettingsManager.getInstance().isToastNotifications() && now - lastInviteSoundTime > 3000) {
+                lastInviteSoundTime = now;
+                try {
+                    client.getSoundManager().play(SimpleSoundInstance.forUI(SoundEvents.NOTE_BLOCK_PLING, 1.2f));
+                } catch (Throwable ignored) {}
+            }
+        });
+    }
+
+    // ------------------------------------------------------------------------
+    // Server / World Mod-Users Discovery & Auto-Sync
+    // ------------------------------------------------------------------------
+
+    private void startServerDiscoveryListener() {
+        if (serverListening) return;
+        this.serverListening = true;
+
+        partyExecutor.submit(() -> {
+            while (serverListening) {
+                try {
+                    String serverId = getServerIdentifier();
+                    this.currentServerId = serverId;
+                    String topic = "pulse_srv_" + serverId;
+
+                    URL url = new URI("https://ntfy.sh/" + topic + "/json?since=10m").toURL();
+                    HttpURLConnection conn = (HttpURLConnection) url.openConnection();
+                    conn.setRequestProperty("User-Agent", "PulseMusicPlayer/2.6");
+                    conn.setConnectTimeout(5000);
+                    conn.setReadTimeout(55000); // persistent streaming
+
+                    if (conn.getResponseCode() == 200) {
+                        try (BufferedReader reader = new BufferedReader(new InputStreamReader(conn.getInputStream(), StandardCharsets.UTF_8))) {
+                            String line;
+                            while (serverListening && (line = reader.readLine()) != null) {
+                                if (line.isBlank()) continue;
+                                if (!getServerIdentifier().equals(currentServerId)) {
+                                    break; // Server changed, rebind
+                                }
+                                try {
+                                    JsonObject event = JsonParser.parseString(line).getAsJsonObject();
+                                    String id = event.has("id") ? event.get("id").getAsString() : null;
+                                    if (id != null && !seenServerEventIds.add(id)) {
+                                        continue;
+                                    }
+                                    if (seenServerEventIds.size() > 300) {
+                                        seenServerEventIds.clear();
+                                    }
+                                    if (event.has("message")) {
+                                        handleServerPayload(event.get("message").getAsString());
+                                    }
+                                } catch (Throwable ignored) {}
+                            }
+                        }
+                    }
+
+                    Thread.sleep(1500);
+                } catch (InterruptedException e) {
+                    break;
+                } catch (Throwable ignored) {
+                    try {
+                        Thread.sleep(2500);
+                    } catch (InterruptedException ignored2) {
+                        break;
+                    }
+                }
+            }
+        });
+
+        // Periodic heartbeat beacon announcing mod presence on this server every 8s
+        partyExecutor.submit(() -> {
+            while (serverListening) {
+                try {
+                    String me = getPlayerName();
+                    if (!"Player".equalsIgnoreCase(me)) {
+                        JsonObject beacon = new JsonObject();
+                        beacon.addProperty("type", "user_presence");
+                        beacon.addProperty("player", me);
+                        beacon.addProperty("isHost", isHost);
+                        beacon.addProperty("room", roomName != null ? roomName : "");
+                        sendNtfyMessage("pulse_srv_" + getServerIdentifier(), beacon);
+                    }
+                    long now = System.currentTimeMillis();
+                    serverModUsers.entrySet().removeIf(e -> (now - e.getValue() > 30000));
+
+                    Thread.sleep(8000);
+                } catch (InterruptedException e) {
+                    break;
+                } catch (Throwable ignored) {}
+            }
+        });
+    }
+
+    private void handleServerPayload(String rawJson) {
+        try {
+            JsonObject obj = JsonParser.parseString(rawJson).getAsJsonObject();
+            String type = obj.has("type") ? obj.get("type").getAsString() : "";
+            String myName = getPlayerName();
+
+            if ("user_presence".equals(type)) {
+                String player = obj.has("player") ? obj.get("player").getAsString() : null;
+                boolean playerIsHost = obj.has("isHost") && obj.get("isHost").getAsBoolean();
+                String pRoom = obj.has("room") ? obj.get("room").getAsString() : null;
+
+                if (player != null && !player.isBlank()) {
+                    serverModUsers.put(player, System.currentTimeMillis());
+                    if (playerIsHost && pRoom != null && !pRoom.isBlank() && !player.equalsIgnoreCase(myName)) {
+                        activeServerPartyHost = player;
+                        activeServerPartyRoom = pRoom;
+                    }
+                }
+            } else if ("server_music_party".equals(type)) {
+                String host = obj.has("host") ? obj.get("host").getAsString() : "Host";
+                String room = obj.has("room") ? obj.get("room").getAsString() : null;
+
+                if (host.equalsIgnoreCase(myName) || room == null) return;
+
+                activeServerPartyHost = host;
+                activeServerPartyRoom = room;
+
+                Minecraft client = Minecraft.getInstance();
+                if (client == null) return;
+
+                client.execute(() -> {
+                    if (client.player == null) return;
+
+                    // 1. If Auto-Connect is enabled and player is not currently in a room, seamlessly auto-sync!
+                    if (SettingsManager.getInstance().isAutoConnectServerParty() && !isInRoom()) {
+                        joinRoom(room, "");
+                        client.player.sendSystemMessage(Component.literal("§a[Pulse] 🎧 Auto-connected to §f" + host + "§a's music party on this server! 💖"));
+                        return;
+                    }
+
+                    // 2. Otherwise display interactive clickable prompt in chat
+                    if (!isInRoom()) {
+                        String joinCmd = "/mp room accept \"" + room + "\"";
+                        Component prompt = Component.literal("§6§l∿ PULSE §8| §f" + host + " §7started playing music on this server! ")
+                                .append(Component.literal("§a§l[▶ CLICK TO LISTEN TOGETHER]")
+                                        .withStyle(style -> style
+                                                .withColor(0x00FF88)
+                                                .withUnderlined(true)
+                                                .withBold(true)
+                                                .withClickEvent(new ClickEvent.RunCommand(joinCmd))
+                                                .withHoverEvent(new HoverEvent.ShowText(Component.literal("§aClick to listen together with §f" + host + "§a!")))))
+                                .withStyle(style -> style
+                                        .withClickEvent(new ClickEvent.RunCommand(joinCmd))
+                                        .withHoverEvent(new HoverEvent.ShowText(Component.literal("§aClick to listen together with §f" + host + "§a!"))));
+
+                        client.player.sendSystemMessage(prompt);
+
+                        if (SettingsManager.getInstance().isToastNotifications()) {
+                            try {
+                                client.getSoundManager().play(SimpleSoundInstance.forUI(SoundEvents.NOTE_BLOCK_PLING, 1.2f));
+                            } catch (Throwable ignored) {}
+                        }
+                    }
+                });
+            }
+        } catch (Throwable ignored) {}
+    }
+
+    private void sendNtfyMessage(String topic, JsonObject obj) {
+        partyExecutor.submit(() -> {
+            try {
+                URL url = new URI("https://ntfy.sh/" + topic).toURL();
+                HttpURLConnection conn = (HttpURLConnection) url.openConnection();
+                conn.setRequestMethod("POST");
+                conn.setRequestProperty("User-Agent", "PulseMusicPlayer/2.6");
+                conn.setRequestProperty("Content-Type", "application/json; charset=utf-8");
+                conn.setDoOutput(true);
+                conn.setConnectTimeout(10000);
+                conn.setReadTimeout(10000);
+
+                byte[] data = obj.toString().getBytes(StandardCharsets.UTF_8);
+                try (OutputStream os = conn.getOutputStream()) {
+                    os.write(data);
+                }
+                conn.getResponseCode();
+            } catch (Throwable ignored) {}
+        });
+    }
+
+    // ------------------------------------------------------------------------
+    // Getters
+    // ------------------------------------------------------------------------
+
+    public boolean isInRoom() {
+        return roomName != null;
+    }
+
+    public String getRoomName() {
+        return roomName;
+    }
+
+    public boolean isHost() {
+        return isHost;
+    }
+
+    public String getCurrentHost() {
+        return (currentHost != null && !currentHost.isBlank()) ? currentHost : (isHost ? getPlayerName() : "Host");
+    }
+
+    public synchronized List<String> getMembers() {
+        List<String> list = new ArrayList<>();
+        String myName = getPlayerName();
+        String host = getCurrentHost();
+
+        // Host first
+        if (isHost || myName.equalsIgnoreCase(host)) {
+            list.add(myName + " (Host, You)");
+        } else {
+            list.add(host + " (Host)");
+        }
+
+        // Other active members without duplicate host entry
+        for (String m : members) {
+            String clean = m.replaceAll("\\s*\\((Host|You|,\\s*)*\\)", "").trim();
+            if (clean.isEmpty() || clean.equalsIgnoreCase(host) || clean.equalsIgnoreCase("Host")) continue;
+
+            if (clean.equalsIgnoreCase(myName)) {
+                if (!isHost) {
+                    list.add(clean + " (You)");
+                }
+            } else {
+                list.add(clean);
+            }
+        }
+        return list;
+    }
+
+    public List<RoomEntry> getDiscoveredRooms() {
+        return Collections.unmodifiableList(discoveredRooms);
+    }
+}

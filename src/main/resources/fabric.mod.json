@@ -1,0 +1,33 @@
+﻿{
+  "schemaVersion": 1,
+  "id": "${mod_id}",
+  "version": "${mod_version}",
+  "name": "Pulse Music Player",
+  "description": "A sleek, high-fidelity in-game music player with synced party rooms, live visualizer, and custom HUD.",
+  "authors": [
+    "Slowbag"
+  ],
+  "contact": {
+    "sources": "https://github.com/bruhslow/pulse-music-player"
+  },
+  "license": "MIT",
+  "icon": "assets/pulse/icon.png",
+  "environment": "*",
+  "entrypoints": {
+    "main": [
+      "com.slowbag.pulse.MusicPlayerMod"
+    ],
+    "client": [
+      "com.slowbag.pulse.client.MusicPlayerClientMod"
+    ]
+  },
+  "mixins": [
+    "pulse.mixins.json"
+  ],
+  "depends": {
+    "fabricloader": ">=${loader_version}",
+    "minecraft": ">=26.1 <=26.4",
+    "java": ">=25",
+    "fabric-api": "*"
+  }
+}
