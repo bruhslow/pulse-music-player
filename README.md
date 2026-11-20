@@ -1,6 +1,6 @@
 # Pulse Music Player
 
-A sleek, lightweight music player client mod built for modern Minecraft with Lunar Client compatibility.
+A sleek, lightweight music player client mod built for modern Minecraft .
 
 <p align="center">
   <img src="assets/icon.png" width="128" height="128" alt="Pulse Music Player Icon" />
