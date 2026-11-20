@@ -1,10 +1,18 @@
 # Pulse Music Player
 
-A sleek, lightweight music player client mod built for modern Minecraft .
+A sleek, lightweight music player client mod built for modern Minecraft (Fabric 1.26+ / 26 and higher).
 
 <p align="center">
   <img src="assets/icon.png" width="128" height="128" alt="Pulse Music Player Icon" />
 </p>
+
+## ⚡ Download (Beta Release)
+> **Note:** Pulse Music Player is currently in **Beta** and built for **Minecraft 26 and higher (Fabric 1.26+)**.
+
+- 📦 **Direct Jar Download:** [**`pulse-music-player-1.5.9.jar`**](https://github.com/bruhslow/pulse-music-player/releases/download/v1.5.9/pulse-music-player-1.5.9.jar)
+- 🚀 **Release Page:** [**Pulse Music Player v1.5.9 (Beta Release)**](https://github.com/bruhslow/pulse-music-player/releases/tag/v1.5.9)
+
+---
 
 ## Highlights
 - **Dynamic Floating HUD**: Compacts into an animated island widget with real-time waveform bars. Drag and place anywhere on screen.
@@ -24,11 +32,13 @@ A sleek, lightweight music player client mod built for modern Minecraft .
 
 ## Installation
 
-### Client Installation
-Drop `pulse-music-player-1.5.9+26.x.jar` into your Minecraft or Lunar Client `mods` folder. Requires Fabric Loader and Fabric API.
+### Client Installation (Beta)
+1. Download [**`pulse-music-player-1.5.9.jar`**](https://github.com/bruhslow/pulse-music-player/releases/download/v1.5.9/pulse-music-player-1.5.9.jar).
+2. Drop it into your Minecraft or Lunar Client `.minecraft/mods` folder.
+3. Requires **Fabric Loader** and **Fabric API** for Minecraft 1.26+.
 
 ### Server-Side Installation (Optional for High-Performance Multiplayer)
-Drop `serverside-music-player-1.5.9+26.x.jar` (or the universal client JAR) into your Fabric server's `mods/` directory.
+Drop `pulse-music-player-1.5.9.jar` into your Fabric server's `mods/` directory.
 - Enables native, zero-latency server packet routing for synced listening rooms.
 - Server directly synchronizes audio track position, play/pause states, and room membership.
 - Delivers private room invites seamlessly without needing external cloud relays.
