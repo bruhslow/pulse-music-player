@@ -1297,25 +1297,16 @@ public class PartyManager {
         client.execute(() -> {
             if (client.player == null) return;
 
-            String joinCmd = "/mp accept \"" + room + "\"";
-            String declineCmd = "/mp decline \"" + sender + "\"";
+            String joinCmd = "/mp";
 
             Component inviteMsg = Component.literal("§6§l∿ PULSE §8| §f" + sender + " §7invited you to join room §6\"" + room + "\"§7!  ")
-                    .append(Component.literal("§a§l[✔ Accept]")
+                    .append(Component.literal("§a§l[▶ OPEN PULSE]")
                             .withStyle(style -> style
                                     .withColor(0x00FF88)
                                     .withUnderlined(true)
                                     .withBold(true)
                                     .withClickEvent(new ClickEvent.RunCommand(joinCmd))
-                                    .withHoverEvent(new HoverEvent.ShowText(Component.literal("§aClick to accept and join room §f" + room + "§a!")))))
-                    .append(Component.literal(" §7 • "))
-                    .append(Component.literal("§c§l[✖ Decline]")
-                            .withStyle(style -> style
-                                    .withColor(0xFF5555)
-                                    .withUnderlined(true)
-                                    .withBold(true)
-                                    .withClickEvent(new ClickEvent.RunCommand(declineCmd))
-                                    .withHoverEvent(new HoverEvent.ShowText(Component.literal("§cClick to decline this invitation.")))));
+                                    .withHoverEvent(new HoverEvent.ShowText(Component.literal("§aClick to open Pulse Music Player!")))));
 
             client.player.sendSystemMessage(inviteMsg);
 
@@ -1455,7 +1446,7 @@ public class PartyManager {
 
                     // 2. Otherwise display interactive clickable prompt in chat
                     if (!isInRoom()) {
-                        String joinCmd = "/mp room accept \"" + room + "\"";
+                        String joinCmd = "/mp";
                         Component prompt = Component.literal("§6§l∿ PULSE §8| §f" + host + " §7started playing music on this server! ")
                                 .append(Component.literal("§a§l[▶ CLICK TO LISTEN TOGETHER]")
                                         .withStyle(style -> style

@@ -17,8 +17,8 @@ public class HudMoveScreen extends Screen {
 
     private int previewX = 100;
     private int previewY = 100;
-    private final int hudW = 208;
-    private final int hudH = 26;
+    private final int hudW = 220;
+    private final int hudH = 32;
 
     public HudMoveScreen(Screen parentScreen) {
         super(Component.literal("Move HUD Overlay"));
@@ -78,23 +78,25 @@ public class HudMoveScreen extends Screen {
         graphics.fill(previewX + hudW - 1, previewY + 2, previewX + hudW, previewY + hudH - 2, borderCol);
         graphics.fill(previewX + 4, previewY + 1, previewX + hudW - 4, previewY + 2, 0x40FFFFFF);
 
-        // Left glowing music badge
-        int iconX = previewX + 4;
-        int iconY = previewY + 4;
-        int iconSize = 18;
-        graphics.fill(iconX, iconY, iconX + iconSize, iconY + iconSize, 0xFF2E241E);
-        graphics.outline(iconX, iconY, iconSize, iconSize, borderCol);
-        graphics.centeredText(this.font, Component.literal("§6♫"), iconX + 9, iconY + 5, 0xFFFFFFFF);
+        // Left circular turntable disc
+        int cx = previewX + 16;
+        int cy = previewY + 16;
+        int circleRadius = 11;
+        graphics.fill(cx - circleRadius, cy - circleRadius, cx + circleRadius + 1, cy + circleRadius + 1, 0xFF1C1A18);
+        graphics.outline(cx - circleRadius, cy - circleRadius, circleRadius * 2 + 1, circleRadius * 2 + 1, borderCol);
+        graphics.fill(cx - 3, cy - 3, cx + 4, cy + 4, 0xFFD97746);
+        graphics.fill(cx - 1, cy - 1, cx + 2, cy + 2, 0xFF141312);
+        graphics.fill(cx + 4, cy - 4, cx + 6, cy - 2, 0xFFFFF0D0);
 
         // Info Text
-        graphics.text(this.font, Component.literal("§f§l" + truncate(title, 20)), previewX + 28, previewY + 4, 0xFFFFFFFF, false);
-        graphics.text(this.font, Component.literal("§7" + truncate(artist, 22)), previewX + 28, previewY + 14, 0xFFA0988E, false);
+        graphics.text(this.font, Component.literal("§f§l" + truncate(title, 20)), previewX + 32, previewY + 5, 0xFFFFFFFF, false);
+        graphics.text(this.font, Component.literal("§7" + truncate(artist, 22)), previewX + 32, previewY + 17, 0xFFA0988E, false);
 
         // Mini dancing visualizer bars on right
-        int visX = previewX + hudW - 30;
-        int barBaseY = previewY + hudH - 5;
-        for (int i = 0; i < 5; i++) {
-            int bh = 4 + (i * 2 % 10);
+        int visX = previewX + hudW - 34;
+        int barBaseY = previewY + hudH - 7;
+        for (int i = 0; i < 6; i++) {
+            int bh = 4 + (i * 3 % 11);
             graphics.fill(visX + (i * 5), barBaseY - bh, visX + (i * 5) + 3, barBaseY, 0xFFD97746);
             graphics.fill(visX + (i * 5), barBaseY - bh, visX + (i * 5) + 3, barBaseY - bh + 1, 0xFFFFF0D0);
         }

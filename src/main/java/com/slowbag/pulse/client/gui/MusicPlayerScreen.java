@@ -38,6 +38,7 @@ public class MusicPlayerScreen extends Screen {
     private float openAnimationProgress = 0.0f;
     private float vinylAngle = 0.0f;
     private final float[] smoothBands = new float[16];
+    private final float[] smoothWaveBars = new float[64];
 
     // Notification toast on refresh / actions
     private String statusMessage = null;
@@ -447,37 +448,49 @@ public class MusicPlayerScreen extends Screen {
 
         graphics.text(this.font, Component.literal("§7" + totalStr), scrubX + scrubW + 4, scrubY - 2, 0xFFA0988E, false);
 
-        // 4. Live Audio Waveform Equalizer (Under scrubber) - Lively, Bouncy & Rhythm-Reactive
+        // 4. Live Audio Waveform Equalizer (Under scrubber) - Fluid, Dynamic & Rhythmic Dancing Wave
         float[] rawBands = audioManager.getVisualizerBands();
         int waveX = x + 10;
         int waveY = y + h - 8;
         int waveBars = Math.max(16, (leftCardW - 20) / 7);
         int maxWaveH = 18;
         long timeMs = System.currentTimeMillis();
+        double t = timeMs / 1000.0;
+        float peak = audioManager.getPeakLevel();
 
         for (int i = 0; i < waveBars; i++) {
             int bandIdx = Math.min(15, i * 16 / waveBars);
             float audioVal = (rawBands != null && bandIdx < rawBands.length) ? rawBands[bandIdx] : 0.0f;
-            
-            // Dynamic rhythmic pulse based on audio energy + frequency oscillation
-            float wavePhase = (float) Math.sin((timeMs / 120.0) + (i * 0.45));
-            float waveBonus = isPlaying ? (Math.abs(wavePhase) * 0.45f + (float) Math.cos((timeMs / 200.0) + (i * 0.8)) * 0.2f) : 0.0f;
-            
-            float target = (isPlaying && !isBuffering && !SettingsManager.getInstance().isReducedMotion()) 
-                    ? Math.max(0.12f, audioVal * 2.8f + waveBonus * Math.max(0.25f, audioVal + 0.3f)) 
-                    : 0.04f;
-            smoothBands[bandIdx] = AnimationUtil.lerp(smoothBands[bandIdx], target, 0.42f);
+            audioVal = Math.max(0.0f, Math.min(1.0f, audioVal));
 
-            int barH = Math.max(2, (int) (smoothBands[bandIdx] * maxWaveH * 1.6f));
-            barH = Math.min(maxWaveH, barH);
+            // Fluid multi-harmonic traveling waves creating natural peaks and valleys across the spectrum
+            double w1 = Math.sin(t * 3.8 - i * 0.38);
+            double w2 = Math.sin(t * 5.6 + i * 0.52) * 0.35;
+            double w3 = Math.cos(t * 2.2 - i * 0.18) * 0.25;
+            double waveShape = 0.50 + (0.32 * w1) + w2 + w3; // smoothly oscillates between ~0.12 and ~0.88
+            waveShape = Math.max(0.08, Math.min(0.92, waveShape));
 
+            float target;
+            if (isPlaying && !isBuffering && !SettingsManager.getInstance().isReducedMotion()) {
+                // Audio energy dynamically surges the wave without pegging all bars to the ceiling
+                double energyMod = 0.30 + (0.45 * audioVal) + (0.25 * peak);
+                target = (float) (0.12 + (waveShape * energyMod));
+                target = Math.max(0.10f, Math.min(0.88f, target));
+            } else {
+                target = 0.05f; // Gentle resting baseline when stopped or paused
+            }
+
+            int barIdx = i % smoothWaveBars.length;
+            smoothWaveBars[barIdx] = AnimationUtil.lerp(smoothWaveBars[barIdx], target, 0.32f);
+
+            int barH = Math.max(2, Math.min(maxWaveH, (int) (smoothWaveBars[barIdx] * maxWaveH)));
             int barX = waveX + (i * 7);
             int barY = waveY - barH;
 
             // Warm amber gradient with bright golden caps
             int barColor = AnimationUtil.colorLerp(0xFFD97746, 0xFFFFA055, (float) i / (float) waveBars);
             graphics.fill(barX, barY, barX + 5, waveY, barColor);
-            // Dynamic tip highlight
+            // Dynamic golden tip highlight
             graphics.fill(barX, barY, barX + 5, barY + 1, 0xFFFFF2D0);
         }
 
