@@ -128,60 +128,66 @@ public class HudOverlayRenderer {
             AlbumArtManager.getInstance().loadArtworkAsync(track.getArtworkUrl());
         }
 
-        // 2. Circle on the Left with Animation Inside (Turntable vinyl disc with grooved rings and spinning arm)
+        // 2. Circle on the Left with Animated Audio Wave Line Inside
         int cx = posX + 16;
         int cy = posY + 16;
         int circleRadius = 11;
 
-        if (isPlaying && !audio.isPaused()) {
-            vinylAngle += 0.07f + (smoothPeak * 0.12f);
-            if (vinylAngle > 6.28318f) vinylAngle -= 6.28318f;
-        }
-
         // Bass pulse aura glow around the circle
         int pulseRadius = circleRadius + (int) (smoothPeak * 2.5f);
-        int glowColor = ((int) (alpha * (0.25f + smoothPeak * 0.45f)) << 24) | (borderR << 16) | (borderG << 8) | borderB;
+        int glowColor = ((int) (alpha * (0.22f + smoothPeak * 0.40f)) << 24) | (borderR << 16) | (borderG << 8) | borderB;
         drawCircle(graphics, cx, cy, pulseRadius + 1, glowColor);
 
-        Identifier circleArtId = AlbumArtManager.getInstance().getCircleAlbumArtId();
-        if (circleArtId != null) {
-            // Render circle album artwork
-            drawCircle(graphics, cx, cy, circleRadius, (alpha << 24) | 0x1A1816);
-            graphics.blit(circleArtId, cx - circleRadius, cy - circleRadius, circleRadius * 2, circleRadius * 2, 0.0f, 0.0f, 1.0f, 1.0f);
-            drawCircleRing(graphics, cx, cy, circleRadius, borderColor);
+        // Dark glass circle interior
+        int discColor = (alpha << 24) | 0x141518;
+        drawCircle(graphics, cx, cy, circleRadius, discColor);
 
-            // Center spindle
-            drawCircle(graphics, cx, cy, 2, (alpha << 24) | 0xFFD97746);
-            drawCircle(graphics, cx, cy, 1, (alpha << 24) | 0x141312);
-        } else {
-            // Dark grooved vinyl record disc
-            int discColor = (alpha << 24) | 0x1C1A18;
-            drawCircle(graphics, cx, cy, circleRadius, discColor);
-            drawCircleRing(graphics, cx, cy, circleRadius, borderColor);
+        // Circular ring border
+        drawCircleRing(graphics, cx, cy, circleRadius, borderColor);
 
-            // Concentric vinyl grooves
-            drawCircleRing(graphics, cx, cy, circleRadius - 3, (alpha << 24) | 0x30FFFFFF);
-            drawCircleRing(graphics, cx, cy, circleRadius - 6, (alpha << 24) | 0x18FFFFFF);
+        // Moving animated audio line inside the circle
+        double timeMs = System.currentTimeMillis();
+        double wavePhase = timeMs * 0.007;
+        float amp = (isPlaying && !audio.isPaused()) ? (1.5f + smoothPeak * 4.5f) : 0.0f;
+        int waveLineColor = (alpha << 24) | 0xFFFFF0D0;
+        int waveGlowColor = ((int) (alpha * 0.40f) << 24) | (borderR << 16) | (borderG << 8) | borderB;
 
-            // Center bronze/gold turntable hub
-            int coreColor = (alpha << 24) | (audio.isPaused() ? 0xFFCC00 : 0xFFD97746);
-            drawCircle(graphics, cx, cy, 4, coreColor);
-            drawCircle(graphics, cx, cy, 2, (alpha << 24) | 0x141312);
+        int prevX = cx - circleRadius + 2;
+        int prevY = cy;
+
+        for (int px = -circleRadius + 2; px <= circleRadius - 2; px++) {
+            int curX = cx + px;
+            float normX = (float) px / (float) (circleRadius - 2);
+            float window = (float) Math.cos(normX * (Math.PI / 2.0));
+            float maxH = (float) Math.sqrt(Math.max(0, (circleRadius - 1) * (circleRadius - 1) - px * px)) - 1.5f;
+
+            double wave = Math.sin(normX * 4.2 + wavePhase) * 0.65 + Math.sin(normX * 8.5 - wavePhase * 1.4) * 0.35;
+            int offset = (int) Math.round(wave * amp * window);
+            offset = Math.max(-(int) maxH, Math.min((int) maxH, offset));
+            int curY = cy + offset;
+
+            // Connect previous point to current point for a continuous, smooth wave line
+            int minY = Math.min(prevY, curY);
+            int maxY = Math.max(prevY, curY);
+            for (int yStep = minY; yStep <= maxY; yStep++) {
+                // Soft glow halo
+                graphics.fill(curX, yStep - 1, curX + 1, yStep, waveGlowColor);
+                graphics.fill(curX, yStep + 1, curX + 1, yStep + 2, waveGlowColor);
+                // Crisp bright core wave line
+                graphics.fill(curX, yStep, curX + 1, yStep + 1, waveLineColor);
+            }
+
+            prevX = curX;
+            prevY = curY;
         }
 
-        // Rotating turntable needle / stylus animation inside the circle
+        // Center beacon dot on the moving wave
         if (isPlaying && !audio.isPaused()) {
-            float needleX = cx + (float) Math.cos(vinylAngle) * 6.5f;
-            float needleY = cy + (float) Math.sin(vinylAngle) * 6.5f;
-            graphics.fill((int) needleX, (int) needleY, (int) needleX + 2, (int) needleY + 2, (alpha << 24) | 0xFFFFF0D0);
-
-            float oppX = cx - (float) Math.cos(vinylAngle) * 4.5f;
-            float oppY = cy - (float) Math.sin(vinylAngle) * 4.5f;
-            graphics.fill((int) oppX, (int) oppY, (int) oppX + 1, (int) oppY + 1, (alpha << 24) | 0x60FFFFFF);
+            graphics.fill(cx - 1, cy - 1, cx + 2, cy + 2, (alpha << 24) | 0xFFFFFFFF);
         } else if (audio.isPaused()) {
             // Little pause pause glyph in center
-            graphics.fill(cx - 2, cy - 2, cx - 1, cy + 3, (alpha << 24) | 0xFFFFFF);
-            graphics.fill(cx + 1, cy - 2, cx + 2, cy + 3, (alpha << 24) | 0xFFFFFF);
+            graphics.fill(cx - 2, cy - 2, cx - 1, cy + 3, (alpha << 24) | 0xFFD97746);
+            graphics.fill(cx + 1, cy - 2, cx + 2, cy + 3, (alpha << 24) | 0xFFD97746);
         }
 
         // 3. Middle Text: Song Info
@@ -215,7 +221,6 @@ public class HudOverlayRenderer {
         int maxBarH = 16;
         int barBaseY = posY + hudH - 7;
         float[] rawBands = audio.getVisualizerBands();
-        long timeMs = System.currentTimeMillis();
         double t = timeMs / 1000.0;
 
         for (int i = 0; i < 6; i++) {
@@ -253,31 +258,52 @@ public class HudOverlayRenderer {
     }
 
     private static void drawPillBackground(GuiGraphicsExtractor graphics, int x, int y, int w, int h, int bg, int outline) {
-        // Rounded pill fill (2px corner chamfers)
-        graphics.fill(x + 2, y, x + w - 2, y + h, bg);
-        graphics.fill(x, y + 2, x + w, y + h - 2, bg);
-        graphics.fill(x + 1, y + 1, x + w - 1, y + h - 1, bg);
+        // Soft rounded capsule fill (5px smooth corner fillets)
+        graphics.fill(x + 5, y, x + w - 5, y + 1, bg);
+        graphics.fill(x + 3, y + 1, x + w - 3, y + 2, bg);
+        graphics.fill(x + 2, y + 2, x + w - 2, y + 3, bg);
+        graphics.fill(x + 1, y + 3, x + w - 1, y + 5, bg);
+        graphics.fill(x, y + 5, x + w, y + h - 5, bg);
+        graphics.fill(x + 1, y + h - 5, x + w - 1, y + h - 3, bg);
+        graphics.fill(x + 2, y + h - 3, x + w - 2, y + h - 2, bg);
+        graphics.fill(x + 3, y + h - 2, x + w - 3, y + h - 1, bg);
+        graphics.fill(x + 5, y + h - 1, x + w - 5, y + h, bg);
 
-        // Smooth pill outline
-        graphics.fill(x + 2, y, x + w - 2, y + 1, outline);
-        graphics.fill(x + 2, y + h - 1, x + w - 2, y + h, outline);
-        graphics.fill(x, y + 2, x + 1, y + h - 2, outline);
-        graphics.fill(x + w - 1, y + 2, x + w, y + h - 2, outline);
+        // Smooth continuous curved outline (no sharp edges)
+        graphics.fill(x + 5, y, x + w - 5, y + 1, outline);
+        graphics.fill(x + 5, y + h - 1, x + w - 5, y + h, outline);
+        graphics.fill(x, y + 5, x + 1, y + h - 5, outline);
+        graphics.fill(x + w - 1, y + 5, x + w, y + h - 5, outline);
 
-        graphics.fill(x + 1, y + 1, x + 2, y + 2, outline);
-        graphics.fill(x + w - 2, y + 1, x + w - 1, y + 2, outline);
-        graphics.fill(x + 1, y + h - 2, x + 2, y + h - 1, outline);
-        graphics.fill(x + w - 2, y + h - 2, x + w - 1, y + h - 1, outline);
+        // Top-Left curve
+        graphics.fill(x + 3, y + 1, x + 5, y + 2, outline);
+        graphics.fill(x + 2, y + 2, x + 3, y + 3, outline);
+        graphics.fill(x + 1, y + 3, x + 2, y + 5, outline);
+
+        // Top-Right curve
+        graphics.fill(x + w - 5, y + 1, x + w - 3, y + 2, outline);
+        graphics.fill(x + w - 3, y + 2, x + w - 2, y + 3, outline);
+        graphics.fill(x + w - 2, y + 3, x + w - 1, y + 5, outline);
+
+        // Bottom-Left curve
+        graphics.fill(x + 1, y + h - 5, x + 2, y + h - 3, outline);
+        graphics.fill(x + 2, y + h - 3, x + 3, y + h - 2, outline);
+        graphics.fill(x + 3, y + h - 2, x + 5, y + h - 1, outline);
+
+        // Bottom-Right curve
+        graphics.fill(x + w - 2, y + h - 5, x + w - 1, y + h - 3, outline);
+        graphics.fill(x + w - 3, y + h - 3, x + w - 2, y + h - 2, outline);
+        graphics.fill(x + w - 5, y + h - 2, x + w - 3, y + h - 1, outline);
     }
 
-    private static void drawCircle(GuiGraphicsExtractor graphics, int cx, int cy, int radius, int color) {
+    public static void drawCircle(GuiGraphicsExtractor graphics, int cx, int cy, int radius, int color) {
         for (int dy = -radius; dy <= radius; dy++) {
             int dx = (int) Math.sqrt(radius * radius - dy * dy);
             graphics.fill(cx - dx, cy + dy, cx + dx + 1, cy + dy + 1, color);
         }
     }
 
-    private static void drawCircleRing(GuiGraphicsExtractor graphics, int cx, int cy, int radius, int color) {
+    public static void drawCircleRing(GuiGraphicsExtractor graphics, int cx, int cy, int radius, int color) {
         int r2 = radius * radius;
         int innerR2 = (radius - 1) * (radius - 1);
         for (int dy = -radius; dy <= radius; dy++) {

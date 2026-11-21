@@ -52,8 +52,7 @@ public class HudMoveScreen extends Screen {
         int headerH = 34;
         int headerX = (this.width - headerW) / 2;
         int headerY = 10;
-        graphics.fill(headerX, headerY, headerX + headerW, headerY + headerH, 0xF0181A1B);
-        graphics.outline(headerX, headerY, headerW, headerH, 0xFFD97746);
+        MusicPlayerScreen.drawSoftBox(graphics, headerX, headerY, headerW, headerH, 5, 0xF0181A1B, 0xFFD97746);
         graphics.centeredText(this.font, Component.literal("§6§l✦ DRAG HUD ANYWHERE ON SCREEN ✦"), this.width / 2, headerY + 6, 0xFFFFFFFF);
         graphics.centeredText(this.font, Component.literal("§7Click and hold the music card to drag • Release to save position"), this.width / 2, headerY + 19, 0xFFA0988E);
 
@@ -64,29 +63,64 @@ public class HudMoveScreen extends Screen {
         String title = track != null ? track.getTitle() : "Pulse Lo-Fi Beats & Chill";
         String artist = track != null ? track.getArtist() : "Lofi Girl Records";
 
-        // HUD Capsule Body (Rounded pill with 2px corner insets)
+        // HUD Capsule Body (Rounded pill with soft 5px curved corners)
         int cardBg = isDragging ? 0xF02A241F : 0xEE141618;
         int borderCol = isDragging ? 0xFFFFD700 : 0xFFD97746;
 
-        graphics.fill(previewX + 2, previewY, previewX + hudW - 2, previewY + hudH, cardBg);
-        graphics.fill(previewX, previewY + 2, previewX + hudW, previewY + hudH - 2, cardBg);
-        graphics.fill(previewX + 1, previewY + 1, previewX + hudW - 1, previewY + hudH - 1, cardBg);
+        graphics.fill(previewX + 5, previewY, previewX + hudW - 5, previewY + 1, cardBg);
+        graphics.fill(previewX + 3, previewY + 1, previewX + hudW - 3, previewY + 2, cardBg);
+        graphics.fill(previewX + 2, previewY + 2, previewX + hudW - 2, previewY + 3, cardBg);
+        graphics.fill(previewX + 1, previewY + 3, previewX + hudW - 1, previewY + 5, cardBg);
+        graphics.fill(previewX, previewY + 5, previewX + hudW, previewY + hudH - 5, cardBg);
+        graphics.fill(previewX + 1, previewY + hudH - 5, previewX + hudW - 1, previewY + hudH - 3, cardBg);
+        graphics.fill(previewX + 2, previewY + hudH - 3, previewX + hudW - 2, previewY + hudH - 2, cardBg);
+        graphics.fill(previewX + 3, previewY + hudH - 2, previewX + hudW - 3, previewY + hudH - 1, cardBg);
+        graphics.fill(previewX + 5, previewY + hudH - 1, previewX + hudW - 5, previewY + hudH, cardBg);
 
-        graphics.fill(previewX + 2, previewY, previewX + hudW - 2, previewY + 1, borderCol);
-        graphics.fill(previewX + 2, previewY + hudH - 1, previewX + hudW - 2, previewY + hudH, borderCol);
-        graphics.fill(previewX, previewY + 2, previewX + 1, previewY + hudH - 2, borderCol);
-        graphics.fill(previewX + hudW - 1, previewY + 2, previewX + hudW, previewY + hudH - 2, borderCol);
-        graphics.fill(previewX + 4, previewY + 1, previewX + hudW - 4, previewY + 2, 0x40FFFFFF);
+        graphics.fill(previewX + 5, previewY, previewX + hudW - 5, previewY + 1, borderCol);
+        graphics.fill(previewX + 5, previewY + hudH - 1, previewX + hudW - 5, previewY + hudH, borderCol);
+        graphics.fill(previewX, previewY + 5, previewX + 1, previewY + hudH - 5, borderCol);
+        graphics.fill(previewX + hudW - 1, previewY + 5, previewX + hudW, previewY + hudH - 5, borderCol);
 
-        // Left circular turntable disc
+        graphics.fill(previewX + 3, previewY + 1, previewX + 5, previewY + 2, borderCol);
+        graphics.fill(previewX + 2, previewY + 2, previewX + 3, previewY + 3, borderCol);
+        graphics.fill(previewX + 1, previewY + 3, previewX + 2, previewY + 5, borderCol);
+
+        graphics.fill(previewX + hudW - 5, previewY + 1, previewX + hudW - 3, previewY + 2, borderCol);
+        graphics.fill(previewX + hudW - 3, previewY + 2, previewX + hudW - 2, previewY + 3, borderCol);
+        graphics.fill(previewX + hudW - 2, previewY + 3, previewX + hudW - 1, previewY + 5, borderCol);
+
+        graphics.fill(previewX + 1, previewY + hudH - 5, previewX + 2, previewY + hudH - 3, borderCol);
+        graphics.fill(previewX + 2, previewY + hudH - 3, previewX + 3, previewY + hudH - 2, borderCol);
+        graphics.fill(previewX + 3, previewY + hudH - 2, previewX + 5, previewY + hudH - 1, borderCol);
+
+        graphics.fill(previewX + hudW - 2, previewY + hudH - 5, previewX + hudW - 1, previewY + hudH - 3, borderCol);
+        graphics.fill(previewX + hudW - 3, previewY + hudH - 3, previewX + hudW - 2, previewY + hudH - 2, borderCol);
+        graphics.fill(previewX + hudW - 5, previewY + hudH - 2, previewX + hudW - 3, previewY + hudH - 1, borderCol);
+
+        graphics.fill(previewX + 5, previewY + 1, previewX + hudW - 5, previewY + 2, 0x40FFFFFF);
+
+        // Left circle with moving animated wave line inside
         int cx = previewX + 16;
         int cy = previewY + 16;
         int circleRadius = 11;
-        graphics.fill(cx - circleRadius, cy - circleRadius, cx + circleRadius + 1, cy + circleRadius + 1, 0xFF1C1A18);
-        graphics.outline(cx - circleRadius, cy - circleRadius, circleRadius * 2 + 1, circleRadius * 2 + 1, borderCol);
-        graphics.fill(cx - 3, cy - 3, cx + 4, cy + 4, 0xFFD97746);
-        graphics.fill(cx - 1, cy - 1, cx + 2, cy + 2, 0xFF141312);
-        graphics.fill(cx + 4, cy - 4, cx + 6, cy - 2, 0xFFFFF0D0);
+
+        // Dark circle interior & border ring
+        HudOverlayRenderer.drawCircle(graphics, cx, cy, circleRadius, 0xFF141518);
+        HudOverlayRenderer.drawCircleRing(graphics, cx, cy, circleRadius, borderCol);
+
+        // Wave line preview
+        double moveTime = System.currentTimeMillis() * 0.007;
+        for (int px = -8; px <= 8; px++) {
+            int curX = cx + px;
+            double normX = px / 8.0;
+            double wave = Math.sin(normX * 4.2 + moveTime) * 0.7;
+            int curY = cy + (int) Math.round(wave * 3.5);
+            graphics.fill(curX, curY - 1, curX + 1, curY, 0x60D97746);
+            graphics.fill(curX, curY, curX + 1, curY + 1, 0xFFFFF0D0);
+            graphics.fill(curX, curY + 1, curX + 1, curY + 2, 0x60D97746);
+        }
+        graphics.fill(cx - 1, cy - 1, cx + 2, cy + 2, 0xFFFFFFFF);
 
         // Info Text
         graphics.text(this.font, Component.literal("§f§l" + truncate(title, 20)), previewX + 32, previewY + 5, 0xFFFFFFFF, false);
@@ -139,16 +173,14 @@ public class HudMoveScreen extends Screen {
         int compBtnW = 110;
         int compBtnX = 12 + (btnW + 6) * 4;
         boolean compHov = mouseX >= compBtnX && mouseX <= compBtnX + compBtnW && mouseY >= bottomY && mouseY <= bottomY + btnH;
-        graphics.fill(compBtnX, bottomY, compBtnX + compBtnW, bottomY + btnH, compactOn ? (compHov ? 0xFFE0783E : 0xFFD97746) : (compHov ? 0x60FFFFFF : 0x25FFFFFF));
-        graphics.outline(compBtnX, bottomY, compBtnW, btnH, compHov ? 0xFFFFFFFF : 0x35FFFFFF);
+        MusicPlayerScreen.drawSoftBox(graphics, compBtnX, bottomY, compBtnW, btnH, 3, compactOn ? (compHov ? 0xFFE0783E : 0xFFD97746) : (compHov ? 0x60FFFFFF : 0x25FFFFFF), compHov ? 0xFFFFFFFF : 0x35FFFFFF);
         graphics.centeredText(this.font, Component.literal(compactOn ? "§fAuto-Compact: §aON" : "§7Auto-Compact: §cOFF"), compBtnX + compBtnW / 2, bottomY + 6, 0xFFFFFFFF);
 
         // Save & Done Button (Green pill on far right)
         int doneW = 86;
         int doneX = this.width - doneW - 12;
         boolean doneHov = mouseX >= doneX && mouseX <= doneX + doneW && mouseY >= bottomY && mouseY <= bottomY + btnH;
-        graphics.fill(doneX, bottomY, doneX + doneW, bottomY + btnH, doneHov ? 0xFF22C55E : 0xFF16A34A);
-        graphics.outline(doneX, bottomY, doneW, btnH, doneHov ? 0xFFFFFFFF : 0x50FFFFFF);
+        MusicPlayerScreen.drawSoftBox(graphics, doneX, bottomY, doneW, btnH, 3, doneHov ? 0xFF22C55E : 0xFF16A34A, doneHov ? 0xFFFFFFFF : 0x50FFFFFF);
         graphics.centeredText(this.font, Component.literal("§f✔ Save & Done"), doneX + doneW / 2, bottomY + 6, 0xFFFFFFFF);
 
         // Coordinates display
@@ -157,8 +189,7 @@ public class HudMoveScreen extends Screen {
 
     private void drawSnapButton(GuiGraphicsExtractor graphics, int bx, int by, int bw, int bh, String label, int mx, int my, Runnable action) {
         boolean hov = mx >= bx && mx <= bx + bw && my >= by && my <= by + bh;
-        graphics.fill(bx, by, bx + bw, by + bh, hov ? 0x80D97746 : 0x25FFFFFF);
-        graphics.outline(bx, by, bw, bh, hov ? 0xFFD97746 : 0x30FFFFFF);
+        MusicPlayerScreen.drawSoftBox(graphics, bx, by, bw, bh, 3, hov ? 0x80D97746 : 0x25FFFFFF, hov ? 0xFFD97746 : 0x30FFFFFF);
         graphics.centeredText(this.font, Component.literal("§f" + label), bx + bw / 2, by + 6, 0xFFFFFFFF);
     }
 
