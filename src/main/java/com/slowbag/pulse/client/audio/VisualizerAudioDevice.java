@@ -135,6 +135,8 @@ public class VisualizerAudioDevice extends AudioDeviceBase {
         if (line != null && line.isOpen()) {
             try {
                 line.flush();
+                prebuffering = true;
+                prebufferBytes = 0;
             } catch (Throwable ignored) {}
         }
     }
@@ -352,7 +354,6 @@ public class VisualizerAudioDevice extends AudioDeviceBase {
                 } catch (Throwable fallback) {
                     openedLine.open(format);
                 }
-                openedLine.start();
                 lastEx = null;
                 break;
             } catch (Exception e) {
@@ -372,6 +373,8 @@ public class VisualizerAudioDevice extends AudioDeviceBase {
 
         if (openedLine != null) {
             line = openedLine;
+            prebuffering = true;
+            prebufferBytes = 0;
             updateHardwareVolume();
         } else {
             throw new JavaLayerException("Failed to open audio line after retries: " + (lastEx != null ? lastEx.getMessage() : "unavailable"), lastEx);
@@ -392,14 +395,6 @@ public class VisualizerAudioDevice extends AudioDeviceBase {
 
         ensureLineOpen();
         if (line == null || !line.isOpen()) return;
-
-        if (SettingsManager.getInstance().isMonoAudio() && len >= 2) {
-            for (int i = offs; i < offs + len - 1; i += 2) {
-                short avg = (short) ((samples[i] + samples[i + 1]) / 2);
-                samples[i] = avg;
-                samples[i + 1] = avg;
-            }
-        }
 
         // 1. Analyze sample energy across 16 bands for visualizer
         int bucketSize = Math.max(1, len / 16);
@@ -444,7 +439,7 @@ public class VisualizerAudioDevice extends AudioDeviceBase {
             return;
         }
 
-        // 2. Prepare byte buffer (little-endian)
+        // 2. Prepare byte buffer (little-endian) with software gain & mono support
         int byteCount = len * 2;
         if (byteBuf.length < byteCount) {
             byteBuf = new byte[byteCount];
@@ -452,29 +447,60 @@ public class VisualizerAudioDevice extends AudioDeviceBase {
 
         boolean useSoftwareGain = !line.isControlSupported(FloatControl.Type.MASTER_GAIN);
         float softGain = useSoftwareGain ? (volume * volume) : 1.0f;
+        boolean mono = SettingsManager.getInstance().isMonoAudio();
 
         int byteIndex = 0;
-        for (int i = offs; i < offs + len; i++) {
-            int val = samples[i];
-            if (useSoftwareGain && softGain < 0.999f) {
-                val = Math.round(val * softGain);
+        if (mono && len >= 2) {
+            for (int i = offs; i < offs + len - 1; i += 2) {
+                int left = samples[i];
+                int right = samples[i + 1];
+                int avg = (left + right) / 2;
+                if (useSoftwareGain && softGain < 0.999f) {
+                    avg = Math.round(avg * softGain);
+                }
+                avg = Math.max(-32768, Math.min(32767, avg));
+                byte b0 = (byte) (avg & 0xFF);
+                byte b1 = (byte) ((avg >> 8) & 0xFF);
+                byteBuf[byteIndex++] = b0;
+                byteBuf[byteIndex++] = b1;
+                byteBuf[byteIndex++] = b0;
+                byteBuf[byteIndex++] = b1;
             }
-            val = Math.max(-32768, Math.min(32767, val));
+        } else {
+            for (int i = offs; i < offs + len; i++) {
+                int val = samples[i];
+                if (useSoftwareGain && softGain < 0.999f) {
+                    val = Math.round(val * softGain);
+                }
+                val = Math.max(-32768, Math.min(32767, val));
 
-            byteBuf[byteIndex++] = (byte) (val & 0xFF);
-            byteBuf[byteIndex++] = (byte) ((val >> 8) & 0xFF);
+                byteBuf[byteIndex++] = (byte) (val & 0xFF);
+                byteBuf[byteIndex++] = (byte) ((val >> 8) & 0xFF);
+            }
         }
 
-        // 3. Output to audio hardware safely
+        // 3. Output to audio hardware safely with pre-buffer cushion
         try {
             line.write(byteBuf, 0, byteCount);
         } catch (Throwable ignored) {}
+
+        if (prebuffering) {
+            prebufferBytes += byteCount;
+            if (prebufferBytes >= PREBUFFER_BYTES_TARGET || (line.isOpen() && prebufferBytes >= line.getBufferSize() - 16384)) {
+                try {
+                    line.start();
+                } catch (Throwable ignored) {}
+                prebuffering = false;
+            }
+        }
     }
 
     @Override
     protected void flushImpl() {
         if (line != null && line.isOpen()) {
             line.flush();
+            prebuffering = true;
+            prebufferBytes = 0;
         }
     }
 

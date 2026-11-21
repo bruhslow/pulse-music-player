@@ -262,13 +262,19 @@ public class AudioManager {
             conn.setRequestProperty("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36");
             conn.setRequestProperty("Accept", "*/*");
             conn.setRequestProperty("Connection", "keep-alive");
-            conn.setRequestProperty("Range", "bytes=" + byteOffset + "-");
+            if (byteOffset > 0) {
+                conn.setRequestProperty("Range", "bytes=" + byteOffset + "-");
+            }
             conn.setRequestProperty("Icy-MetaData", "0");
             conn.setInstanceFollowRedirects(true);
             conn.setConnectTimeout(8000);
             conn.setReadTimeout(30000);
 
             int code = conn.getResponseCode();
+            if (code == 416 && byteOffset > 0) {
+                // Live streams (Icecast/Shoutcast) do not support byte offsets; reconnect to live stream directly
+                return openSingleHttpStream(urlStr, 0);
+            }
             if (code == 301 || code == 302 || code == 303 || code == 307 || code == 308) {
                 String loc = conn.getHeaderField("Location");
                 if (loc != null && !loc.isBlank()) {
@@ -325,7 +331,7 @@ public class AudioManager {
                     rawStream = new BufferedInputStream(new FileInputStream(file), 128 * 1024);
                 } else {
                     InputStream asyncBuffer = new AsyncAudioBufferStream(openHttpStreamWithRedirects(urlStr, 0), offset -> openHttpStreamWithRedirects(urlStr, offset));
-                    rawStream = new BufferedInputStream(asyncBuffer, 128 * 1024);
+                    rawStream = new BufferedInputStream(asyncBuffer, 8192);
                 }
 
                 if (sessionId != sessionCounter.get()) {
@@ -562,7 +568,11 @@ public class AudioManager {
                 dev.writeDirectPcm(chunk, 0, chunk.length);
                 notifyAudioStarted(seekSeconds);
             }
-            dev.drainDirect();
+            if (!isPlaying || sessionId != sessionCounter.get()) {
+                dev.flushDirect();
+            } else {
+                dev.drainDirect();
+            }
         } finally {
             dev.close();
             if (activeDevice == dev) activeDevice = null;
@@ -596,7 +606,11 @@ public class AudioManager {
                 dev.writeDirectPcm(buffer, 0, read);
                 notifyAudioStarted(seekSeconds);
             }
-            dev.drainDirect();
+            if (!isPlaying || sessionId != sessionCounter.get()) {
+                dev.flushDirect();
+            } else {
+                dev.drainDirect();
+            }
         } finally {
             dev.close();
             if (activeDevice == dev) activeDevice = null;
@@ -642,24 +656,41 @@ public class AudioManager {
                 dev.setMuted(true);
                 int skipFrames = (int) (seekSeconds * 38.28);
                 for (int i = 0; i < skipFrames && isPlaying && sessionId == sessionCounter.get() && activePlayer != null; i++) {
-                    activePlayer.play(1);
+                    try {
+                        activePlayer.play(1);
+                    } catch (Throwable ignored) {}
                 }
                 dev.setMuted(false);
             }
 
+            int consecutiveErrors = 0;
             while (isPlaying && sessionId == sessionCounter.get() && activePlayer != null) {
                 if (isPaused) {
                     Thread.sleep(40);
                     continue;
                 }
 
-                boolean hasMore = activePlayer.play(1);
+                boolean hasMore;
+                try {
+                    hasMore = activePlayer.play(1);
+                    consecutiveErrors = 0;
+                } catch (Throwable frameEx) {
+                    consecutiveErrors++;
+                    if (consecutiveErrors > 25) {
+                        throw frameEx;
+                    }
+                    continue;
+                }
                 notifyAudioStarted(seekSeconds);
                 if (!hasMore) {
                     break;
                 }
             }
-            dev.drainDirect();
+            if (!isPlaying || sessionId != sessionCounter.get()) {
+                dev.flushDirect();
+            } else {
+                dev.drainDirect();
+            }
         } finally {
             if (activePlayer != null) {
                 try { activePlayer.close(); } catch (Throwable ignored) {}

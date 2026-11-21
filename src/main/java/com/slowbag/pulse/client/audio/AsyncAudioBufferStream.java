@@ -128,9 +128,9 @@ public class AsyncAudioBufferStream extends InputStream {
     private synchronized void waitForInitialData() {
         long start = System.currentTimeMillis();
         int preloadSec = SettingsManager.getInstance().getPreloadSeconds();
-        // 48KB - 96KB initial data is plenty for MP4 headers/atoms and begins instant playback
-        int targetPreload = Math.max(32768, Math.min(98304, preloadSec * 16 * 1024));
-        long timeoutMs = Math.max(800, preloadSec * 200L);
+        // 24KB - 64KB initial data cushion begins smooth uninterrupted playback
+        int targetPreload = Math.max(24576, Math.min(65536, preloadSec * 16 * 1024));
+        long timeoutMs = Math.max(1200, preloadSec * 300L);
 
         while (availableBytes < targetPreload && !sourceEof && !closed && readerException == null) {
             if (System.currentTimeMillis() - start > timeoutMs) {
@@ -152,7 +152,7 @@ public class AsyncAudioBufferStream extends InputStream {
 
         while (availableBytes < minRequired && !closed && !sourceEof && readerException == null) {
             long elapsed = System.currentTimeMillis() - start;
-            if (elapsed > 200 && !announcedBuffering) {
+            if (elapsed > 400 && !announcedBuffering) {
                 announcedBuffering = true;
                 try {
                     AudioManager.getInstance().setBuffering(true);
@@ -227,7 +227,7 @@ public class AsyncAudioBufferStream extends InputStream {
                 }
                 throw readerException;
             }
-            awaitBufferData(Math.min(len, 4096));
+            awaitBufferData(1);
             if (availableBytes == 0 && (closed || sourceEof)) return -1;
         }
 
