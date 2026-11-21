@@ -1,23 +1,25 @@
 # Pulse Music Player
 
-A sleek, lightweight music player client mod built for modern Minecraft (Fabric 1.26+ / 26 and higher) with full Lunar Client compatibility.
+A sleek, lightweight music player client mod built for modern Minecraft (Fabric 1.21.x & 26.x).
 
 <p align="center">
   <img src="assets/icon.png" width="128" height="128" alt="Pulse Music Player Icon" />
 </p>
 
-## ⚡ Download
-- 📦 **Direct Jar Download:** [**`pulse-music-player-1.5.9.jar`**](https://github.com/bruhslow/pulse-music-player/releases/download/v1.5.9/pulse-music-player-1.5.9.jar)
-- 🚀 **Release Page:** [**Pulse Music Player v1.5.9**](https://github.com/bruhslow/pulse-music-player/releases/tag/v1.5.9)
+## ⚡ Direct Downloads (v1.5.9)
+Choose the version that matches your Minecraft installation:
+
+- 📦 **Minecraft 1.21.x:** [**`pulse-music-player-1.5.9-mc1.21.jar`**](https://github.com/bruhslow/pulse-music-player/releases/download/v1.5.9/pulse-music-player-1.5.9-mc1.21.jar)
+- 📦 **Minecraft 26.x+:** [**`pulse-music-player-1.5.9-mc26.jar`**](https://github.com/bruhslow/pulse-music-player/releases/download/v1.5.9/pulse-music-player-1.5.9-mc26.jar)
+- 🚀 **Release Details:** [**Pulse Music Player v1.5.9 Release Page**](https://github.com/bruhslow/pulse-music-player/releases/tag/v1.5.9)
 
 ---
 
 ## Highlights
-- **Dynamic Floating Island HUD**: Sleek pill-shaped capsule with dynamic audio-reactive dancing equalizer bars and track info. Position anywhere on screen.
-- **Modern Glassmorphic UI**: Smooth rounded pill buttons, lively equalizer waveform, instant search, and dedicated queue management.
-- **Listen Together (100% GUI-Driven Rooms)**: Create and join password-protected or open listening rooms right from the GUI without complex chat commands.
-- **Multiplayer Nametag Badges**: Shows `[⚡]` indicator for players with the mod, and an animated beating `[♫]` badge with music notes when listening.
-- **High-Performance Audio Engine**: Pure-Java audio decoder supporting MP3, OGG Vorbis, AAC streams, local audio files, web radio, and YouTube music.
+- **Dynamic Floating HUD**: Compacts into an animated island widget with real-time waveform bars. Drag and place anywhere on screen.
+- **Listen Together**: Create and join peer-to-peer synced audio sessions with friends without requiring any server-side plugins.
+- **Multiplayer Nametag Indicators**: Animated beating music badges above player nametags visible to anyone who enables them.
+- **Queue & Search**: Fast search, playback queue, local audio file loading, and YouTube/radio streaming.
 
 ## Commands
 - `/mp` - Open the Pulse player interface
@@ -32,15 +34,14 @@ A sleek, lightweight music player client mod built for modern Minecraft (Fabric 
 ## Installation
 
 ### Client Installation
-1. Download [**`pulse-music-player-1.5.9.jar`**](https://github.com/bruhslow/pulse-music-player/releases/download/v1.5.9/pulse-music-player-1.5.9.jar).
+1. Download the JAR for your version (**1.21.x** or **26.x**).
 2. Drop it into your Minecraft or Lunar Client `.minecraft/mods` folder.
-3. Requires **Fabric Loader** and **Fabric API** for Minecraft 1.26+.
+3. Requires **Fabric Loader** and **Fabric API**.
 
-### Server-Side Installation (Optional for Multiplayer)
-Drop `pulse-music-player-1.5.9.jar` into your Fabric server's `mods/` directory.
+### Server-Side Installation (Optional for High-Performance Multiplayer)
+Drop `serverside-music-player-1.5.9.jar` into your Fabric server's `mods/` directory.
 - Enables native, zero-latency server packet routing for synced listening rooms.
 - Server directly synchronizes audio track position, play/pause states, and room membership.
-- *Note: If a server does not have the mod installed, Pulse automatically falls back to seamless peer-to-peer cloud rooms!*
 
 ## Author
 Developed by **bruhslow**.
