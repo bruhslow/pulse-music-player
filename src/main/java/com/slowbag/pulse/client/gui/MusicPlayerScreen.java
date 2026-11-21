@@ -72,6 +72,8 @@ public class MusicPlayerScreen extends Screen {
     // Rooms (Live Group Rooms | Operations) inputs & scrolling
     private String joinRoomCodeInput = "";
     private boolean isJoinRoomCodeFocused = false;
+    private String joinRoomPasswordInput = "";
+    private boolean isJoinRoomPasswordFocused = false;
     private String newRoomName = "";
     private boolean isRoomNameFocused = false;
     private String newRoomPassword = "";
@@ -736,29 +738,39 @@ public class MusicPlayerScreen extends Screen {
                 graphics.text(this.font, Component.literal("§f§l🔑 Private Sync Rooms"), x + 10, y + 2, 0xFFFFFFFF, true);
                 graphics.text(this.font, Component.literal("§7Listen together synchronously across all servers with a 5-digit code!"), x + 10, y + 14, 0xFFA0988E, false);
 
-                // Section 1: Join Room with Code Card
-                int joinCardY = y + 28;
+                // Section 1: Join Room with Code & Password Card
+                int joinCardY = y + 26;
                 int joinCardH = 46;
                 drawSoftBox(graphics, x + 10, joinCardY, w - 20, joinCardH, 4, 0x18FFFFFF, 0x25FFFFFF);
-                graphics.text(this.font, Component.literal("§e✦ Join Room by Code:"), x + 16, joinCardY + 4, 0xFFFFFFFF, true);
+                graphics.text(this.font, Component.literal("§e✦ Join Room by Code & Password:"), x + 16, joinCardY + 4, 0xFFFFFFFF, true);
 
                 int codeBoxX = x + 16;
                 int codeBoxY = joinCardY + 18;
-                int joinBtnW = 68;
-                int codeBoxW = Math.max(80, w - 20 - 16 - joinBtnW - 8);
+                int codeBoxW = 64;
+                int joinBtnW = 50;
+                int passBoxX = codeBoxX + codeBoxW + 6;
+                int passBoxW = Math.max(60, (x + w - 16 - joinBtnW - 6) - passBoxX);
+                int joinBtnX = passBoxX + passBoxW + 6;
 
                 // Code Input Box (soft rounded corners)
                 drawSoftBox(graphics, codeBoxX, codeBoxY, codeBoxW, 20, 3, 0x60000000, isJoinRoomCodeFocused ? 0xFFD97746 : 0x35FFFFFF);
-
                 if (joinRoomCodeInput.isEmpty()) {
-                    graphics.text(this.font, Component.literal(isJoinRoomCodeFocused ? "§7_" : "§8Enter 5-digit code (e.g. 84920)..."), codeBoxX + 6, codeBoxY + 6, 0xFFFFFFFF, false);
+                    graphics.text(this.font, Component.literal(isJoinRoomCodeFocused ? "§7_" : "§8Code..."), codeBoxX + 6, codeBoxY + 6, 0xFFFFFFFF, false);
                 } else {
                     String cursor = isJoinRoomCodeFocused && (System.currentTimeMillis() / 500 % 2 == 0) ? "§6_" : "";
                     graphics.text(this.font, Component.literal("§f§l" + joinRoomCodeInput + cursor), codeBoxX + 6, codeBoxY + 6, 0xFFFFFFFF, false);
                 }
 
+                // Password Input Box (for password-protected rooms)
+                drawSoftBox(graphics, passBoxX, codeBoxY, passBoxW, 20, 3, 0x60000000, isJoinRoomPasswordFocused ? 0xFFD97746 : 0x35FFFFFF);
+                if (joinRoomPasswordInput.isEmpty()) {
+                    graphics.text(this.font, Component.literal(isJoinRoomPasswordFocused ? "§7_" : "§8Pass (optional)..."), passBoxX + 6, codeBoxY + 6, 0xFF888888, false);
+                } else {
+                    String cursor = isJoinRoomPasswordFocused && (System.currentTimeMillis() / 500 % 2 == 0) ? "§6_" : "";
+                    graphics.text(this.font, Component.literal("§f" + joinRoomPasswordInput + cursor), passBoxX + 6, codeBoxY + 6, 0xFFFFFFFF, false);
+                }
+
                 // Join Pill Button
-                int joinBtnX = codeBoxX + codeBoxW + 8;
                 drawGlassButton(graphics, joinBtnX, codeBoxY, joinBtnW, 20, "§f▶ Join", 0xFFD97746, mouseX, mouseY);
 
                 // Section 2: Host Private Room Card
@@ -766,13 +778,24 @@ public class MusicPlayerScreen extends Screen {
                 int hostCardH = 46;
                 drawSoftBox(graphics, x + 10, hostCardY, w - 20, hostCardH, 4, 0x18FFFFFF, 0x25FFFFFF);
                 graphics.text(this.font, Component.literal("§6✧ Host Your Own Room:"), x + 16, hostCardY + 4, 0xFFFFFFFF, true);
-                graphics.text(this.font, Component.literal("§7Get a 5-digit code to share. Songs you play sync to all listeners."), x + 16, hostCardY + 16, 0xFFA0988E, false);
+
+                int hostPassX = x + 16;
+                int hostPassY = hostCardY + 18;
+                int createBtnW = 92;
+                int hostPassW = Math.max(60, (x + w - 16 - createBtnW - 6) - hostPassX);
+                int createBtnX = hostPassX + hostPassW + 6;
+
+                // Host Password Input Box
+                drawSoftBox(graphics, hostPassX, hostPassY, hostPassW, 20, 3, 0x60000000, isRoomPasswordFocused ? 0xFFD97746 : 0x35FFFFFF);
+                if (newRoomPassword.isEmpty()) {
+                    graphics.text(this.font, Component.literal(isRoomPasswordFocused ? "§7_" : "§8Set pass (optional)..."), hostPassX + 6, hostPassY + 6, 0xFF888888, false);
+                } else {
+                    String cursor = isRoomPasswordFocused && (System.currentTimeMillis() / 500 % 2 == 0) ? "§6_" : "";
+                    graphics.text(this.font, Component.literal("§f" + newRoomPassword + cursor), hostPassX + 6, hostPassY + 6, 0xFFFFFFFF, false);
+                }
 
                 // Host Create Button
-                int createBtnX = x + 16;
-                int createBtnY = hostCardY + 26;
-                int createBtnW = 110;
-                drawGlassButton(graphics, createBtnX, createBtnY, createBtnW, 16, "§f➕ Create Room", 0x30FFFFFF, mouseX, mouseY);
+                drawGlassButton(graphics, createBtnX, hostPassY, createBtnW, 20, "§f➕ Create Room", 0x30FFFFFF, mouseX, mouseY);
 
             } else {
                 // IN A ROOM VIEW: Clean, modern, distraction-free
@@ -2109,62 +2132,69 @@ public class MusicPlayerScreen extends Screen {
                 int browserH = Math.max(145, Math.min(185, this.height - browserY - 8));
 
                 if (!partyManager.isInRoom()) {
-                    int joinCardY = tabContentY + 28;
+                    int joinCardY = tabContentY + 26;
                     int joinCardH = 46;
-                    int joinBtnW = 68;
                     int codeBoxX = startX + 16;
                     int codeBoxY = joinCardY + 18;
-                    int codeBoxW = Math.max(80, leftW - 20 - 16 - joinBtnW - 8);
-                    int joinBtnX = codeBoxX + codeBoxW + 8;
+                    int codeBoxW = 64;
+                    int joinBtnW = 50;
+                    int passBoxX = codeBoxX + codeBoxW + 6;
+                    int passBoxW = Math.max(60, (startX + leftW - 16 - joinBtnW - 6) - passBoxX);
+                    int joinBtnX = passBoxX + passBoxW + 6;
 
                     // Click Code input box
                     if (mx >= codeBoxX && mx <= codeBoxX + codeBoxW && my >= codeBoxY && my <= codeBoxY + 20) {
                         playClickSound();
                         isJoinRoomCodeFocused = true;
+                        isJoinRoomPasswordFocused = false;
+                        isRoomPasswordFocused = false;
                         return true;
-                    } else if (mx >= startX && mx <= startX + leftW && my >= tabContentY && my <= tabContentY + browserH) {
+                    }
+
+                    // Click Join Password input box
+                    if (mx >= passBoxX && mx <= passBoxX + passBoxW && my >= codeBoxY && my <= codeBoxY + 20) {
+                        playClickSound();
+                        isJoinRoomPasswordFocused = true;
                         isJoinRoomCodeFocused = false;
+                        isRoomPasswordFocused = false;
+                        return true;
                     }
 
                     // Click Join button
                     if (mx >= joinBtnX && mx <= joinBtnX + joinBtnW && my >= codeBoxY && my <= codeBoxY + 20) {
                         playClickSound();
-                        if (!joinRoomCodeInput.isBlank()) {
-                            String codeToJoin = joinRoomCodeInput.trim().toUpperCase();
-                            statusMessage = "§e⚡ Connecting to room: " + codeToJoin + "...";
-                            statusMessageTime = System.currentTimeMillis();
-                            new Thread(() -> {
-                                boolean ok = partyManager.joinRoomByCode(codeToJoin);
-                                if (ok) {
-                                    statusMessage = "§a🎉 Connected to room! Listening to host ~ 🎵";
-                                } else {
-                                    statusMessage = "§c✖ Room code '" + codeToJoin + "' not found or expired.";
-                                }
-                                statusMessageTime = System.currentTimeMillis();
-                            }, "JoinRoomThread").start();
-                        } else {
-                            statusMessage = "§ePlease enter a 5-digit room code first!";
-                            statusMessageTime = System.currentTimeMillis();
-                        }
+                        triggerJoinRoom();
                         return true;
                     }
 
-                    // Host Card: Create Room button
+                    // Host Card
                     int hostCardY = joinCardY + joinCardH + 8;
-                    int createBtnX = startX + 16;
-                    int createBtnY = hostCardY + 26;
-                    int createBtnW = 110;
-                    int createBtnH = 16;
-                    if (mx >= createBtnX && mx <= createBtnX + createBtnW && my >= createBtnY && my <= createBtnY + createBtnH) {
+                    int hostPassX = startX + 16;
+                    int hostPassY = hostCardY + 18;
+                    int createBtnW = 92;
+                    int hostPassW = Math.max(60, (startX + leftW - 16 - createBtnW - 6) - hostPassX);
+                    int createBtnX = hostPassX + hostPassW + 6;
+
+                    // Click Host Password box
+                    if (mx >= hostPassX && mx <= hostPassX + hostPassW && my >= hostPassY && my <= hostPassY + 20) {
                         playClickSound();
-                        statusMessage = "§e⚡ Creating private room...";
-                        statusMessageTime = System.currentTimeMillis();
-                        new Thread(() -> {
-                            partyManager.createRoom(partyManager.getPlayerName() + "'s Room", "");
-                            statusMessage = "§a🎉 Room created! Code: " + partyManager.getRoomCode() + " ~ 🎵";
-                            statusMessageTime = System.currentTimeMillis();
-                        }, "CreateRoomThread").start();
+                        isRoomPasswordFocused = true;
+                        isJoinRoomCodeFocused = false;
+                        isJoinRoomPasswordFocused = false;
                         return true;
+                    }
+
+                    // Click Host Create Room button
+                    if (mx >= createBtnX && mx <= createBtnX + createBtnW && my >= hostPassY && my <= hostPassY + 20) {
+                        playClickSound();
+                        triggerCreateRoom();
+                        return true;
+                    }
+
+                    if (mx >= startX && mx <= startX + leftW && my >= tabContentY && my <= tabContentY + browserH) {
+                        isJoinRoomCodeFocused = false;
+                        isJoinRoomPasswordFocused = false;
+                        isRoomPasswordFocused = false;
                     }
 
                 } else {
@@ -2681,21 +2711,29 @@ public class MusicPlayerScreen extends Screen {
                 }
                 return true;
             } else if (event.key() == GLFW.GLFW_KEY_ENTER || event.key() == GLFW.GLFW_KEY_KP_ENTER) {
-                if (!joinRoomCodeInput.isBlank()) {
-                    playClickSound();
-                    String codeToJoin = joinRoomCodeInput.trim().toUpperCase();
-                    statusMessage = "§e⚡ Connecting to room code: " + codeToJoin + "...";
-                    statusMessageTime = System.currentTimeMillis();
-                    new Thread(() -> {
-                        boolean ok = partyManager.joinRoomByCode(codeToJoin);
-                        if (ok) {
-                            statusMessage = "§a🎉 Connected to room! Listening to host ~ 🎵";
-                        } else {
-                            statusMessage = "§c✖ Room code '" + codeToJoin + "' not found or expired.";
-                        }
-                        statusMessageTime = System.currentTimeMillis();
-                    }, "JoinRoomThread").start();
+                playClickSound();
+                triggerJoinRoom();
+                return true;
+            } else if (event.key() == GLFW.GLFW_KEY_TAB) {
+                isJoinRoomCodeFocused = false;
+                isJoinRoomPasswordFocused = true;
+                return true;
+            }
+        }
+
+        if (isJoinRoomPasswordFocused) {
+            if (event.key() == GLFW.GLFW_KEY_BACKSPACE) {
+                if (!joinRoomPasswordInput.isEmpty()) {
+                    joinRoomPasswordInput = joinRoomPasswordInput.substring(0, joinRoomPasswordInput.length() - 1);
                 }
+                return true;
+            } else if (event.key() == GLFW.GLFW_KEY_ENTER || event.key() == GLFW.GLFW_KEY_KP_ENTER) {
+                playClickSound();
+                triggerJoinRoom();
+                return true;
+            } else if (event.key() == GLFW.GLFW_KEY_TAB) {
+                isJoinRoomPasswordFocused = false;
+                isRoomPasswordFocused = true;
                 return true;
             }
         }
@@ -2711,6 +2749,10 @@ public class MusicPlayerScreen extends Screen {
             if (event.key() == GLFW.GLFW_KEY_BACKSPACE && !newRoomPassword.isEmpty()) {
                 newRoomPassword = newRoomPassword.substring(0, newRoomPassword.length() - 1);
                 return true;
+            } else if (event.key() == GLFW.GLFW_KEY_ENTER || event.key() == GLFW.GLFW_KEY_KP_ENTER) {
+                playClickSound();
+                triggerCreateRoom();
+                return true;
             }
         }
 
@@ -2722,6 +2764,37 @@ public class MusicPlayerScreen extends Screen {
         }
 
         return super.keyPressed(event);
+    }
+
+    private void triggerJoinRoom() {
+        if (!joinRoomCodeInput.isBlank()) {
+            String codeToJoin = joinRoomCodeInput.trim().toUpperCase();
+            String passToJoin = joinRoomPasswordInput.trim();
+            statusMessage = "§e⚡ Connecting to room code: " + codeToJoin + "...";
+            statusMessageTime = System.currentTimeMillis();
+            new Thread(() -> {
+                boolean ok = partyManager.joinRoom(codeToJoin, passToJoin);
+                if (ok) {
+                    statusMessage = "§a🎉 Connected to room! Listening to host ~ 🎵";
+                } else {
+                    statusMessage = "§c✖ Room code '" + codeToJoin + "' not found or expired.";
+                }
+                statusMessageTime = System.currentTimeMillis();
+            }, "JoinRoomThread").start();
+        } else {
+            statusMessage = "§ePlease enter a 5-digit room code first!";
+            statusMessageTime = System.currentTimeMillis();
+        }
+    }
+
+    private void triggerCreateRoom() {
+        statusMessage = "§e⚡ Creating private room...";
+        statusMessageTime = System.currentTimeMillis();
+        new Thread(() -> {
+            partyManager.createRoom(partyManager.getPlayerName() + "'s Room", newRoomPassword.trim());
+            statusMessage = "§a🎉 Room created! Code: " + partyManager.getRoomCode() + " ~ 🎵";
+            statusMessageTime = System.currentTimeMillis();
+        }, "CreateRoomThread").start();
     }
 
     @Override
@@ -2749,6 +2822,11 @@ public class MusicPlayerScreen extends Screen {
         } else if (isJoinRoomCodeFocused) {
             if (Character.isLetterOrDigit(ch) && joinRoomCodeInput.length() < 8) {
                 joinRoomCodeInput += Character.toUpperCase(ch);
+            }
+            return true;
+        } else if (isJoinRoomPasswordFocused) {
+            if (joinRoomPasswordInput.length() < 24) {
+                joinRoomPasswordInput += ch;
             }
             return true;
         } else if (isRoomNameFocused) {

@@ -50,6 +50,7 @@ public class PartyManager {
 
     public static class RoomEntry {
         private final String name;
+        private final String code;
         private final String host;
         private final boolean hasPassword;
         private final String password;
@@ -57,7 +58,12 @@ public class PartyManager {
         private volatile long lastSeen;
 
         public RoomEntry(String name, String host, boolean hasPassword, String password, int memberCount) {
+            this(name, "", host, hasPassword, password, memberCount);
+        }
+
+        public RoomEntry(String name, String code, String host, boolean hasPassword, String password, int memberCount) {
             this.name = name;
+            this.code = (code != null && !code.isEmpty()) ? code : sanitizeTopic(name);
             this.host = host;
             this.hasPassword = hasPassword;
             this.password = password != null ? password : "";
@@ -67,6 +73,10 @@ public class PartyManager {
 
         public String getName() {
             return name;
+        }
+
+        public String getCode() {
+            return code != null ? code : "";
         }
 
         public String getHost() {
@@ -114,7 +124,6 @@ public class PartyManager {
     private String roomName = null;
     private String roomPassword = null;
     private volatile String roomCode = null;
-    private static final String CLOUD_REGISTRY_URL = "https://api.restful-api.dev/objects/ff808181a09d98f701a1fab14e550b66";
     private boolean isHost = false;
     private volatile String currentHost = null;
     private final Set<String> members = new LinkedHashSet<>();
@@ -231,6 +240,36 @@ public class PartyManager {
                 case "track_sync" -> {
                     if (!isHost) {
                         handleTrackSyncPacket(obj);
+                    }
+                }
+                case "pause_sync" -> {
+                    if (!isHost && obj.has("paused")) {
+                        boolean paused = obj.get("paused").getAsBoolean();
+                        AudioManager.getInstance().togglePauseRemote(paused);
+                    }
+                }
+                case "seek_sync" -> {
+                    if (!isHost && obj.has("ratio")) {
+                        double ratio = obj.get("ratio").getAsDouble();
+                        AudioManager.getInstance().seekToRemote(ratio);
+                    }
+                }
+                case "queue_add" -> {
+                    if (isHost) {
+                        String title = obj.has("title") ? obj.get("title").getAsString() : "Track";
+                        String artist = obj.has("artist") ? obj.get("artist").getAsString() : "Unknown";
+                        String url = obj.has("url") ? obj.get("url").getAsString() : "";
+                        long dur = obj.has("duration") ? obj.get("duration").getAsLong() : -1;
+                        String art = obj.has("artwork") ? obj.get("artwork").getAsString() : null;
+                        String sender = obj.has("sender") ? obj.get("sender").getAsString() : "Member";
+                        if (!url.isEmpty()) {
+                            AudioTrack qt = new AudioTrack(title, artist, url, false, dur, "Room", art);
+                            AudioManager.getInstance().enqueueTrackDirect(qt);
+                            Minecraft client = Minecraft.getInstance();
+                            if (client != null && client.player != null) {
+                                client.player.sendSystemMessage(Component.literal("§a[Pulse] 📥 " + sender + " added '§f" + title + "§a' to the Room Queue!"));
+                            }
+                        }
                     }
                 }
                 case "room_disbanded" -> {
@@ -393,133 +432,36 @@ public class PartyManager {
         return roomCode != null ? roomCode : "";
     }
 
-    // ------------------------------------------------------------------------
-    // Cloud Room Code Registry Operations (api.restful-api.dev)
-    // ------------------------------------------------------------------------
 
-    private JsonObject fetchCloudRooms() {
-        try {
-            URL url = new URI(CLOUD_REGISTRY_URL).toURL();
-            HttpURLConnection conn = (HttpURLConnection) url.openConnection();
-            conn.setRequestMethod("GET");
-            conn.setRequestProperty("User-Agent", "PulseMusicPlayer/1.5.9");
-            conn.setConnectTimeout(4000);
-            conn.setReadTimeout(4000);
-            if (conn.getResponseCode() == 200) {
-                try (InputStreamReader isr = new InputStreamReader(conn.getInputStream(), StandardCharsets.UTF_8)) {
-                    JsonObject root = JsonParser.parseReader(isr).getAsJsonObject();
-                    if (root.has("data") && root.get("data").isJsonObject()) {
-                        JsonObject data = root.getAsJsonObject("data");
-                        if (data.has("rooms") && data.get("rooms").isJsonObject()) {
-                            return data.getAsJsonObject("rooms");
-                        }
-                    }
-                }
-            }
-        } catch (Throwable ignored) {}
-        return new JsonObject();
-    }
-
-    private void saveCloudRoom(String code, JsonObject roomObj) {
-        partyExecutor.submit(() -> {
-            try {
-                JsonObject rooms = fetchCloudRooms();
-                rooms.add(code, roomObj);
-
-                JsonObject data = new JsonObject();
-                data.add("rooms", rooms);
-
-                JsonObject payload = new JsonObject();
-                payload.addProperty("name", "pulse_master_registry");
-                payload.add("data", data);
-
-                URL url = new URI(CLOUD_REGISTRY_URL).toURL();
-                HttpURLConnection conn = (HttpURLConnection) url.openConnection();
-                conn.setRequestMethod("PUT");
-                conn.setRequestProperty("Content-Type", "application/json; charset=utf-8");
-                conn.setRequestProperty("User-Agent", "PulseMusicPlayer/1.5.9");
-                conn.setDoOutput(true);
-                conn.setConnectTimeout(4000);
-                conn.setReadTimeout(4000);
-                try (OutputStream os = conn.getOutputStream()) {
-                    os.write(payload.toString().getBytes(StandardCharsets.UTF_8));
-                }
-                conn.getResponseCode();
-            } catch (Throwable ignored) {}
-        });
-    }
-
-    private void removeCloudRoom(String code) {
-        partyExecutor.submit(() -> {
-            try {
-                JsonObject rooms = fetchCloudRooms();
-                if (rooms.has(code)) {
-                    rooms.remove(code);
-                    JsonObject data = new JsonObject();
-                    data.add("rooms", rooms);
-
-                    JsonObject payload = new JsonObject();
-                    payload.addProperty("name", "pulse_master_registry");
-                    payload.add("data", data);
-
-                    URL url = new URI(CLOUD_REGISTRY_URL).toURL();
-                    HttpURLConnection conn = (HttpURLConnection) url.openConnection();
-                    conn.setRequestMethod("PUT");
-                    conn.setRequestProperty("Content-Type", "application/json; charset=utf-8");
-                    conn.setRequestProperty("User-Agent", "PulseMusicPlayer/1.5.9");
-                    conn.setDoOutput(true);
-                    conn.setConnectTimeout(4000);
-                    conn.setReadTimeout(4000);
-                    try (OutputStream os = conn.getOutputStream()) {
-                        os.write(payload.toString().getBytes(StandardCharsets.UTF_8));
-                    }
-                    conn.getResponseCode();
-                }
-            } catch (Throwable ignored) {}
-        });
-    }
-
-    private void removeGuestFromCloudRoom(String code, String guestName) {
-        partyExecutor.submit(() -> {
-            try {
-                JsonObject rooms = fetchCloudRooms();
-                if (rooms.has(code)) {
-                    JsonObject r = rooms.getAsJsonObject(code);
-                    if (r.has("members") && r.get("members").isJsonArray()) {
-                        JsonArray oldArr = r.getAsJsonArray("members");
-                        JsonArray newArr = new JsonArray();
-                        for (JsonElement e : oldArr) {
-                            if (!e.getAsString().equalsIgnoreCase(guestName)) {
-                                newArr.add(e);
-                            }
-                        }
-                        r.add("members", newArr);
-                        saveCloudRoom(code, r);
-                    }
-                }
-            } catch (Throwable ignored) {}
-        });
-    }
 
     public void publishHostRoomState() {
         if (!isHost || roomCode == null) return;
         AudioManager am = AudioManager.getInstance();
         AudioTrack t = am.getCurrentTrack();
 
-        JsonObject r = new JsonObject();
-        r.addProperty("code", roomCode);
-        r.addProperty("roomName", roomName != null ? roomName : "Pulse Room");
-        r.addProperty("host", currentHost != null ? currentHost : getPlayerName());
-        r.addProperty("isPaused", am.isPaused() || !am.isPlaying());
-        r.addProperty("elapsed", am.getElapsedSeconds());
-        r.addProperty("lastHeartbeat", System.currentTimeMillis());
+        JsonObject hb = new JsonObject();
+        hb.addProperty("type", "host_heartbeat");
+        hb.addProperty("action", "track_sync");
+        hb.addProperty("code", roomCode);
+        hb.addProperty("room", roomName != null ? roomName : "Pulse Room");
+        hb.addProperty("host", currentHost != null ? currentHost : getPlayerName());
+        hb.addProperty("hasPassword", roomPassword != null && !roomPassword.isEmpty());
+        hb.addProperty("password", roomPassword != null ? roomPassword : "");
+        hb.addProperty("isPaused", am.isPaused() || !am.isPlaying());
+        hb.addProperty("elapsed", am.getElapsedSeconds());
+        hb.addProperty("lastHeartbeat", System.currentTimeMillis());
 
         if (t != null) {
-            r.addProperty("trackTitle", t.getTitle());
-            r.addProperty("trackArtist", t.getArtist());
-            r.addProperty("trackUrl", t.getUrl());
-            r.addProperty("artworkUrl", t.getArtworkUrl() != null ? t.getArtworkUrl() : "");
-            r.addProperty("duration", t.getDurationSeconds());
+            JsonObject tObj = new JsonObject();
+            tObj.addProperty("title", t.getTitle());
+            tObj.addProperty("artist", t.getArtist());
+            tObj.addProperty("url", t.getUrl());
+            tObj.addProperty("category", t.getCategory());
+            tObj.addProperty("duration", t.getDurationSeconds());
+            tObj.addProperty("elapsed", am.getElapsedSeconds());
+            tObj.addProperty("isPaused", am.isPaused() || !am.isPlaying());
+            if (t.getArtworkUrl() != null) tObj.addProperty("artwork", t.getArtworkUrl());
+            hb.add("track", tObj);
         }
 
         JsonArray memArr = new JsonArray();
@@ -528,7 +470,7 @@ public class PartyManager {
                 memArr.add(m);
             }
         }
-        r.add("members", memArr);
+        hb.add("members", memArr);
 
         // Serialize current upcoming queue to room
         JsonArray qArr = new JsonArray();
@@ -541,9 +483,13 @@ public class PartyManager {
             if (qt.getArtworkUrl() != null) qObj.addProperty("artworkUrl", qt.getArtworkUrl());
             qArr.add(qObj);
         }
-        r.add("queue", qArr);
+        hb.add("queue", qArr);
 
-        saveCloudRoom(roomCode, r);
+        sendNtfyMessage("pulse_room_" + roomCode.toLowerCase(), hb);
+        if (roomName != null && !roomName.isEmpty()) {
+            sendNtfyMessage("pulse_room_" + sanitizeTopic(roomName), hb);
+        }
+        broadcastRoomPresence();
     }
 
     public void addTrackToRoomQueue(AudioTrack track) {
@@ -554,216 +500,29 @@ public class PartyManager {
             return;
         }
 
-        partyExecutor.submit(() -> {
-            try {
-                if (roomCode == null) return;
-                JsonObject rooms = fetchCloudRooms();
-                if (rooms.has(roomCode)) {
-                    JsonObject r = rooms.getAsJsonObject(roomCode);
-                    JsonArray qArr = r.has("queue") && r.get("queue").isJsonArray() ? r.getAsJsonArray("queue") : new JsonArray();
+        JsonObject qObj = new JsonObject();
+        qObj.addProperty("type", "queue_add");
+        qObj.addProperty("action", "queue_add");
+        qObj.addProperty("code", roomCode != null ? roomCode : "");
+        qObj.addProperty("room", roomName != null ? roomName : "");
+        qObj.addProperty("title", track.getTitle());
+        qObj.addProperty("artist", track.getArtist());
+        qObj.addProperty("url", track.getUrl());
+        qObj.addProperty("duration", track.getDurationSeconds());
+        if (track.getArtworkUrl() != null) qObj.addProperty("artworkUrl", track.getArtworkUrl());
+        qObj.addProperty("sender", getPlayerName());
 
-                    JsonObject qObj = new JsonObject();
-                    qObj.addProperty("title", track.getTitle());
-                    qObj.addProperty("artist", track.getArtist());
-                    qObj.addProperty("url", track.getUrl());
-                    qObj.addProperty("duration", track.getDurationSeconds());
-                    if (track.getArtworkUrl() != null) qObj.addProperty("artworkUrl", track.getArtworkUrl());
-                    qObj.addProperty("addedBy", getPlayerName());
-                    qArr.add(qObj);
-
-                    r.add("queue", qArr);
-                    saveCloudRoom(roomCode, r);
-
-                    Minecraft client = Minecraft.getInstance();
-                    if (client.player != null) {
-                        client.player.sendSystemMessage(Component.literal("§a[Pulse] 🎵 Added '" + track.getTitle() + "' to the Room Queue!"));
-                    }
-                }
-            } catch (Throwable ignored) {}
-        });
-    }
-
-    private void syncFromRoomJson(JsonObject r) {
-        if (r.has("trackUrl") && !r.get("trackUrl").getAsString().isBlank()) {
-            String title = r.has("trackTitle") ? r.get("trackTitle").getAsString() : "Party Track";
-            String artist = r.has("trackArtist") ? r.get("trackArtist").getAsString() : "Host";
-            String url = r.get("trackUrl").getAsString();
-            String artwork = r.has("artworkUrl") ? r.get("artworkUrl").getAsString() : null;
-            long duration = r.has("duration") ? r.get("duration").getAsLong() : -1;
-            long hostElapsed = r.has("elapsed") ? r.get("elapsed").getAsLong() : 0;
-            boolean isPaused = r.has("isPaused") && r.get("isPaused").getAsBoolean();
-
-            AudioTrack current = AudioManager.getInstance().getCurrentTrack();
-            boolean isPlaying = AudioManager.getInstance().isPlaying();
-
-            if (current == null || !url.equals(current.getUrl())) {
-                AudioTrack syncTrack = new AudioTrack(title, artist, url, false, duration, "Room", artwork);
-                Minecraft.getInstance().execute(() -> {
-                    AudioManager.getInstance().playTrackInternal(syncTrack, false, Math.max(0, hostElapsed));
-                    if (isPaused) {
-                        AudioManager.getInstance().togglePauseRemote(true);
-                    }
-                });
-            } else {
-                long myElapsed = AudioManager.getInstance().getElapsedSeconds();
-                if (Math.abs(myElapsed - hostElapsed) > 4) {
-                    AudioTrack syncTrack = new AudioTrack(title, artist, url, false, duration, "Room", artwork);
-                    Minecraft.getInstance().execute(() -> {
-                        AudioManager.getInstance().playTrackInternal(syncTrack, false, Math.max(0, hostElapsed));
-                    });
-                }
-                if (AudioManager.getInstance().isPaused() != isPaused) {
-                    Minecraft.getInstance().execute(() -> {
-                        AudioManager.getInstance().togglePauseRemote(isPaused);
-                    });
-                }
-            }
+        if (isServerNetworkingActive()) {
+            ClientPlayNetworking.send(new PulseNetworkPayload(qObj.toString()));
         }
-    }
+        if (roomCode != null && !roomCode.isEmpty()) {
+            sendNtfyMessage("pulse_room_" + roomCode.toLowerCase(), qObj);
+        }
 
-    private void startCloudHostLoop() {
-        this.roomListening = true;
-        partyExecutor.submit(() -> {
-            while (roomListening && isInRoom() && isHost) {
-                try {
-                    Thread.sleep(1500);
-                    if (!roomListening || !isInRoom() || !isHost) break;
-
-                    publishHostRoomState();
-
-                    // Check for new members and queued tracks from cloud
-                    if (roomCode != null) {
-                        JsonObject rooms = fetchCloudRooms();
-                        if (rooms.has(roomCode)) {
-                            JsonObject r = rooms.getAsJsonObject(roomCode);
-                            if (r.has("members") && r.get("members").isJsonArray()) {
-                                for (JsonElement e : r.getAsJsonArray("members")) {
-                                    String mem = e.getAsString();
-                                    boolean isNew = false;
-                                    synchronized (this) {
-                                        if (!members.contains(mem)) {
-                                            members.add(mem);
-                                            isNew = true;
-                                        }
-                                    }
-                                    if (isNew) {
-                                        Minecraft client = Minecraft.getInstance();
-                                        if (client.player != null) {
-                                            client.player.sendSystemMessage(Component.literal("§a[Pulse] 👥 §f" + mem + " §ajoined your room! 🎶"));
-                                        }
-                                    }
-                                }
-                            }
-
-                            // Host adopts tracks queued by members into upcomingQueue
-                            if (r.has("queue") && r.get("queue").isJsonArray()) {
-                                AudioManager hostAm = AudioManager.getInstance();
-                                JsonArray qArr = r.getAsJsonArray("queue");
-                                boolean hasNewQueueTrack = false;
-                                for (JsonElement qe : qArr) {
-                                    if (qe.isJsonObject()) {
-                                        JsonObject qo = qe.getAsJsonObject();
-                                        String qUrl = qo.has("url") ? qo.get("url").getAsString() : "";
-                                        String qTitle = qo.has("title") ? qo.get("title").getAsString() : "Track";
-                                        String qArtist = qo.has("artist") ? qo.get("artist").getAsString() : "Unknown";
-                                        long qDur = qo.has("duration") ? qo.get("duration").getAsLong() : -1;
-                                        String qArt = qo.has("artworkUrl") ? qo.get("artworkUrl").getAsString() : null;
-                                        String addedBy = qo.has("addedBy") ? qo.get("addedBy").getAsString() : "Member";
-
-                                        boolean exists = false;
-                                        for (AudioTrack existing : hostAm.getUpcomingQueue()) {
-                                            if (existing.getUrl().equals(qUrl)) {
-                                                exists = true;
-                                                break;
-                                            }
-                                        }
-                                        AudioTrack cur = hostAm.getCurrentTrack();
-                                        if (cur != null && cur.getUrl().equals(qUrl)) {
-                                            exists = true;
-                                        }
-
-                                        if (!exists && !qUrl.isEmpty()) {
-                                            AudioTrack qt = new AudioTrack(qTitle, qArtist, qUrl, false, qDur, "Room", qArt);
-                                            hostAm.enqueueTrackDirect(qt);
-                                            hasNewQueueTrack = true;
-
-                                            Minecraft client = Minecraft.getInstance();
-                                            if (client.player != null) {
-                                                client.player.sendSystemMessage(Component.literal("§a[Pulse] 📥 " + addedBy + " added '§f" + qTitle + "§a' to the Room Queue!"));
-                                            }
-                                        }
-                                    }
-                                }
-                                if (hasNewQueueTrack) {
-                                    publishHostRoomState();
-                                }
-                            }
-                        }
-                    }
-                } catch (InterruptedException e) {
-                    break;
-                } catch (Throwable ignored) {}
-            }
-        });
-    }
-
-    private void startCloudGuestLoop(String code) {
-        this.roomListening = true;
-        partyExecutor.submit(() -> {
-            while (roomListening && isInRoom() && !isHost) {
-                try {
-                    Thread.sleep(1500);
-                    if (!roomListening || !isInRoom() || isHost) break;
-
-                    JsonObject rooms = fetchCloudRooms();
-                    if (rooms.has(code)) {
-                        JsonObject r = rooms.getAsJsonObject(code);
-                        if (r.has("members") && r.get("members").isJsonArray()) {
-                            synchronized (this) {
-                                members.clear();
-                                if (currentHost != null) members.add(currentHost);
-                                for (JsonElement e : r.getAsJsonArray("members")) {
-                                    members.add(e.getAsString());
-                                }
-                                members.add(getPlayerName());
-                            }
-                        }
-
-                        // Guest syncs room queue to their local upcoming queue view
-                        if (r.has("queue") && r.get("queue").isJsonArray()) {
-                            JsonArray qArr = r.getAsJsonArray("queue");
-                            List<AudioTrack> guestQueue = new ArrayList<>();
-                            for (JsonElement qe : qArr) {
-                                if (qe.isJsonObject()) {
-                                    JsonObject qo = qe.getAsJsonObject();
-                                    String qUrl = qo.has("url") ? qo.get("url").getAsString() : "";
-                                    String qTitle = qo.has("title") ? qo.get("title").getAsString() : "Track";
-                                    String qArtist = qo.has("artist") ? qo.get("artist").getAsString() : "Unknown";
-                                    long qDur = qo.has("duration") ? qo.get("duration").getAsLong() : -1;
-                                    String qArt = qo.has("artworkUrl") ? qo.get("artworkUrl").getAsString() : null;
-                                    if (!qUrl.isEmpty()) {
-                                        guestQueue.add(new AudioTrack(qTitle, qArtist, qUrl, false, qDur, "Room", qArt));
-                                    }
-                                }
-                            }
-                            AudioManager.getInstance().syncGuestQueue(guestQueue);
-                        }
-
-                        syncFromRoomJson(r);
-                    } else {
-                        // Room was disbanded by host
-                        Minecraft client = Minecraft.getInstance();
-                        if (client.player != null) {
-                            client.player.sendSystemMessage(Component.literal("§c[Pulse] The room was closed by the host."));
-                        }
-                        leaveRoomInternal(false);
-                        break;
-                    }
-                } catch (InterruptedException e) {
-                    break;
-                } catch (Throwable ignored) {}
-            }
-        });
+        Minecraft client = Minecraft.getInstance();
+        if (client.player != null) {
+            client.player.sendSystemMessage(Component.literal("§a[Pulse] 🎵 Added '" + track.getTitle() + "' to the Room Queue!"));
+        }
     }
 
     // ------------------------------------------------------------------------
@@ -778,44 +537,64 @@ public class PartyManager {
             name = myName + "'s Room";
         }
         name = name.trim();
+        String pass = (password != null) ? password.trim() : "";
 
         // Generate clean 5-digit room code
         this.roomCode = String.format("%05d", new java.util.Random().nextInt(90000) + 10000);
         this.roomName = name;
-        this.roomPassword = "";
+        this.roomPassword = pass;
         this.isHost = true;
         this.currentHost = myName;
         this.members.clear();
         this.members.add(myName);
         this.memberLastSeen.clear();
         this.memberLastSeen.put(myName.toLowerCase(), System.currentTimeMillis());
+        this.roomListening = true;
 
-        // Publish to Cloud Registry immediately
-        publishHostRoomState();
+        startRoomListener(this.roomCode);
+        startHostHeartbeat();
 
         if (isServerNetworkingActive()) {
             JsonObject obj = new JsonObject();
             obj.addProperty("action", "create_room");
             obj.addProperty("room", name);
             obj.addProperty("code", this.roomCode);
+            obj.addProperty("password", pass);
             ClientPlayNetworking.send(new PulseNetworkPayload(obj.toString()));
         }
 
-        startCloudHostLoop();
+        publishHostRoomState();
+
+        AudioTrack cur = AudioManager.getInstance().getCurrentTrack();
+        if (cur != null) {
+            broadcastTrackIfHost(cur);
+            broadcastPauseIfHost(AudioManager.getInstance().isPaused());
+        }
 
         Minecraft client = Minecraft.getInstance();
-        if (client.player != null) {
-            client.player.sendSystemMessage(Component.literal("§a[Pulse] Created private room! Room Code: §e§l" + this.roomCode + " §7(Share this code with friends to listen together)"));
+        if (client != null && client.player != null) {
+            String passNotice = pass.isEmpty() ? "" : " §7[Password: §f" + pass + "§7]";
+            client.player.sendSystemMessage(Component.literal("§a[Pulse] Created room '§f" + this.roomName + "§a'! Room Code: §e§l" + this.roomCode + passNotice + " §7(Share this code with friends to listen together)"));
         }
     }
 
-    public synchronized boolean joinRoom(String name, String password) {
-        if (name == null || name.trim().isEmpty()) return false;
-        String trimmed = name.trim();
-        String pass = password != null ? password.trim() : "";
+    public synchronized boolean joinRoom(String codeOrName, String password) {
+        if (codeOrName == null || codeOrName.trim().isEmpty()) return false;
+        String trimmed = codeOrName.trim();
+        String pass = (password != null) ? password.trim() : "";
 
         leaveRoomInternal(false);
         String myName = getPlayerName();
+        String topicSuffix = sanitizeTopic(trimmed);
+
+        this.roomCode = trimmed;
+        this.roomName = "Room " + trimmed;
+        this.roomPassword = pass;
+        this.isHost = false;
+        this.currentHost = "Host";
+        this.members.clear();
+        this.members.add(myName);
+        this.roomListening = true;
 
         // 1. Server Networking if connected to a Fabric server
         if (isServerNetworkingActive()) {
@@ -825,49 +604,55 @@ public class PartyManager {
             obj.addProperty("code", trimmed);
             obj.addProperty("password", pass);
             ClientPlayNetworking.send(new PulseNetworkPayload(obj.toString()));
-            this.roomCode = trimmed;
-            this.roomName = trimmed;
-            this.isHost = false;
-            this.currentHost = "Host";
-            this.members.clear();
-            this.members.add(myName);
-            return true;
         }
 
-        // 2. Cloud Registry fallback
-        JsonObject rooms = fetchCloudRooms();
-        String codeUpper = trimmed.toUpperCase();
-        if (rooms.has(codeUpper)) {
-            JsonObject r = rooms.getAsJsonObject(codeUpper);
-            this.roomCode = codeUpper;
-            this.roomName = r.has("roomName") ? r.get("roomName").getAsString() : "Room " + codeUpper;
-            this.currentHost = r.has("host") ? r.get("host").getAsString() : "Host";
-            this.isHost = myName.equalsIgnoreCase(this.currentHost);
-            this.members.clear();
-            this.members.add(this.currentHost);
-            this.members.add(myName);
+        // 2. Start P2P listeners and heartbeats
+        startRoomListener(topicSuffix);
+        startMemberHeartbeat();
 
-            if (r.has("members") && r.get("members").isJsonArray()) {
-                for (JsonElement e : r.getAsJsonArray("members")) {
-                    this.members.add(e.getAsString());
+        // 3. Send join handshake to the room
+        JsonObject joinPkt = new JsonObject();
+        joinPkt.addProperty("type", "join");
+        joinPkt.addProperty("action", "join");
+        joinPkt.addProperty("sender", myName);
+        joinPkt.addProperty("code", trimmed);
+        joinPkt.addProperty("password", pass);
+        sendNtfyMessage("pulse_room_" + topicSuffix, joinPkt);
+
+        // 4. Request initial sync
+        requestSync();
+
+        // 5. Query latest heartbeat asynchronously to sync track immediately
+        partyExecutor.submit(() -> {
+            try {
+                URL pollUrl = new URI("https://ntfy.sh/pulse_room_" + topicSuffix + "/json?poll=1&since=60s").toURL();
+                HttpURLConnection conn = (HttpURLConnection) pollUrl.openConnection();
+                conn.setRequestMethod("GET");
+                conn.setRequestProperty("User-Agent", "PulseMusicPlayer/1.5.9");
+                conn.setConnectTimeout(4000);
+                conn.setReadTimeout(4000);
+                if (conn.getResponseCode() == 200) {
+                    try (BufferedReader br = new BufferedReader(new InputStreamReader(conn.getInputStream(), StandardCharsets.UTF_8))) {
+                        String line;
+                        while ((line = br.readLine()) != null) {
+                            if (line.isBlank()) continue;
+                            try {
+                                JsonObject event = JsonParser.parseString(line).getAsJsonObject();
+                                if (event.has("message")) {
+                                    handleRoomPayload(event.get("message").getAsString());
+                                }
+                            } catch (Throwable ignored) {}
+                        }
+                    }
                 }
-            }
+            } catch (Throwable ignored) {}
+        });
 
-            if (!this.members.contains(myName)) {
-                this.members.add(myName);
-            }
-            saveCloudRoom(codeUpper, r);
-            syncFromRoomJson(r);
-            startCloudGuestLoop(codeUpper);
-
-            Minecraft client = Minecraft.getInstance();
-            if (client.player != null) {
-                client.player.sendSystemMessage(Component.literal("§a[Pulse] 🎉 Connected to room §e#" + codeUpper + "§a! Enjoy music together ~ 🎶"));
-            }
-            return true;
+        Minecraft client = Minecraft.getInstance();
+        if (client != null && client.player != null) {
+            client.player.sendSystemMessage(Component.literal("§a[Pulse] ⚡ Connected to room §e#" + trimmed + "§a! Listening together ~ 🎵"));
         }
-
-        return false;
+        return true;
     }
 
     public synchronized boolean joinRoomByCode(String code) {
@@ -895,19 +680,22 @@ public class PartyManager {
 
     private synchronized void leaveRoomInternal(boolean notifyUser) {
         this.roomListening = false;
-        if (this.roomCode != null) {
-            String code = this.roomCode;
-            if (this.isHost) {
-                removeCloudRoom(code);
-            } else {
-                removeGuestFromCloudRoom(code, getPlayerName());
-            }
+        String curCode = this.roomCode;
+        String curName = this.roomName;
+        boolean wasHost = this.isHost;
+
+        if (curCode != null && !curCode.isEmpty()) {
+            JsonObject leaveMsg = new JsonObject();
+            leaveMsg.addProperty("type", wasHost ? "disband" : "leave");
+            leaveMsg.addProperty("sender", getPlayerName());
+            leaveMsg.addProperty("code", curCode);
+            sendNtfyMessage("pulse_room_" + curCode.toLowerCase(), leaveMsg);
         }
 
-        if (isServerNetworkingActive() && this.roomName != null) {
+        if (isServerNetworkingActive() && curName != null) {
             JsonObject obj = new JsonObject();
-            obj.addProperty("action", isHost ? "disband_room" : "leave_room");
-            obj.addProperty("room", roomName);
+            obj.addProperty("action", wasHost ? "disband_room" : "leave_room");
+            obj.addProperty("room", curName);
             ClientPlayNetworking.send(new PulseNetworkPayload(obj.toString()));
         }
 
@@ -921,7 +709,7 @@ public class PartyManager {
 
         if (notifyUser) {
             Minecraft client = Minecraft.getInstance();
-            if (client.player != null) {
+            if (client != null && client.player != null) {
                 client.player.sendSystemMessage(Component.literal("§7[Pulse] Left room."));
             }
         }
@@ -1000,16 +788,56 @@ public class PartyManager {
         if (isServerNetworkingActive()) {
             ClientPlayNetworking.send(new PulseNetworkPayload(msg.toString()));
         }
+        if (roomCode != null && !roomCode.isEmpty()) {
+            sendNtfyMessage("pulse_room_" + roomCode.toLowerCase(), msg);
+        }
+        if (roomName != null && !roomName.isEmpty()) {
+            sendNtfyMessage("pulse_room_" + sanitizeTopic(roomName), msg);
+        }
     }
 
     public void broadcastPauseIfHost(boolean isPaused) {
         if (!isInRoom() || !isHost) return;
-        publishHostRoomState();
+
+        JsonObject msg = new JsonObject();
+        msg.addProperty("action", "pause_sync");
+        msg.addProperty("type", "pause_sync");
+        msg.addProperty("sender", getPlayerName());
+        msg.addProperty("room", roomName);
+        msg.addProperty("code", roomCode != null ? roomCode : "");
+        msg.addProperty("paused", isPaused);
+
+        if (isServerNetworkingActive()) {
+            ClientPlayNetworking.send(new PulseNetworkPayload(msg.toString()));
+        }
+        if (roomCode != null && !roomCode.isEmpty()) {
+            sendNtfyMessage("pulse_room_" + roomCode.toLowerCase(), msg);
+        }
+        if (roomName != null && !roomName.isEmpty()) {
+            sendNtfyMessage("pulse_room_" + sanitizeTopic(roomName), msg);
+        }
     }
 
     public void broadcastSeekIfHost(double ratio) {
         if (!isInRoom() || !isHost) return;
-        publishHostRoomState();
+
+        JsonObject msg = new JsonObject();
+        msg.addProperty("action", "seek_sync");
+        msg.addProperty("type", "seek_sync");
+        msg.addProperty("sender", getPlayerName());
+        msg.addProperty("room", roomName);
+        msg.addProperty("code", roomCode != null ? roomCode : "");
+        msg.addProperty("ratio", ratio);
+
+        if (isServerNetworkingActive()) {
+            ClientPlayNetworking.send(new PulseNetworkPayload(msg.toString()));
+        }
+        if (roomCode != null && !roomCode.isEmpty()) {
+            sendNtfyMessage("pulse_room_" + roomCode.toLowerCase(), msg);
+        }
+        if (roomName != null && !roomName.isEmpty()) {
+            sendNtfyMessage("pulse_room_" + sanitizeTopic(roomName), msg);
+        }
     }
 
     public void requestSync() {
@@ -1017,7 +845,12 @@ public class PartyManager {
         JsonObject req = new JsonObject();
         req.addProperty("type", "request_sync");
         req.addProperty("sender", getPlayerName());
-        sendNtfyMessage("pulse_room_" + sanitizeTopic(roomName), req);
+        if (roomCode != null && !roomCode.isEmpty()) {
+            sendNtfyMessage("pulse_room_" + roomCode.toLowerCase(), req);
+        }
+        if (roomName != null && !roomName.isEmpty()) {
+            sendNtfyMessage("pulse_room_" + sanitizeTopic(roomName), req);
+        }
     }
 
     private void broadcastRoomPresence() {
@@ -1025,6 +858,7 @@ public class PartyManager {
         JsonObject msg = new JsonObject();
         msg.addProperty("type", "room_presence");
         msg.addProperty("name", roomName);
+        msg.addProperty("code", roomCode != null ? roomCode : "");
         msg.addProperty("host", getPlayerName());
         msg.addProperty("hasPassword", roomPassword != null && !roomPassword.isEmpty());
         msg.addProperty("password", roomPassword != null ? roomPassword : "");
@@ -1043,48 +877,16 @@ public class PartyManager {
                     String myName = getPlayerName();
                     long now = System.currentTimeMillis();
 
-                    // Prune inactive members who haven't pinged in 22 seconds
+                    // Prune inactive members who haven't pinged in 25 seconds
                     synchronized (PartyManager.this) {
                         members.removeIf(m -> {
                             if (m.equalsIgnoreCase(myName) || m.equalsIgnoreCase(currentHost)) return false;
                             Long lastSeen = memberLastSeen.get(m.toLowerCase());
-                            return (lastSeen == null || (now - lastSeen > 22000));
+                            return (lastSeen == null || (now - lastSeen > 25000));
                         });
                     }
 
-                    // 1. Broadcast presence to global directory
-                    broadcastRoomPresence();
-
-                    // 2. Broadcast heartbeat to room members with active track info
-                    JsonObject hb = new JsonObject();
-                    hb.addProperty("type", "host_heartbeat");
-                    hb.addProperty("host", myName);
-
-                    JsonArray mArr = new JsonArray();
-                    synchronized (PartyManager.this) {
-                        for (String m : members) {
-                            mArr.add(m);
-                        }
-                    }
-                    hb.add("members", mArr);
-
-                    AudioTrack cur = AudioManager.getInstance().getCurrentTrack();
-                    if (cur != null && AudioManager.getInstance().isPlaying()) {
-                        JsonObject tObj = new JsonObject();
-                        tObj.addProperty("title", cur.getTitle());
-                        tObj.addProperty("artist", cur.getArtist());
-                        tObj.addProperty("url", cur.getUrl());
-                        tObj.addProperty("category", cur.getCategory());
-                        tObj.addProperty("duration", cur.getDurationSeconds());
-                        tObj.addProperty("elapsed", AudioManager.getInstance().getElapsedSeconds());
-                        tObj.addProperty("isPaused", AudioManager.getInstance().isPaused());
-                        if (cur.getArtworkUrl() != null) {
-                            tObj.addProperty("artwork", cur.getArtworkUrl());
-                        }
-                        hb.add("track", tObj);
-                    }
-
-                    sendNtfyMessage("pulse_room_" + sanitizeTopic(roomName), hb);
+                    publishHostRoomState();
                 } catch (InterruptedException e) {
                     break;
                 } catch (Throwable ignored) {}
@@ -1102,7 +904,10 @@ public class PartyManager {
                     JsonObject ping = new JsonObject();
                     ping.addProperty("type", "member_ping");
                     ping.addProperty("sender", getPlayerName());
-                    sendNtfyMessage("pulse_room_" + sanitizeTopic(roomName), ping);
+                    ping.addProperty("code", roomCode != null ? roomCode : "");
+                    if (roomCode != null && !roomCode.isEmpty()) {
+                        sendNtfyMessage("pulse_room_" + roomCode.toLowerCase(), ping);
+                    }
                 } catch (InterruptedException e) {
                     break;
                 } catch (Throwable ignored) {}
@@ -1192,8 +997,39 @@ public class PartyManager {
                 return;
             }
 
+            if ("password_error".equals(type)) {
+                String target = obj.has("target") ? obj.get("target").getAsString() : "";
+                if (target.equalsIgnoreCase(myName)) {
+                    Minecraft client = Minecraft.getInstance();
+                    if (client != null && client.player != null) {
+                        client.player.sendSystemMessage(Component.literal("§c[Pulse] ✖ Incorrect password for room #" + (roomCode != null ? roomCode : "") + "!"));
+                    }
+                    leaveRoomInternal(false);
+                    return;
+                }
+            }
+
             if ("member_ping".equals(type) || "join".equals(type)) {
                 if (!sender.equalsIgnoreCase(myName)) {
+                    if (isHost && "join".equals(type)) {
+                        if (this.roomPassword != null && !this.roomPassword.isEmpty()) {
+                            String provided = obj.has("password") ? obj.get("password").getAsString().trim() : "";
+                            if (!this.roomPassword.equals(provided)) {
+                                JsonObject err = new JsonObject();
+                                err.addProperty("type", "password_error");
+                                err.addProperty("target", sender);
+                                err.addProperty("code", roomCode != null ? roomCode : "");
+                                if (roomCode != null && !roomCode.isEmpty()) {
+                                    sendNtfyMessage("pulse_room_" + roomCode.toLowerCase(), err);
+                                }
+                                if (roomName != null && !roomName.isEmpty()) {
+                                    sendNtfyMessage("pulse_room_" + sanitizeTopic(roomName), err);
+                                }
+                                return;
+                            }
+                        }
+                    }
+
                     boolean newlyAdded = false;
                     synchronized (this) {
                         memberLastSeen.put(sender.toLowerCase(), System.currentTimeMillis());
@@ -1232,6 +1068,12 @@ public class PartyManager {
             if ("host_heartbeat".equals(type) && !isHost) {
                 if (obj.has("host")) {
                     currentHost = obj.get("host").getAsString();
+                }
+                if (obj.has("room")) {
+                    this.roomName = obj.get("room").getAsString();
+                }
+                if (obj.has("code")) {
+                    this.roomCode = obj.get("code").getAsString();
                 }
                 if (obj.has("members")) {
                     JsonArray arr = obj.getAsJsonArray("members");
@@ -1452,10 +1294,11 @@ public class PartyManager {
                 boolean hasPass = obj.has("hasPassword") && obj.get("hasPassword").getAsBoolean();
                 String pass = obj.has("password") ? obj.get("password").getAsString() : "";
                 int count = obj.has("members") ? obj.get("members").getAsInt() : 1;
+                String code = obj.has("code") ? obj.get("code").getAsString() : "";
 
                 RoomEntry existing = null;
                 for (RoomEntry re : discoveredRooms) {
-                    if (re.getName().equalsIgnoreCase(name)) {
+                    if (re.getName().equalsIgnoreCase(name) || (!code.isEmpty() && re.getCode().equalsIgnoreCase(code))) {
                         existing = re;
                         break;
                     }
@@ -1465,7 +1308,7 @@ public class PartyManager {
                     existing.touch();
                     existing.setMemberCount(count);
                 } else {
-                    discoveredRooms.add(new RoomEntry(name, host, hasPass, pass, count));
+                    discoveredRooms.add(new RoomEntry(name, code, host, hasPass, pass, count));
                 }
             } else if ("room_close".equals(type)) {
                 String name = obj.has("name") ? obj.get("name").getAsString() : "";

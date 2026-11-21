@@ -113,9 +113,6 @@ public class HudOverlayRenderer {
         int borderB = (int) AnimationUtil.lerp(0x46, 0x60, smoothPeak);
         int borderColor = (alpha << 24) | (borderR << 16) | (borderG << 8) | borderB;
 
-        // Scissor box ensures nothing bleeds outside capsule
-        graphics.enableScissor(posX, posY, posX + hudW, posY + hudH);
-
         // 1. Sleek Curvy Pill Card Background & Amber Border
         drawPillBackground(graphics, posX, posY, hudW, hudH, bg, borderColor);
 
@@ -206,15 +203,15 @@ public class HudOverlayRenderer {
 
                 if (titleWidth > availTextW) {
                     graphics.enableScissor(textX, posY + 3, textX + availTextW, posY + 16);
-                    int gap = 32;
+                    int gap = 36;
                     int cycleW = titleWidth + gap;
-                    float scrollOffset = (float) ((timeMs * 0.024) % cycleW);
-                    int x1 = (int) (textX - scrollOffset);
-                    int x2 = x1 + cycleW;
-
-                    graphics.text(font, Component.literal("§f§l" + title), x1, posY + 5, (alpha << 24) | 0xFFFFFF, false);
-                    if (x2 < textX + availTextW) {
-                        graphics.text(font, Component.literal("§f§l" + title), x2, posY + 5, (alpha << 24) | 0xFFFFFF, false);
+                    float scrollOffset = (float) ((timeMs * 0.026) % cycleW);
+                    int drawX = (int) (textX - scrollOffset);
+                    while (drawX < textX + availTextW) {
+                        if (drawX + titleWidth > textX) {
+                            graphics.text(font, Component.literal("§f§l" + title), drawX, posY + 5, (alpha << 24) | 0xFFFFFF, false);
+                        }
+                        drawX += cycleW;
                     }
                     graphics.disableScissor();
                 } else {
@@ -233,15 +230,15 @@ public class HudOverlayRenderer {
 
                 if (labelW > availTextW) {
                     graphics.enableScissor(textX, posY + 8, textX + availTextW, posY + 24);
-                    int gap = 32;
+                    int gap = 36;
                     int cycleW = labelW + gap;
-                    float scrollOffset = (float) ((timeMs * 0.024) % cycleW);
-                    int x1 = (int) (textX - scrollOffset);
-                    int x2 = x1 + cycleW;
-
-                    graphics.text(font, Component.literal("§f" + compactLabel), x1, posY + 12, (alpha << 24) | 0xFFFFFF, false);
-                    if (x2 < textX + availTextW) {
-                        graphics.text(font, Component.literal("§f" + compactLabel), x2, posY + 12, (alpha << 24) | 0xFFFFFF, false);
+                    float scrollOffset = (float) ((timeMs * 0.026) % cycleW);
+                    int drawX = (int) (textX - scrollOffset);
+                    while (drawX < textX + availTextW) {
+                        if (drawX + labelW > textX) {
+                            graphics.text(font, Component.literal("§f" + compactLabel), drawX, posY + 12, (alpha << 24) | 0xFFFFFF, false);
+                        }
+                        drawX += cycleW;
                     }
                     graphics.disableScissor();
                 } else {
@@ -249,8 +246,6 @@ public class HudOverlayRenderer {
                 }
             }
         }
-
-        graphics.disableScissor();
     }
 
     private static void drawPillBackground(GuiGraphicsExtractor graphics, int x, int y, int w, int h, int bg, int outline) {

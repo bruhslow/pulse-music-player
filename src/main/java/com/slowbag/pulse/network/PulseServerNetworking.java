@@ -79,6 +79,9 @@ public class PulseServerNetworking {
                 case "disband_room" -> handleDisbandRoom(server, player);
                 case "invite" -> handleInvite(server, player, obj);
                 case "track_sync" -> handleTrackSync(server, player, obj);
+                case "pause_sync" -> handlePauseSync(server, player, obj);
+                case "seek_sync" -> handleSeekSync(server, player, obj);
+                case "queue_add" -> handleQueueAdd(server, player, obj);
                 case "server_party" -> handleServerParty(server, player);
             }
         } catch (Throwable t) {
@@ -161,7 +164,6 @@ public class PulseServerNetworking {
         resp.addProperty("isHost", room.hostUuid.equals(player.getUUID()));
         resp.add("members", getRoomMembersJson(server, room));
         sendPacket(player, resp);
-        sendPacket(player, resp);
 
         // Immediate audio synchronization
         if (room.lastTrackSync != null) {
@@ -221,6 +223,33 @@ public class PulseServerNetworking {
 
         room.lastTrackSync = obj;
         broadcastToRoom(server, room, obj, player.getUUID());
+    }
+
+    private static void handlePauseSync(MinecraftServer server, ServerPlayer player, JsonObject obj) {
+        String query = obj.has("code") ? obj.get("code").getAsString().trim() : (obj.has("room") ? obj.get("room").getAsString().trim() : "");
+        ServerRoom room = ROOMS.get(query.toLowerCase());
+        if (room == null || !room.hostUuid.equals(player.getUUID())) return;
+        if (room.lastTrackSync != null && obj.has("paused")) {
+            room.lastTrackSync.addProperty("isPaused", obj.get("paused").getAsBoolean());
+        }
+        broadcastToRoom(server, room, obj, player.getUUID());
+    }
+
+    private static void handleSeekSync(MinecraftServer server, ServerPlayer player, JsonObject obj) {
+        String query = obj.has("code") ? obj.get("code").getAsString().trim() : (obj.has("room") ? obj.get("room").getAsString().trim() : "");
+        ServerRoom room = ROOMS.get(query.toLowerCase());
+        if (room == null || !room.hostUuid.equals(player.getUUID())) return;
+        broadcastToRoom(server, room, obj, player.getUUID());
+    }
+
+    private static void handleQueueAdd(MinecraftServer server, ServerPlayer player, JsonObject obj) {
+        String query = obj.has("code") ? obj.get("code").getAsString().trim() : (obj.has("room") ? obj.get("room").getAsString().trim() : "");
+        ServerRoom room = ROOMS.get(query.toLowerCase());
+        if (room == null) return;
+        ServerPlayer hostPlayer = server.getPlayerList().getPlayer(room.hostUuid);
+        if (hostPlayer != null) {
+            sendPacket(hostPlayer, obj);
+        }
     }
 
     private static void handleLeaveRoom(MinecraftServer server, ServerPlayer player) {

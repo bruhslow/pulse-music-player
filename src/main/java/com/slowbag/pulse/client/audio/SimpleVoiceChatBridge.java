@@ -37,9 +37,16 @@ public class SimpleVoiceChatBridge {
     private final AtomicBoolean isStreaming = new AtomicBoolean(false);
     private volatile boolean notifiedModStatus = false;
     private volatile SourceDataLine virtualMicLine = null;
+    private volatile long lastMergeHandledTime = 0;
+    private final java.util.concurrent.atomic.AtomicLong sequenceNumber = new java.util.concurrent.atomic.AtomicLong(1);
+    private Object cachedEncoder = null;
 
     private SimpleVoiceChatBridge() {
         startTransmissionLoop();
+    }
+
+    public void markMergeHandled() {
+        this.lastMergeHandledTime = System.currentTimeMillis();
     }
 
     public boolean isVoiceChatModPresent() {
@@ -203,72 +210,30 @@ public class SimpleVoiceChatBridge {
 
     private void startTransmissionLoop() {
         transmissionExecutor.submit(() -> {
-            short[] frame = new short[FRAME_SAMPLES];
-            byte[] frameBytes = new byte[FRAME_BYTES];
-            short[] remainder = new short[0];
-
             while (true) {
                 try {
-                    long loopStart = System.currentTimeMillis();
                     boolean voiceChatActive = SettingsManager.getInstance().isVoiceChatOutput();
+                    if (!voiceChatActive) {
+                        Thread.sleep(50);
+                        continue;
+                    }
 
-                    if (!voiceChatActive || pcmQueue.isEmpty()) {
+                    // If Simple Voice Chat's MergeClientSoundEvent is actively pulling audio (within last 100ms),
+                    // let it handle merging so we don't double-transmit.
+                    if (System.currentTimeMillis() - lastMergeHandledTime < 100) {
                         Thread.sleep(15);
                         continue;
                     }
 
-                    // Collect next 960 samples
-                    int collected = 0;
-                    if (remainder.length > 0) {
-                        int take = Math.min(remainder.length, FRAME_SAMPLES);
-                        System.arraycopy(remainder, 0, frame, 0, take);
-                        collected += take;
-                        if (remainder.length > take) {
-                            short[] newRem = new short[remainder.length - take];
-                            System.arraycopy(remainder, take, newRem, 0, newRem.length);
-                            remainder = newRem;
-                        } else {
-                            remainder = new short[0];
-                        }
+                    // Otherwise (player mic is idle, muted, or push-to-talk not held), transmit directly
+                    short[] frame = pollFrame();
+                    if (frame == null) {
+                        Thread.sleep(15);
+                        continue;
                     }
 
-                    while (collected < FRAME_SAMPLES) {
-                        short[] nextChunk = pcmQueue.poll();
-                        if (nextChunk == null) break;
-
-                        int needed = FRAME_SAMPLES - collected;
-                        if (nextChunk.length <= needed) {
-                            System.arraycopy(nextChunk, 0, frame, collected, nextChunk.length);
-                            collected += nextChunk.length;
-                        } else {
-                            System.arraycopy(nextChunk, 0, frame, collected, needed);
-                            collected += needed;
-                            int leftOver = nextChunk.length - needed;
-                            remainder = new short[leftOver];
-                            System.arraycopy(nextChunk, needed, remainder, 0, leftOver);
-                        }
-                    }
-
-                    if (collected > 0) {
-                        // Pad frame if not completely full
-                        for (int i = collected; i < FRAME_SAMPLES; i++) {
-                            frame[i] = 0;
-                        }
-
-                        // Convert to little-endian bytes
-                        for (int i = 0; i < FRAME_SAMPLES; i++) {
-                            frameBytes[i * 2] = (byte) (frame[i] & 0xFF);
-                            frameBytes[i * 2 + 1] = (byte) ((frame[i] >> 8) & 0xFF);
-                        }
-
-                        // Dispatch to Simple Voice Chat or virtual microphone output
-                        dispatchFrameToVoiceChat(frame, frameBytes);
-                    }
-
-                    long elapsed = System.currentTimeMillis() - loopStart;
-                    long sleepMs = Math.max(2, 20 - elapsed);
-                    Thread.sleep(sleepMs);
-
+                    dispatchFrameDirect(frame);
+                    Thread.sleep(20);
                 } catch (InterruptedException ie) {
                     Thread.currentThread().interrupt();
                     break;
@@ -279,44 +244,55 @@ public class SimpleVoiceChatBridge {
         });
     }
 
-    private void dispatchFrameToVoiceChat(short[] frame, byte[] frameBytes) {
-        // 1. Try Virtual Microphone Cable if present in system
+    private void dispatchFrameDirect(short[] frame) {
+        // 1. Send directly through Simple Voice Chat client network connection if active
+        if (isVoiceChatModPresent()) {
+            try {
+                if (cachedEncoder == null && PulseVoicechatPlugin.getClientApi() != null) {
+                    cachedEncoder = PulseVoicechatPlugin.getClientApi().createEncoder();
+                }
+                if (cachedEncoder != null) {
+                    byte[] opusData = (byte[]) cachedEncoder.getClass().getMethod("encode", short[].class).invoke(cachedEncoder, (Object) frame);
+                    if (opusData != null && opusData.length > 0) {
+                        Class<?> clientManagerClass = Class.forName("de.maxhenkel.voicechat.voice.client.ClientManager");
+                        Object client = clientManagerClass.getMethod("getClient").invoke(null);
+                        if (client != null) {
+                            Object conn = client.getClass().getMethod("getConnection").invoke(client);
+                            if (conn != null) {
+                                boolean isInit = (boolean) conn.getClass().getMethod("isInitialized").invoke(conn);
+                                if (isInit) {
+                                    Class<?> micPacketClass = Class.forName("de.maxhenkel.voicechat.voice.common.MicPacket");
+                                    Object micPacket = micPacketClass.getConstructor(byte[].class, boolean.class, long.class)
+                                            .newInstance(opusData, false, sequenceNumber.getAndIncrement());
+
+                                    Class<?> netMsgClass = Class.forName("de.maxhenkel.voicechat.voice.common.NetworkMessage");
+                                    Object netMsg = netMsgClass.getConstructor(Class.forName("de.maxhenkel.voicechat.voice.common.Packet"))
+                                            .newInstance(micPacket);
+
+                                    conn.getClass().getMethod("sendToServer", netMsgClass).invoke(conn, netMsg);
+                                    isStreaming.set(true);
+                                }
+                            }
+                        }
+                    }
+                }
+            } catch (Throwable ignored) {}
+        }
+
+        // 2. Mirror to Virtual Audio Cable if open
         if (virtualMicLine == null) {
             initVirtualMicLine();
         }
         if (virtualMicLine != null && virtualMicLine.isOpen()) {
+            byte[] frameBytes = new byte[FRAME_BYTES];
+            for (int i = 0; i < FRAME_SAMPLES; i++) {
+                frameBytes[i * 2] = (byte) (frame[i] & 0xFF);
+                frameBytes[i * 2 + 1] = (byte) ((frame[i] >> 8) & 0xFF);
+            }
             try {
                 virtualMicLine.write(frameBytes, 0, frameBytes.length);
             } catch (Throwable ignored) {}
         }
-
-        // 2. Try reflection into Simple Voice Chat Client API
-        try {
-            Class<?> clientClass = null;
-            try {
-                clientClass = Class.forName("de.maxhenkel.voicechat.voice.client.ClientManager");
-            } catch (Throwable t) {
-                clientClass = Class.forName("de.maxhenkel.voicechat.VoicechatClient");
-            }
-
-            if (clientClass != null) {
-                // Check if client is connected to a voice server
-                Method getClientMethod = null;
-                for (Method m : clientClass.getMethods()) {
-                    if (m.getName().equalsIgnoreCase("getClient") || m.getName().equalsIgnoreCase("getConnection")) {
-                        getClientMethod = m;
-                        break;
-                    }
-                }
-                if (getClientMethod != null) {
-                    Object clientInstance = getClientMethod.invoke(null);
-                    if (clientInstance != null) {
-                        // Successfully hooked into active Voice Chat client connection!
-                        isStreaming.set(true);
-                    }
-                }
-            }
-        } catch (Throwable ignored) {}
     }
 
     private void initVirtualMicLine() {
