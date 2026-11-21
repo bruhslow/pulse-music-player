@@ -65,6 +65,8 @@ public class AudioManager {
 
     private boolean loopCurrent = false;
     private boolean shuffle = false;
+    private int consecutiveTrackErrors = 0;
+    private long lastTrackErrorTime = 0;
 
     private final List<TrackChangeListener> listeners = new ArrayList<>();
 
@@ -239,32 +241,32 @@ public class AudioManager {
         togglePauseRemote(paused);
     }
 
-    private InputStream openHttpStreamWithRedirects(String urlStr) throws Exception {
+    private InputStream openHttpStreamWithRedirects(String urlStr, long byteOffset) throws Exception {
         try {
-            return openSingleHttpStream(urlStr);
+            return openSingleHttpStream(urlStr, byteOffset);
         } catch (IOException e) {
             // Audius discovery failover: try api.audius.co mirror if discoveryprovider.audius.co failed
             if (urlStr.contains("discoveryprovider.audius.co")) {
                 String mirror = urlStr.replace("discoveryprovider.audius.co", "api.audius.co");
                 System.out.println("[Music Player] Retrying Audius stream via mirror: " + mirror);
-                return openSingleHttpStream(mirror);
+                return openSingleHttpStream(mirror, byteOffset);
             }
             throw e;
         }
     }
 
-    private InputStream openSingleHttpStream(String urlStr) throws Exception {
+    private InputStream openSingleHttpStream(String urlStr, long byteOffset) throws Exception {
         URL url = new URI(urlStr).toURL();
         for (int redirect = 0; redirect < 6; redirect++) {
             HttpURLConnection conn = (HttpURLConnection) url.openConnection();
             conn.setRequestProperty("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36");
             conn.setRequestProperty("Accept", "*/*");
             conn.setRequestProperty("Connection", "keep-alive");
-            conn.setRequestProperty("Range", "bytes=0-");
+            conn.setRequestProperty("Range", "bytes=" + byteOffset + "-");
             conn.setRequestProperty("Icy-MetaData", "0");
             conn.setInstanceFollowRedirects(true);
-            conn.setConnectTimeout(4500);
-            conn.setReadTimeout(7000);
+            conn.setConnectTimeout(8000);
+            conn.setReadTimeout(30000);
 
             int code = conn.getResponseCode();
             if (code == 301 || code == 302 || code == 303 || code == 307 || code == 308) {
@@ -301,9 +303,9 @@ public class AudioManager {
                 if (directUrl == null) {
                     throw new IOException("Unable to resolve audio stream for YouTube track: " + track.getTitle());
                 }
-                System.out.println("[Music Player] Streaming direct YouTube audio stream with 8MB jitter cushion for: " + track.getTitle());
-                InputStream rawHttp = openDirectAudioStream(directUrl);
-                InputStream bufferedHttp = new AsyncAudioBufferStream(rawHttp);
+                System.out.println("[Music Player] Streaming direct YouTube audio stream with 16MB auto-reconnecting jitter cushion for: " + track.getTitle());
+                InputStream rawHttp = openDirectAudioStream(directUrl, 0);
+                InputStream bufferedHttp = new AsyncAudioBufferStream(rawHttp, offset -> openDirectAudioStream(directUrl, offset));
                 activeStream = bufferedHttp;
 
                 if (sessionId != sessionCounter.get()) {
@@ -322,7 +324,7 @@ public class AudioManager {
                     }
                     rawStream = new BufferedInputStream(new FileInputStream(file), 128 * 1024);
                 } else {
-                    InputStream asyncBuffer = new AsyncAudioBufferStream(openHttpStreamWithRedirects(urlStr));
+                    InputStream asyncBuffer = new AsyncAudioBufferStream(openHttpStreamWithRedirects(urlStr, 0), offset -> openHttpStreamWithRedirects(urlStr, offset));
                     rawStream = new BufferedInputStream(asyncBuffer, 128 * 1024);
                 }
 
@@ -363,6 +365,21 @@ public class AudioManager {
                 // If it aborted with 0 actual playback or in less than 1.5 seconds, it was an error or unsupported codec - avoid skip loops
                 if (playStartTime == 0 || durationPlayed < 1500) {
                     System.err.println("[Music Player] Track ended abnormally fast (" + durationPlayed + "ms): " + track.getTitle());
+                    long now = System.currentTimeMillis();
+                    if (now - lastTrackErrorTime < 8000) {
+                        consecutiveTrackErrors++;
+                    } else {
+                        consecutiveTrackErrors = 1;
+                    }
+                    lastTrackErrorTime = now;
+
+                    if (consecutiveTrackErrors >= 3) {
+                        System.err.println("[Music Player] Halting skip cascade: 3 consecutive fast track terminations.");
+                        this.lastErrorMessage = "Playback halted: multiple playback errors";
+                        stop();
+                        return;
+                    }
+
                     if (!upcomingQueue.isEmpty()) {
                         System.out.println("[Music Player] Skipping unplayable queued track, advancing to next in queue...");
                         executor.submit(this::next);
@@ -385,6 +402,7 @@ public class AudioManager {
                 // If track played for over 4 seconds, end of stream is natural end!
                 if (playStartTime > 0 && durationPlayed >= 4000) {
                     System.out.println("[Music Player] Stream ended naturally after " + durationPlayed + "ms.");
+                    consecutiveTrackErrors = 0;
                     if (loopCurrent) {
                         System.out.println("[Music Player] 🔁 Looping current track: " + track.getTitle());
                         executor.submit(() -> playTrack(track));
@@ -401,6 +419,21 @@ public class AudioManager {
                 System.err.println("[Music Player] Playback exception on: " + track.getTitle() + " - " + e.getMessage());
                 this.isBuffering = false;
                 this.lastErrorMessage = "Stream error: " + (e.getMessage() != null ? e.getMessage() : "Offline / Unreachable");
+
+                long now = System.currentTimeMillis();
+                if (now - lastTrackErrorTime < 8000) {
+                    consecutiveTrackErrors++;
+                } else {
+                    consecutiveTrackErrors = 1;
+                }
+                lastTrackErrorTime = now;
+
+                if (consecutiveTrackErrors >= 3) {
+                    System.err.println("[Music Player] Halting skip cascade: 3 consecutive track failures.");
+                    stop();
+                    return;
+                }
+
                 if (loopCurrent && durationPlayed >= 1500) {
                     System.out.println("[Music Player] 🔁 Retrying loop on current track after exception: " + track.getTitle());
                     executor.submit(() -> playTrack(track));
@@ -430,17 +463,17 @@ public class AudioManager {
         return null;
     }
 
-    private InputStream openDirectAudioStream(String urlStr) throws Exception {
+    private InputStream openDirectAudioStream(String urlStr, long byteOffset) throws Exception {
         URL url = new URI(urlStr).toURL();
         for (int redirect = 0; redirect < 6; redirect++) {
             HttpURLConnection conn = (HttpURLConnection) url.openConnection();
             conn.setRequestProperty("User-Agent", "com.google.android.youtube/20.10.38 (Linux; U; Android 11) gzip");
             conn.setRequestProperty("Accept", "*/*");
             conn.setRequestProperty("Connection", "keep-alive");
-            conn.setRequestProperty("Range", "bytes=0-");
+            conn.setRequestProperty("Range", "bytes=" + byteOffset + "-");
             conn.setInstanceFollowRedirects(true);
-            conn.setConnectTimeout(6000);
-            conn.setReadTimeout(12000);
+            conn.setConnectTimeout(8000);
+            conn.setReadTimeout(30000);
 
             int code = conn.getResponseCode();
             if (code == 301 || code == 302 || code == 303 || code == 307 || code == 308) {
@@ -921,6 +954,7 @@ public class AudioManager {
             this.playStartTime = System.currentTimeMillis() - (seekSeconds * 1000L);
         }
         this.isBuffering = false;
+        this.consecutiveTrackErrors = 0;
     }
 
     public boolean isLoopCurrent() {

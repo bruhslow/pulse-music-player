@@ -131,6 +131,14 @@ public class VisualizerAudioDevice extends AudioDeviceBase {
         }
     }
 
+    public synchronized void flushDirect() {
+        if (line != null && line.isOpen()) {
+            try {
+                line.flush();
+            } catch (Throwable ignored) {}
+        }
+    }
+
     public synchronized void startDirectIfPrebuffering() {
         if (line != null && line.isOpen() && !line.isActive()) {
             try {

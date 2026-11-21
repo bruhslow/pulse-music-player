@@ -122,23 +122,35 @@ public class PartyManager {
     }
 
     private String roomName = null;
+    private static Set<String> createBoundedSet(int maxSize) {
+        return Collections.synchronizedSet(Collections.newSetFromMap(
+            new java.util.LinkedHashMap<String, Boolean>(maxSize, 0.75f, true) {
+                @Override
+                protected boolean removeEldestEntry(Map.Entry<String, Boolean> eldest) {
+                    return size() > maxSize;
+                }
+            }
+        ));
+    }
+
     private String roomPassword = null;
     private volatile String roomCode = null;
     private boolean isHost = false;
     private volatile String currentHost = null;
     private final Set<String> members = Collections.synchronizedSet(new LinkedHashSet<>());
     private final Map<String, Long> memberLastSeen = new ConcurrentHashMap<>();
-    private final Set<String> invitedRooms = Collections.synchronizedSet(new LinkedHashSet<>());
-    private final Set<String> processedInviteIds = Collections.synchronizedSet(new LinkedHashSet<>());
-    private final Set<String> seenRoomEventIds = Collections.synchronizedSet(new LinkedHashSet<>());
-    private final Set<String> seenDirEventIds = Collections.synchronizedSet(new LinkedHashSet<>());
+    private final Set<String> invitedRooms = createBoundedSet(200);
+    private final Set<String> processedInviteIds = createBoundedSet(500);
+    private final Set<String> seenRoomEventIds = createBoundedSet(500);
+    private final Set<String> seenDirEventIds = createBoundedSet(500);
     private final Map<String, Long> serverModUsers = new ConcurrentHashMap<>();
-    private final Set<String> seenServerEventIds = Collections.synchronizedSet(new LinkedHashSet<>());
+    private final Set<String> seenServerEventIds = createBoundedSet(500);
     private volatile String activeServerPartyHost = null;
     private volatile String activeServerPartyRoom = null;
     private volatile String currentServerId = null;
     private volatile boolean serverListening = false;
     private volatile long lastInviteSoundTime = 0;
+    private volatile long lastServerPartySoundTime = 0;
     private final CopyOnWriteArrayList<RoomEntry> discoveredRooms = new CopyOnWriteArrayList<>();
 
     private final ExecutorService partyExecutor = Executors.newCachedThreadPool(r -> {
@@ -925,9 +937,6 @@ public class PartyManager {
                                     if (id != null && !seenRoomEventIds.add(id)) {
                                         continue;
                                     }
-                                    if (seenRoomEventIds.size() > 300) {
-                                        seenRoomEventIds.clear();
-                                    }
                                     if (event.has("message")) {
                                         handleRoomPayload(event.get("message").getAsString());
                                     }
@@ -1224,9 +1233,6 @@ public class PartyManager {
                                     if (id != null && !seenDirEventIds.add(id)) {
                                         continue;
                                     }
-                                    if (seenDirEventIds.size() > 500) {
-                                        seenDirEventIds.clear();
-                                    }
                                     if (event.has("time")) {
                                         long eventTimeSec = event.get("time").getAsLong();
                                         long curTimeSec = System.currentTimeMillis() / 1000;
@@ -1378,7 +1384,7 @@ public class PartyManager {
                     }
 
                     String topic = "pulse_invite_" + myName.toLowerCase().trim();
-                    URL url = new URI("https://ntfy.sh/" + topic + "/json?since=1m").toURL();
+                    URL url = new URI("https://ntfy.sh/" + topic + "/json?since=now").toURL();
                     HttpURLConnection conn = (HttpURLConnection) url.openConnection();
                     conn.setRequestProperty("User-Agent", "PulseMusicPlayer/2.6");
                     conn.setConnectTimeout(5000);
@@ -1394,9 +1400,6 @@ public class PartyManager {
                                     String id = event.has("id") ? event.get("id").getAsString() : null;
                                     if (id != null && !processedInviteIds.add(id)) {
                                         continue;
-                                    }
-                                    if (processedInviteIds.size() > 200) {
-                                        processedInviteIds.clear();
                                     }
                                     if (event.has("message")) {
                                         handlePersonalInvite(event.get("message").getAsString());
@@ -1461,7 +1464,7 @@ public class PartyManager {
 
             // Play notification sound only if toasts/notifications are enabled and outside cooldown
             long now = System.currentTimeMillis();
-            if (SettingsManager.getInstance().isToastNotifications() && now - lastInviteSoundTime > 3000) {
+            if (SettingsManager.getInstance().isToastNotifications() && now - lastInviteSoundTime > 8000) {
                 lastInviteSoundTime = now;
                 try {
                     client.getSoundManager().play(SimpleSoundInstance.forUI(SoundEvents.NOTE_BLOCK_PLING, 1.2f));
@@ -1482,10 +1485,14 @@ public class PartyManager {
             while (serverListening) {
                 try {
                     String serverId = getServerIdentifier();
+                    if ("global_lobby".equals(serverId)) {
+                        Thread.sleep(3000);
+                        continue;
+                    }
                     this.currentServerId = serverId;
                     String topic = "pulse_srv_" + serverId;
 
-                    URL url = new URI("https://ntfy.sh/" + topic + "/json?since=10m").toURL();
+                    URL url = new URI("https://ntfy.sh/" + topic + "/json?since=now").toURL();
                     HttpURLConnection conn = (HttpURLConnection) url.openConnection();
                     conn.setRequestProperty("User-Agent", "PulseMusicPlayer/2.6");
                     conn.setConnectTimeout(5000);
@@ -1504,9 +1511,6 @@ public class PartyManager {
                                     String id = event.has("id") ? event.get("id").getAsString() : null;
                                     if (id != null && !seenServerEventIds.add(id)) {
                                         continue;
-                                    }
-                                    if (seenServerEventIds.size() > 300) {
-                                        seenServerEventIds.clear();
                                     }
                                     if (event.has("message")) {
                                         handleServerPayload(event.get("message").getAsString());
@@ -1611,9 +1615,13 @@ public class PartyManager {
                         client.player.sendSystemMessage(prompt);
 
                         if (SettingsManager.getInstance().isToastNotifications()) {
-                            try {
-                                client.getSoundManager().play(SimpleSoundInstance.forUI(SoundEvents.NOTE_BLOCK_PLING, 1.2f));
-                            } catch (Throwable ignored) {}
+                            long now = System.currentTimeMillis();
+                            if (now - lastServerPartySoundTime > 15000) {
+                                lastServerPartySoundTime = now;
+                                try {
+                                    client.getSoundManager().play(SimpleSoundInstance.forUI(SoundEvents.NOTE_BLOCK_PLING, 1.2f));
+                                } catch (Throwable ignored) {}
+                            }
                         }
                     }
                 });

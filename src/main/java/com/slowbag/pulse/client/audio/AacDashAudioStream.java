@@ -191,8 +191,12 @@ public class AacDashAudioStream {
                 }
             }
         } finally {
-            device.startDirectIfPrebuffering();
-            device.drainDirect();
+            if (!controller.isPlaying() || controller.getSessionId() != targetSessionId) {
+                device.flushDirect();
+            } else {
+                device.startDirectIfPrebuffering();
+                device.drainDirect();
+            }
             if (cacheOut != null) {
                 try { cacheOut.flush(); cacheOut.close(); } catch (Throwable ignored) {}
             }
@@ -283,8 +287,12 @@ public class AacDashAudioStream {
             }
         }
 
-        device.startDirectIfPrebuffering();
-        device.drainDirect();
+        if (!controller.isPlaying() || controller.getSessionId() != targetSessionId) {
+            device.flushDirect();
+        } else {
+            device.startDirectIfPrebuffering();
+            device.drainDirect();
+        }
     }
 
     private static class AudioTrakInfo {
