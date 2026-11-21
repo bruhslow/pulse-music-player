@@ -1,3 +1,9 @@
+import java.nio.file.FileSystems
+import java.nio.file.Files
+import java.nio.file.StandardCopyOption
+import java.nio.file.StandardOpenOption
+import java.nio.charset.StandardCharsets
+
 plugins {
     id 'net.fabricmc.fabric-loom' version '1.19.+'
 }
@@ -16,17 +22,27 @@ java {
     toolchain {
         languageVersion = JavaLanguageVersion.of(25)
     }
+    sourceCompatibility = JavaVersion.VERSION_21
+    targetCompatibility = JavaVersion.VERSION_21
+}
+
+tasks.withType(JavaCompile).configureEach {
+    options.release = 21
 }
 
 repositories {
     mavenCentral()
     maven { url = "https://maven.fabricmc.net/" }
+    maven { url = "https://maven.maxhenkel.de/repository/public" }
 }
 
 dependencies {
     minecraft "com.mojang:minecraft:${minecraft_version}"
     implementation "net.fabricmc:fabric-loader:${loader_version}"
     implementation "net.fabricmc.fabric-api:fabric-api:${fabric_api_version}"
+
+    // Simple Voice Chat Official Plugin API for direct in-game microphone streaming
+    compileOnly "de.maxhenkel.voicechat:voicechat-api:2.5.0"
 
     // Pure-Java audio decoder for MP3 and live web radio streams
     implementation "javazoom:jlayer:1.0.1"
@@ -51,11 +67,48 @@ loom {
 
 processResources {
     filesMatching('fabric.mod.json') {
-        expand "mod_version": mod_version, "mod_id": mod_id, "loader_version": loader_version, "minecraft_version": minecraft_version
+        expand "mod_version": mod_version, "mod_id": mod_id, "loader_version": loader_version, "minecraft_dependency": ">=1.21 <=26.4"
     }
 }
 
 jar {
     archiveBaseName.set("pulse-music-player")
     archiveVersion.set(mod_version)
+
+    doLast {
+        def builtJar = archiveFile.get().asFile
+        def libsDir = builtJar.parentFile
+
+        // Helper to patch fabric.mod.json inside a jar copy
+        def patchJar = { File targetJar, String mcRange ->
+            Files.copy(builtJar.toPath(), targetJar.toPath(), StandardCopyOption.REPLACE_EXISTING)
+            def jarUri = URI.create("jar:" + targetJar.toURI().toString())
+            def env = [create: "false"]
+            try {
+                FileSystems.newFileSystem(jarUri, env).withCloseable { fs ->
+                    def modJsonPath = fs.getPath("fabric.mod.json")
+                    if (Files.exists(modJsonPath)) {
+                        String content = new String(Files.readAllBytes(modJsonPath), StandardCharsets.UTF_8)
+                        String updated = content.replaceAll(/"minecraft":\s*"[^"]*"/, "\"minecraft\": \"${mcRange}\"")
+                        updated = updated.replaceAll(/"java":\s*"[^"]*"/, "\"java\": \">=21\"")
+                        Files.write(modJsonPath, updated.getBytes(StandardCharsets.UTF_8), StandardOpenOption.TRUNCATE_EXISTING)
+                    }
+                }
+            } catch (Throwable t) {
+                println("[Pulse Build] Warning patching jar " + targetJar.name + ": " + t.getMessage())
+            }
+        }
+
+        // 1. Build for any version of 1.21 (1.21.0 through 1.21.4)
+        def jar121 = new File(libsDir, "pulse-music-player-${mod_version}-mc1.21.jar")
+        patchJar(jar121, ">=1.21 <=1.21.4")
+
+        // 2. Build for any version of 26 (26.1 through 26.4)
+        def jar26 = new File(libsDir, "pulse-music-player-${mod_version}-mc26.jar")
+        patchJar(jar26, ">=26.1 <=26.4")
+
+        println("[Pulse Build] Successfully generated dual releases:")
+        println("  -> " + jar121.name + " (Minecraft 1.21.x: >=1.21 <=1.21.4, Java 21+)")
+        println("  -> " + jar26.name + " (Minecraft 26.x: >=26.1 <=26.4, Java 21+)")
+    }
 }

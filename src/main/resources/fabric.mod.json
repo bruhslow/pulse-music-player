@@ -19,6 +19,9 @@
     ],
     "client": [
       "com.slowbag.pulse.client.MusicPlayerClientMod"
+    ],
+    "voicechat": [
+      "com.slowbag.pulse.client.audio.PulseVoicechatPlugin"
     ]
   },
   "mixins": [
@@ -26,8 +29,8 @@
   ],
   "depends": {
     "fabricloader": ">=${loader_version}",
-    "minecraft": ">=26.1 <=26.4",
-    "java": ">=25",
+    "minecraft": "${minecraft_dependency}",
+    "java": ">=21",
     "fabric-api": "*"
   }
 }

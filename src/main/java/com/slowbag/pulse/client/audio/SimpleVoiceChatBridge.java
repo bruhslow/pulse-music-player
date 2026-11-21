@@ -136,6 +136,71 @@ public class SimpleVoiceChatBridge {
         return out;
     }
 
+    private final Object frameLock = new Object();
+    private short[] remainder = new short[0];
+
+    public short[] pollFrame() {
+        synchronized (frameLock) {
+            if (pcmQueue.isEmpty() && remainder.length == 0) {
+                return null;
+            }
+
+            short[] frame = new short[FRAME_SAMPLES];
+            int collected = 0;
+
+            if (remainder.length > 0) {
+                int take = Math.min(remainder.length, FRAME_SAMPLES);
+                System.arraycopy(remainder, 0, frame, 0, take);
+                collected += take;
+                if (remainder.length > take) {
+                    short[] newRem = new short[remainder.length - take];
+                    System.arraycopy(remainder, take, newRem, 0, newRem.length);
+                    remainder = newRem;
+                } else {
+                    remainder = new short[0];
+                }
+            }
+
+            while (collected < FRAME_SAMPLES) {
+                short[] nextChunk = pcmQueue.poll();
+                if (nextChunk == null) break;
+
+                int needed = FRAME_SAMPLES - collected;
+                if (nextChunk.length <= needed) {
+                    System.arraycopy(nextChunk, 0, frame, collected, nextChunk.length);
+                    collected += nextChunk.length;
+                } else {
+                    System.arraycopy(nextChunk, 0, frame, collected, needed);
+                    collected += needed;
+                    int leftOver = nextChunk.length - needed;
+                    remainder = new short[leftOver];
+                    System.arraycopy(nextChunk, needed, remainder, 0, leftOver);
+                }
+            }
+
+            if (collected == 0) {
+                return null;
+            }
+
+            // Zero-pad remainder of frame
+            for (int i = collected; i < FRAME_SAMPLES; i++) {
+                frame[i] = 0;
+            }
+
+            // Mirror to virtual audio cable if active
+            if (virtualMicLine != null && virtualMicLine.isOpen()) {
+                byte[] b = new byte[FRAME_BYTES];
+                for (int i = 0; i < FRAME_SAMPLES; i++) {
+                    b[i * 2] = (byte) (frame[i] & 0xFF);
+                    b[i * 2 + 1] = (byte) ((frame[i] >> 8) & 0xFF);
+                }
+                try { virtualMicLine.write(b, 0, b.length); } catch (Throwable ignored) {}
+            }
+
+            return frame;
+        }
+    }
+
     private void startTransmissionLoop() {
         transmissionExecutor.submit(() -> {
             short[] frame = new short[FRAME_SAMPLES];

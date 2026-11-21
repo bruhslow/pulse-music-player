@@ -193,17 +193,33 @@ public class HudOverlayRenderer {
             graphics.fill(cx + 1, cy - 3, cx + 2, cy + 4, (alpha << 24) | 0xFFD97746);
         }
 
-        // 3. Middle Text: Song Info (Expands smoothly across entire pill width without bars crowding)
+        // 3. Middle Text: Song Info with Smooth Marquee Scrolling (Right to Left)
         Font font = client.font;
         int textX = cx + circleRadius + 8;
         int availTextW = (posX + hudW - 10) - textX;
 
         if (availTextW > 20) {
             if (compactProgress < 0.6f) {
-                // Expanded mode: 2 clean lines
-                int titleW = Math.max(10, availTextW);
-                String safeTitle = truncateText(font, track.getTitle(), titleW);
-                graphics.text(font, Component.literal("§f§l" + safeTitle), textX, posY + 5, (alpha << 24) | 0xFFFFFF, false);
+                // Expanded mode: Line 1 Title (Smooth marquee scroll from right to left), Line 2 Artist & Time
+                String title = track.getTitle();
+                int titleWidth = font.width(title);
+
+                if (titleWidth > availTextW) {
+                    graphics.enableScissor(textX, posY + 3, textX + availTextW, posY + 16);
+                    int gap = 32;
+                    int cycleW = titleWidth + gap;
+                    float scrollOffset = (float) ((timeMs * 0.024) % cycleW);
+                    int x1 = (int) (textX - scrollOffset);
+                    int x2 = x1 + cycleW;
+
+                    graphics.text(font, Component.literal("§f§l" + title), x1, posY + 5, (alpha << 24) | 0xFFFFFF, false);
+                    if (x2 < textX + availTextW) {
+                        graphics.text(font, Component.literal("§f§l" + title), x2, posY + 5, (alpha << 24) | 0xFFFFFF, false);
+                    }
+                    graphics.disableScissor();
+                } else {
+                    graphics.text(font, Component.literal("§f§l" + title), textX, posY + 5, (alpha << 24) | 0xFFFFFF, false);
+                }
 
                 String artistTime = track.getArtist();
                 long elapsedSecs = audio.getElapsedSeconds();
@@ -211,10 +227,26 @@ public class HudOverlayRenderer {
                 String safeArtist = truncateText(font, artistTime + " §8• §6" + timeStr, availTextW);
                 graphics.text(font, Component.literal("§7" + safeArtist), textX, posY + 17, (alpha << 24) | 0xA0988E, false);
             } else {
-                // Compact pill mode: 1 centered clean line
+                // Compact pill mode: 1 centered clean line (Smooth marquee scroll if long)
                 String compactLabel = track.getTitle() + " • " + track.getArtist();
-                String safeText = truncateText(font, compactLabel, availTextW);
-                graphics.text(font, Component.literal("§f" + safeText), textX, posY + 12, (alpha << 24) | 0xFFFFFF, false);
+                int labelW = font.width(compactLabel);
+
+                if (labelW > availTextW) {
+                    graphics.enableScissor(textX, posY + 8, textX + availTextW, posY + 24);
+                    int gap = 32;
+                    int cycleW = labelW + gap;
+                    float scrollOffset = (float) ((timeMs * 0.024) % cycleW);
+                    int x1 = (int) (textX - scrollOffset);
+                    int x2 = x1 + cycleW;
+
+                    graphics.text(font, Component.literal("§f" + compactLabel), x1, posY + 12, (alpha << 24) | 0xFFFFFF, false);
+                    if (x2 < textX + availTextW) {
+                        graphics.text(font, Component.literal("§f" + compactLabel), x2, posY + 12, (alpha << 24) | 0xFFFFFF, false);
+                    }
+                    graphics.disableScissor();
+                } else {
+                    graphics.text(font, Component.literal("§f" + compactLabel), textX, posY + 12, (alpha << 24) | 0xFFFFFF, false);
+                }
             }
         }
 

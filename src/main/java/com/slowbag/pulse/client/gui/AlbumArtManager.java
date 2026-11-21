@@ -49,13 +49,37 @@ public class AlbumArtManager {
     private String currentUrl = null;
     private boolean isTextureReady = false;
 
-    public static class SmoothDynamicTexture extends DynamicTexture {
-        public SmoothDynamicTexture(Supplier<String> label, NativeImage image) {
-            super(label, image);
+    public static DynamicTexture createDynamicTexture(String label, NativeImage image) {
+        DynamicTexture tex = null;
+        try {
+            // 26.x and 1.21.4+ constructor: DynamicTexture(Supplier<String>, NativeImage)
+            java.lang.reflect.Constructor<DynamicTexture> ctor26 = DynamicTexture.class.getConstructor(Supplier.class, NativeImage.class);
+            tex = ctor26.newInstance((Supplier<String>) () -> label, image);
+        } catch (Throwable t1) {
             try {
-                this.sampler = RenderSystem.getSamplerCache().getClampToEdge(FilterMode.LINEAR);
-            } catch (Throwable ignored) {}
+                // 1.21.0 - 1.21.3 constructor: DynamicTexture(NativeImage)
+                java.lang.reflect.Constructor<DynamicTexture> ctor121 = DynamicTexture.class.getConstructor(NativeImage.class);
+                tex = ctor121.newInstance(image);
+            } catch (Throwable t2) {
+                tex = new DynamicTexture(() -> label, image);
+            }
         }
+
+        if (tex != null) {
+            try {
+                // 26.x Blaze3D GpuSampler hardware linear filtering
+                java.lang.reflect.Field samplerField = net.minecraft.client.renderer.texture.AbstractTexture.class.getDeclaredField("sampler");
+                samplerField.setAccessible(true);
+                samplerField.set(tex, RenderSystem.getSamplerCache().getClampToEdge(FilterMode.LINEAR));
+            } catch (Throwable ignored) {
+                try {
+                    // 1.21.x legacy setFilter(bilinear, mipmap)
+                    java.lang.reflect.Method setFilterMethod = tex.getClass().getMethod("setFilter", boolean.class, boolean.class);
+                    setFilterMethod.invoke(tex, true, false);
+                } catch (Throwable ignored2) {}
+            }
+        }
+        return tex;
     }
 
     private AlbumArtManager() {}
@@ -150,9 +174,9 @@ public class AlbumArtManager {
                         if (currentCircleTexture != null) {
                             currentCircleTexture.close();
                         }
-                        // Use SmoothDynamicTexture for hardware linear antialiasing
-                        currentSquareTexture = new SmoothDynamicTexture(() -> "album_art_square", finalSquare);
-                        currentCircleTexture = new SmoothDynamicTexture(() -> "album_art_circle", finalCircle);
+                        // Cross-version smooth dynamic texture with hardware linear antialiasing
+                        currentSquareTexture = createDynamicTexture("album_art_square", finalSquare);
+                        currentCircleTexture = createDynamicTexture("album_art_circle", finalCircle);
 
                         Minecraft.getInstance().getTextureManager().register(albumArtId, currentSquareTexture);
                         Minecraft.getInstance().getTextureManager().register(circleAlbumArtId, currentCircleTexture);
@@ -280,7 +304,7 @@ public class AlbumArtManager {
             NativeImage nativeDefault = NativeImage.read(new ByteArrayInputStream(baos.toByteArray()));
 
             Minecraft.getInstance().execute(() -> {
-                defaultTexture = new SmoothDynamicTexture(() -> "default_album_art", nativeDefault);
+                defaultTexture = createDynamicTexture("default_album_art", nativeDefault);
                 Minecraft.getInstance().getTextureManager().register(defaultAlbumArtId, defaultTexture);
             });
         } catch (Throwable t) {

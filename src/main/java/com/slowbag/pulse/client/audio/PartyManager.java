@@ -809,19 +809,38 @@ public class PartyManager {
         }
     }
 
-    public synchronized boolean joinRoomByCode(String code) {
-        if (code == null || code.trim().isEmpty()) return false;
-        code = code.trim().toUpperCase();
+    public synchronized boolean joinRoom(String name, String password) {
+        if (name == null || name.trim().isEmpty()) return false;
+        String trimmed = name.trim();
+        String pass = password != null ? password.trim() : "";
 
         leaveRoomInternal(false);
         String myName = getPlayerName();
 
-        // 1. Check Cloud Registry for room code
+        // 1. Server Networking if connected to a Fabric server
+        if (isServerNetworkingActive()) {
+            JsonObject obj = new JsonObject();
+            obj.addProperty("action", "join_room");
+            obj.addProperty("room", trimmed);
+            obj.addProperty("code", trimmed);
+            obj.addProperty("password", pass);
+            ClientPlayNetworking.send(new PulseNetworkPayload(obj.toString()));
+            this.roomCode = trimmed;
+            this.roomName = trimmed;
+            this.isHost = false;
+            this.currentHost = "Host";
+            this.members.clear();
+            this.members.add(myName);
+            return true;
+        }
+
+        // 2. Cloud Registry fallback
         JsonObject rooms = fetchCloudRooms();
-        if (rooms.has(code)) {
-            JsonObject r = rooms.getAsJsonObject(code);
-            this.roomCode = code;
-            this.roomName = r.has("roomName") ? r.get("roomName").getAsString() : "Room " + code;
+        String codeUpper = trimmed.toUpperCase();
+        if (rooms.has(codeUpper)) {
+            JsonObject r = rooms.getAsJsonObject(codeUpper);
+            this.roomCode = codeUpper;
+            this.roomName = r.has("roomName") ? r.get("roomName").getAsString() : "Room " + codeUpper;
             this.currentHost = r.has("host") ? r.get("host").getAsString() : "Host";
             this.isHost = myName.equalsIgnoreCase(this.currentHost);
             this.members.clear();
@@ -834,46 +853,25 @@ public class PartyManager {
                 }
             }
 
-            // Immediately register self in cloud room
             if (!this.members.contains(myName)) {
                 this.members.add(myName);
             }
-            saveCloudRoom(code, r);
-
-            // Sync audio track immediately
+            saveCloudRoom(codeUpper, r);
             syncFromRoomJson(r);
-
-            // Start guest polling loop
-            startCloudGuestLoop(code);
+            startCloudGuestLoop(codeUpper);
 
             Minecraft client = Minecraft.getInstance();
             if (client.player != null) {
-                client.player.sendSystemMessage(Component.literal("§a[Pulse] 🎉 Connected to room §e#" + code + "§a! Enjoy music together ~ 🎶"));
+                client.player.sendSystemMessage(Component.literal("§a[Pulse] 🎉 Connected to room §e#" + codeUpper + "§a! Enjoy music together ~ 🎶"));
             }
-            return true;
-        }
-
-        // 2. Server Networking fallback if on same Fabric server
-        if (isServerNetworkingActive()) {
-            JsonObject obj = new JsonObject();
-            obj.addProperty("action", "join_room");
-            obj.addProperty("room", code);
-            obj.addProperty("code", code);
-            ClientPlayNetworking.send(new PulseNetworkPayload(obj.toString()));
-            this.roomCode = code;
-            this.roomName = "Room " + code;
-            this.isHost = false;
-            this.currentHost = "Host";
-            this.members.clear();
-            this.members.add(myName);
             return true;
         }
 
         return false;
     }
 
-    public synchronized boolean joinRoom(String name, String password) {
-        return joinRoomByCode(name);
+    public synchronized boolean joinRoomByCode(String code) {
+        return joinRoom(code, "");
     }
 
     public synchronized void leaveRoom() {

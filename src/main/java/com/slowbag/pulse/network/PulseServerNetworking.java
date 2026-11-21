@@ -16,6 +16,7 @@ public class PulseServerNetworking {
 
     public static class ServerRoom {
         public final String name;
+        public final String code;
         public final String password;
         public UUID hostUuid;
         public String hostName;
@@ -23,8 +24,9 @@ public class PulseServerNetworking {
         public final Set<UUID> invitedUuids = ConcurrentHashMap.newKeySet();
         public JsonObject lastTrackSync = null;
 
-        public ServerRoom(String name, String password, UUID hostUuid, String hostName) {
+        public ServerRoom(String name, String code, String password, UUID hostUuid, String hostName) {
             this.name = name;
+            this.code = code != null ? code : "";
             this.password = password != null ? password : "";
             this.hostUuid = hostUuid;
             this.hostName = hostName;
@@ -101,17 +103,22 @@ public class PulseServerNetworking {
 
     private static void handleCreateRoom(MinecraftServer server, ServerPlayer player, JsonObject obj) {
         String name = obj.get("room").getAsString().trim();
+        String code = obj.has("code") ? obj.get("code").getAsString().trim() : "";
         String pass = obj.has("password") ? obj.get("password").getAsString().trim() : "";
 
         // Remove from existing rooms
         removePlayerFromAllRooms(server, player.getUUID());
 
-        ServerRoom room = new ServerRoom(name, pass, player.getUUID(), player.getName().getString());
+        ServerRoom room = new ServerRoom(name, code, pass, player.getUUID(), player.getName().getString());
         ROOMS.put(name.toLowerCase(), room);
+        if (!code.isEmpty()) {
+            ROOMS.put(code.toLowerCase(), room);
+        }
 
         JsonObject resp = new JsonObject();
         resp.addProperty("action", "room_joined");
         resp.addProperty("room", name);
+        resp.addProperty("code", code);
         resp.addProperty("isHost", true);
         resp.add("members", getRoomMembersJson(server, room));
         sendPacket(player, resp);
@@ -120,17 +127,26 @@ public class PulseServerNetworking {
     }
 
     private static void handleJoinRoom(MinecraftServer server, ServerPlayer player, JsonObject obj) {
-        String name = obj.get("room").getAsString().trim();
+        String query = obj.has("room") ? obj.get("room").getAsString().trim() : "";
+        String code = obj.has("code") ? obj.get("code").getAsString().trim() : "";
         String pass = obj.has("password") ? obj.get("password").getAsString().trim() : "";
 
-        ServerRoom room = ROOMS.get(name.toLowerCase());
+        ServerRoom room = null;
+        if (!code.isEmpty()) room = ROOMS.get(code.toLowerCase());
+        if (room == null && !query.isEmpty()) room = ROOMS.get(query.toLowerCase());
+
         if (room == null) {
-            sendError(player, "Room '" + name + "' does not exist!");
+            sendError(player, "Room not found! Check your room code or room name.");
             return;
         }
 
-        if (!room.password.isEmpty() && !room.password.equals(pass) && !room.invitedUuids.contains(player.getUUID())) {
-            sendError(player, "Incorrect password for room '" + name + "'!");
+        boolean passwordValid = room.password.isEmpty()
+                || room.password.equalsIgnoreCase(pass)
+                || (!room.code.isEmpty() && room.code.equalsIgnoreCase(pass))
+                || room.invitedUuids.contains(player.getUUID());
+
+        if (!passwordValid) {
+            sendError(player, "Incorrect password or room code for room '" + room.name + "'!");
             return;
         }
 
@@ -140,9 +156,11 @@ public class PulseServerNetworking {
         JsonObject resp = new JsonObject();
         resp.addProperty("action", "room_joined");
         resp.addProperty("room", room.name);
+        resp.addProperty("code", room.code);
         resp.addProperty("host", room.hostName);
         resp.addProperty("isHost", room.hostUuid.equals(player.getUUID()));
         resp.add("members", getRoomMembersJson(server, room));
+        sendPacket(player, resp);
         sendPacket(player, resp);
 
         // Immediate audio synchronization
@@ -232,7 +250,7 @@ public class PulseServerNetworking {
     private static void handleServerParty(MinecraftServer server, ServerPlayer player) {
         String srvRoomName = "Server Music Party";
         ServerRoom room = ROOMS.computeIfAbsent(srvRoomName.toLowerCase(), k ->
-                new ServerRoom(srvRoomName, "", player.getUUID(), player.getName().getString())
+                new ServerRoom(srvRoomName, "SERVER", "", player.getUUID(), player.getName().getString())
         );
 
         removePlayerFromAllRooms(server, player.getUUID());
