@@ -37,6 +37,7 @@ public class MusicPlayerClientMod implements ClientModInitializer {
         // 2. Register HUD Overlay
         try {
             HudOverlayRenderer.register();
+            com.slowbag.pulse.client.gui.HudConfigManager.getInstance().setHudEnabled(true);
         } catch (Throwable t) {
             MusicPlayerMod.LOGGER.error("[Music Player] Failed to register HUD overlay", t);
         }

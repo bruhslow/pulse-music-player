@@ -397,12 +397,16 @@ public class MusicPlayerCommand {
 
     private static void sendClientMessage(CommandContext<FabricClientCommandSource> context, Component message) {
         Minecraft client = Minecraft.getInstance();
-        if (client.player != null) {
-            client.player.sendSystemMessage(message);
-        } else {
-            try {
-                context.getSource().sendFeedback(message);
-            } catch (Throwable ignored) {}
+        if (client != null) {
+            client.execute(() -> {
+                if (client.player != null) {
+                    client.player.sendSystemMessage(message);
+                } else {
+                    try {
+                        context.getSource().sendFeedback(message);
+                    } catch (Throwable ignored) {}
+                }
+            });
         }
     }
 

@@ -126,7 +126,7 @@ public class PartyManager {
     private volatile String roomCode = null;
     private boolean isHost = false;
     private volatile String currentHost = null;
-    private final Set<String> members = new LinkedHashSet<>();
+    private final Set<String> members = Collections.synchronizedSet(new LinkedHashSet<>());
     private final Map<String, Long> memberLastSeen = new ConcurrentHashMap<>();
     private final Set<String> invitedRooms = Collections.synchronizedSet(new LinkedHashSet<>());
     private final Set<String> processedInviteIds = Collections.synchronizedSet(new LinkedHashSet<>());
@@ -160,6 +160,26 @@ public class PartyManager {
         startDirectoryListener();
         startPersonalInviteListener();
         startServerDiscoveryListener();
+    }
+
+    public void sendPlayerMessage(Component comp) {
+        if (comp == null) return;
+        try {
+            Minecraft client = Minecraft.getInstance();
+            if (client == null) return;
+            client.execute(() -> {
+                try {
+                    if (client.player != null) {
+                        client.player.sendSystemMessage(comp);
+                    }
+                } catch (Throwable ignored) {}
+            });
+        } catch (Throwable ignored) {}
+    }
+
+    public void sendPlayerMessage(String text) {
+        if (text == null) return;
+        sendPlayerMessage(Component.literal(text));
     }
 
     public void init() {
@@ -217,10 +237,7 @@ public class PartyManager {
                             if (!mClean.isEmpty()) this.members.add(mClean);
                         }
                     }
-                    Minecraft client = Minecraft.getInstance();
-                    if (client.player != null) {
-                        client.player.sendSystemMessage(Component.literal("§a[Pulse] Joined room '§f" + roomName + "§a'!"));
-                    }
+                    sendPlayerMessage("§a[Pulse] Joined room '§f" + roomName + "§a'!");
                 }
                 case "members_updated" -> {
                     if (obj.has("members")) {
@@ -265,10 +282,7 @@ public class PartyManager {
                         if (!url.isEmpty()) {
                             AudioTrack qt = new AudioTrack(title, artist, url, false, dur, "Room", art);
                             AudioManager.getInstance().enqueueTrackDirect(qt);
-                            Minecraft client = Minecraft.getInstance();
-                            if (client != null && client.player != null) {
-                                client.player.sendSystemMessage(Component.literal("§a[Pulse] 📥 " + sender + " added '§f" + title + "§a' to the Room Queue!"));
-                            }
+                            sendPlayerMessage("§a[Pulse] 📥 " + sender + " added '§f" + title + "§a' to the Room Queue!");
                         }
                     }
                 }
@@ -276,33 +290,21 @@ public class PartyManager {
                     this.isHost = false;
                     this.roomName = null;
                     this.currentHost = null;
-                    Minecraft client = Minecraft.getInstance();
-                    if (client.player != null) {
-                        client.player.sendSystemMessage(Component.literal("§c[Pulse] The room was disbanded by the host."));
-                    }
+                    sendPlayerMessage("§c[Pulse] The room was disbanded by the host.");
                 }
                 case "member_joined" -> {
                     String player = obj.get("player").getAsString();
                     String pClean = player.replaceAll("\\s*\\(Host\\)", "").trim();
                     if (!pClean.isEmpty()) this.members.add(pClean);
-                    Minecraft client = Minecraft.getInstance();
-                    if (client.player != null) {
-                        client.player.sendSystemMessage(Component.literal("§a[Pulse] §f" + player + " §ajoined the room!"));
-                    }
+                    sendPlayerMessage("§a[Pulse] §f" + player + " §ajoined the room!");
                 }
                 case "feedback" -> {
                     String msg = obj.get("message").getAsString();
-                    Minecraft client = Minecraft.getInstance();
-                    if (client.player != null) {
-                        client.player.sendSystemMessage(Component.literal(msg));
-                    }
+                    sendPlayerMessage(msg);
                 }
                 case "error" -> {
                     String msg = obj.get("message").getAsString();
-                    Minecraft client = Minecraft.getInstance();
-                    if (client.player != null) {
-                        client.player.sendSystemMessage(Component.literal("§c[Pulse] " + msg));
-                    }
+                    sendPlayerMessage("§c[Pulse] " + msg);
                 }
             }
         } catch (Throwable t) {
@@ -413,9 +415,8 @@ public class PartyManager {
                 count++;
             }
         }
-        Minecraft client = Minecraft.getInstance();
-        if (client != null && client.player != null && count > 0) {
-            client.player.sendSystemMessage(Component.literal("§a[Pulse] 💌 Sent private party invite to " + count + " player(s) with the mod on this server!"));
+        if (count > 0) {
+            sendPlayerMessage("§a[Pulse] 💌 Sent private party invite to " + count + " player(s) with the mod on this server!");
         }
     }
 
@@ -519,10 +520,7 @@ public class PartyManager {
             sendNtfyMessage("pulse_room_" + roomCode.toLowerCase(), qObj);
         }
 
-        Minecraft client = Minecraft.getInstance();
-        if (client.player != null) {
-            client.player.sendSystemMessage(Component.literal("§a[Pulse] 🎵 Added '" + track.getTitle() + "' to the Room Queue!"));
-        }
+        sendPlayerMessage("§a[Pulse] 🎵 Added '" + track.getTitle() + "' to the Room Queue!");
     }
 
     // ------------------------------------------------------------------------
@@ -571,11 +569,8 @@ public class PartyManager {
             broadcastPauseIfHost(AudioManager.getInstance().isPaused());
         }
 
-        Minecraft client = Minecraft.getInstance();
-        if (client != null && client.player != null) {
-            String passNotice = pass.isEmpty() ? "" : " §7[Password: §f" + pass + "§7]";
-            client.player.sendSystemMessage(Component.literal("§a[Pulse] Created room '§f" + this.roomName + "§a'! Room Code: §e§l" + this.roomCode + passNotice + " §7(Share this code with friends to listen together)"));
-        }
+        String passNotice = pass.isEmpty() ? "" : " §7[Password: §f" + pass + "§7]";
+        sendPlayerMessage("§a[Pulse] Created room '§f" + this.roomName + "§a'! Room Code: §e§l" + this.roomCode + passNotice + " §7(Share this code with friends to listen together)");
     }
 
     public synchronized boolean joinRoom(String codeOrName, String password) {
@@ -648,10 +643,7 @@ public class PartyManager {
             } catch (Throwable ignored) {}
         });
 
-        Minecraft client = Minecraft.getInstance();
-        if (client != null && client.player != null) {
-            client.player.sendSystemMessage(Component.literal("§a[Pulse] ⚡ Connected to room §e#" + trimmed + "§a! Listening together ~ 🎵"));
-        }
+        sendPlayerMessage("§a[Pulse] ⚡ Connected to room §e#" + trimmed + "§a! Listening together ~ 🎵");
         return true;
     }
 
@@ -665,16 +657,11 @@ public class PartyManager {
 
     public synchronized void disbandRoom() {
         if (!isInRoom()) return;
-        Minecraft client = Minecraft.getInstance();
         if (!isHost) {
-            if (client != null && client.player != null) {
-                client.player.sendSystemMessage(Component.literal("§c[Pulse] Only the room host can disband this room."));
-            }
+            sendPlayerMessage("§c[Pulse] Only the room host can disband this room.");
             return;
         }
-        if (client != null && client.player != null) {
-            client.player.sendSystemMessage(Component.literal("§c[Pulse] Room '" + roomName + "' has been disbanded."));
-        }
+        sendPlayerMessage("§c[Pulse] Room '" + roomName + "' has been disbanded.");
         leaveRoomInternal(false);
     }
 
@@ -708,10 +695,7 @@ public class PartyManager {
         this.memberLastSeen.clear();
 
         if (notifyUser) {
-            Minecraft client = Minecraft.getInstance();
-            if (client != null && client.player != null) {
-                client.player.sendSystemMessage(Component.literal("§7[Pulse] Left room."));
-            }
+            sendPlayerMessage("§7[Pulse] Left room.");
         }
     }
 
@@ -720,16 +704,13 @@ public class PartyManager {
     // ------------------------------------------------------------------------
 
     public void invitePlayer(String targetPlayer) {
-        Minecraft client = Minecraft.getInstance();
-        if (client == null || client.player == null) return;
-
         if (!isInRoom()) {
-            client.player.sendSystemMessage(Component.literal("§c[Pulse] You are not in a room right now."));
+            sendPlayerMessage("§c[Pulse] You are not in a room right now.");
             return;
         }
 
         if (!isHost) {
-            client.player.sendSystemMessage(Component.literal("§c[Pulse] Only the room host can invite players!"));
+            sendPlayerMessage("§c[Pulse] Only the room host can invite players!");
             return;
         }
 
@@ -757,7 +738,7 @@ public class PartyManager {
 
         sendNtfyMessage("pulse_invite_" + target.toLowerCase(), invite);
 
-        client.player.sendSystemMessage(Component.literal("§a[Pulse] Sent private room invite to §f" + target + "§a!"));
+        sendPlayerMessage("§a[Pulse] Sent private room invite to §f" + target + "§a!");
     }
 
     // ------------------------------------------------------------------------
@@ -978,7 +959,12 @@ public class PartyManager {
             arr.add(m);
         }
         sync.add("members", arr);
-        sendNtfyMessage("pulse_room_" + sanitizeTopic(roomName), sync);
+        if (roomCode != null && !roomCode.isEmpty()) {
+            sendNtfyMessage("pulse_room_" + roomCode.toLowerCase(), sync);
+        }
+        if (roomName != null && !roomName.isEmpty()) {
+            sendNtfyMessage("pulse_room_" + sanitizeTopic(roomName), sync);
+        }
     }
 
     private void handleRoomPayload(String rawJson) {
@@ -989,10 +975,7 @@ public class PartyManager {
             String myName = getPlayerName();
 
             if ("disband".equals(type)) {
-                Minecraft client = Minecraft.getInstance();
-                if (client != null && client.player != null) {
-                    client.player.sendSystemMessage(Component.literal("§c[Pulse] The room was disbanded because the host left."));
-                }
+                sendPlayerMessage("§c[Pulse] The room was disbanded because the host left.");
                 leaveRoomInternal(false);
                 return;
             }
@@ -1000,10 +983,7 @@ public class PartyManager {
             if ("password_error".equals(type)) {
                 String target = obj.has("target") ? obj.get("target").getAsString() : "";
                 if (target.equalsIgnoreCase(myName)) {
-                    Minecraft client = Minecraft.getInstance();
-                    if (client != null && client.player != null) {
-                        client.player.sendSystemMessage(Component.literal("§c[Pulse] ✖ Incorrect password for room #" + (roomCode != null ? roomCode : "") + "!"));
-                    }
+                    sendPlayerMessage("§c[Pulse] ✖ Incorrect password for room #" + (roomCode != null ? roomCode : "") + "!");
                     leaveRoomInternal(false);
                     return;
                 }
@@ -1048,17 +1028,15 @@ public class PartyManager {
 
                     if (isHost) {
                         if (newlyAdded || "join".equals(type)) {
-                            Minecraft client = Minecraft.getInstance();
-                            if (client != null && client.player != null) {
-                                client.player.sendSystemMessage(Component.literal("§a[Pulse] 👥 §f" + sender + " §ajoined your room! 🎶"));
-                            }
+                            sendPlayerMessage("§a[Pulse] 👥 §f" + sender + " §ajoined your room! 🎶");
                             AudioTrack current = AudioManager.getInstance().getCurrentTrack();
                             if (current != null) {
                                 broadcastTrackIfHost(current);
                             }
                             broadcastPauseIfHost(AudioManager.getInstance().isPaused());
-                            broadcastRoomPresence();
+                            publishHostRoomState();
                             broadcastMembersSync();
+                            broadcastRoomPresence();
                         }
                     }
                 }
@@ -1067,7 +1045,10 @@ public class PartyManager {
 
             if ("host_heartbeat".equals(type) && !isHost) {
                 if (obj.has("host")) {
-                    currentHost = obj.get("host").getAsString();
+                    String h = obj.get("host").getAsString();
+                    if (h != null && !h.isBlank() && !h.equalsIgnoreCase("Host")) {
+                        currentHost = h;
+                    }
                 }
                 if (obj.has("room")) {
                     this.roomName = obj.get("room").getAsString();
@@ -1129,17 +1110,25 @@ public class PartyManager {
 
             if ("members_sync".equals(type) && !isHost) {
                 if (obj.has("host")) {
-                    currentHost = obj.get("host").getAsString();
+                    String h = obj.get("host").getAsString();
+                    if (h != null && !h.isBlank() && !h.equalsIgnoreCase("Host")) {
+                        currentHost = h;
+                    }
                 }
                 if (obj.has("members")) {
                     com.google.gson.JsonArray arr = obj.getAsJsonArray("members");
                     synchronized (this) {
                         members.clear();
                         for (com.google.gson.JsonElement e : arr) {
-                            members.add(e.getAsString());
+                            String mStr = e.getAsString();
+                            if (mStr != null && !mStr.isBlank()) {
+                                members.add(mStr);
+                            }
                         }
-                        members.add(myName);
-                        if (currentHost != null) members.add(currentHost);
+                        if (myName != null) members.add(myName);
+                        if (currentHost != null && !currentHost.equalsIgnoreCase("Host")) {
+                            members.add(currentHost);
+                        }
                     }
                 }
                 return;
@@ -1151,6 +1140,7 @@ public class PartyManager {
                     broadcastTrackIfHost(current);
                 }
                 broadcastPauseIfHost(AudioManager.getInstance().isPaused());
+                publishHostRoomState();
                 broadcastMembersSync();
                 broadcastRoomPresence();
                 return;
@@ -1676,25 +1666,28 @@ public class PartyManager {
         List<String> list = new ArrayList<>();
         String myName = getPlayerName();
         String host = getCurrentHost();
+        if (host == null || host.isBlank()) host = "Host";
 
-        // Host first
+        // 1. Host first with player name and host tag
         if (isHost || myName.equalsIgnoreCase(host)) {
-            list.add(myName + " (Host, You)");
+            list.add(myName + " §e[Host] §7(You)");
         } else {
-            list.add(host + " (Host)");
+            list.add(host + " §e[Host]");
         }
 
-        // Other active members without duplicate host entry
-        for (String m : members) {
-            String clean = m.replaceAll("\\s*\\((Host|You|,\\s*)*\\)", "").trim();
-            if (clean.isEmpty() || clean.equalsIgnoreCase(host) || clean.equalsIgnoreCase("Host")) continue;
+        // 2. Members inside the room
+        synchronized (members) {
+            for (String m : members) {
+                String clean = m.replaceAll("\\s*\\(.*?\\)", "").replaceAll("§.", "").trim();
+                if (clean.isEmpty() || clean.equalsIgnoreCase(host) || clean.equalsIgnoreCase("Host")) continue;
 
-            if (clean.equalsIgnoreCase(myName)) {
-                if (!isHost) {
-                    list.add(clean + " (You)");
+                if (clean.equalsIgnoreCase(myName)) {
+                    if (!isHost) {
+                        list.add(clean + " §a[Member] §7(You)");
+                    }
+                } else {
+                    list.add(clean + " §a[Member]");
                 }
-            } else {
-                list.add(clean);
             }
         }
         return list;

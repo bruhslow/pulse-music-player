@@ -65,12 +65,16 @@ public class SimpleVoiceChatBridge {
 
     public void notifyModeEnabled() {
         Minecraft mc = Minecraft.getInstance();
-        if (mc != null && mc.player != null) {
-            if (isVoiceChatModPresent()) {
-                mc.player.sendSystemMessage(Component.literal("§6[Pulse] 🎤 Simple Voice Chat microphone output selected! Music will stream directly through your in-game mic to nearby players."));
-            } else {
-                mc.player.sendSystemMessage(Component.literal("§e[Pulse] 🎤 Voice Chat mode active! Note: Simple Voice Chat mod or VB-Audio Cable was not found. Install Simple Voice Chat or a virtual mic to broadcast to friends in-game."));
-            }
+        if (mc != null) {
+            mc.execute(() -> {
+                if (mc.player != null) {
+                    if (isVoiceChatModPresent()) {
+                        mc.player.sendSystemMessage(Component.literal("§6[Pulse] 🎤 Simple Voice Chat microphone output selected! Music will stream directly through your in-game mic to nearby players."));
+                    } else {
+                        mc.player.sendSystemMessage(Component.literal("§e[Pulse] 🎤 Voice Chat mode active! Note: Simple Voice Chat mod or VB-Audio Cable was not found. Install Simple Voice Chat or a virtual mic to broadcast to friends in-game."));
+                    }
+                }
+            });
         }
     }
 

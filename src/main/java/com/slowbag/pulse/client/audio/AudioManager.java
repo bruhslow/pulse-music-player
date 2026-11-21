@@ -107,8 +107,12 @@ public class AudioManager {
         PartyManager pm = PartyManager.getInstance();
         if (pm.isInRoom() && !pm.isHost()) {
             net.minecraft.client.Minecraft client = net.minecraft.client.Minecraft.getInstance();
-            if (client != null && client.player != null) {
-                client.player.sendSystemMessage(net.minecraft.network.chat.Component.literal("§e[Pulse] You are in " + pm.getCurrentHost() + "'s room! Only the host controls playback. You can add songs to Queue ~ 🎵"));
+            if (client != null) {
+                client.execute(() -> {
+                    if (client.player != null) {
+                        client.player.sendSystemMessage(net.minecraft.network.chat.Component.literal("§e[Pulse] You are in " + pm.getCurrentHost() + "'s room! Only the host controls playback. You can add songs to Queue ~ 🎵"));
+                    }
+                });
             }
             return false;
         }
