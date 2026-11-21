@@ -58,6 +58,17 @@ public class MusicSearchService {
             String cleanQuery = query.trim();
             String lowerQuery = cleanQuery.toLowerCase(Locale.ROOT);
 
+            // 0. Direct URL or YouTube Playlist/Video pasted in search bar: resolve directly
+            if (cleanQuery.startsWith("http://") || cleanQuery.startsWith("https://") || YouTubeResolver.isYouTubeUrl(cleanQuery)) {
+                try {
+                    List<AudioTrack> directTracks = RecentUrlManager.parseUrlOrPlaylist(cleanQuery);
+                    if (!directTracks.isEmpty()) {
+                        callback.accept(directTracks);
+                        return;
+                    }
+                } catch (Throwable ignored) {}
+            }
+
             // 1. Search Local Files first (0ms instant match)
             try {
                 for (AudioTrack local : LocalMusicScanner.scanLocalTracks()) {
