@@ -108,7 +108,7 @@ public class AudioManager {
         if (pm.isInRoom() && !pm.isHost()) {
             net.minecraft.client.Minecraft client = net.minecraft.client.Minecraft.getInstance();
             if (client != null && client.player != null) {
-                client.player.sendSystemMessage(net.minecraft.network.chat.Component.literal("§c[Pulse] You are in " + pm.getCurrentHost() + "'s room! Only the host has control."));
+                client.player.sendSystemMessage(net.minecraft.network.chat.Component.literal("§e[Pulse] You are in " + pm.getCurrentHost() + "'s room! Only the host controls playback. You can add songs to Queue ~ 🎵"));
             }
             return false;
         }
@@ -801,32 +801,60 @@ public class AudioManager {
 
     public synchronized void enqueueTrack(AudioTrack track) {
         if (track == null) return;
-        if (!checkHostPermission("queue songs")) return;
+        PartyManager pm = PartyManager.getInstance();
+        if (pm.isInRoom() && !pm.isHost()) {
+            pm.addTrackToRoomQueue(track);
+            return;
+        }
         if (!isPlaying || currentTrack == null) {
             playTrack(track);
             return;
         }
-        upcomingQueue.add(track);
+        if (!upcomingQueue.contains(track)) {
+            upcomingQueue.add(track);
+        }
+        if (pm.isInRoom() && pm.isHost()) {
+            pm.publishHostRoomState();
+        }
+    }
+
+    public synchronized void addToQueue(AudioTrack track) {
+        enqueueTrack(track);
     }
 
     public synchronized void enqueueTrackNext(AudioTrack track) {
         if (track == null) return;
-        if (!checkHostPermission("queue songs")) return;
+        PartyManager pm = PartyManager.getInstance();
+        if (pm.isInRoom() && !pm.isHost()) {
+            pm.addTrackToRoomQueue(track);
+            return;
+        }
         if (!isPlaying || currentTrack == null) {
             playTrack(track);
             return;
         }
         upcomingQueue.add(0, track);
+        if (pm.isInRoom() && pm.isHost()) {
+            pm.publishHostRoomState();
+        }
     }
 
     public synchronized void enqueueTrackLast(AudioTrack track) {
+        enqueueTrack(track);
+    }
+
+    public synchronized void enqueueTrackDirect(AudioTrack track) {
         if (track == null) return;
-        if (!checkHostPermission("queue songs")) return;
-        if (!isPlaying || currentTrack == null) {
-            playTrack(track);
-            return;
+        if (!upcomingQueue.contains(track)) {
+            upcomingQueue.add(track);
         }
-        upcomingQueue.add(track);
+    }
+
+    public synchronized void syncGuestQueue(List<AudioTrack> queue) {
+        upcomingQueue.clear();
+        if (queue != null) {
+            upcomingQueue.addAll(queue);
+        }
     }
 
     public synchronized List<AudioTrack> getUpcomingQueue() {

@@ -1418,7 +1418,7 @@ public class MusicPlayerScreen extends Screen {
     private boolean notifyIfGuestInRoom() {
         if (partyManager.isInRoom() && !partyManager.isHost()) {
             playClickSound();
-            statusMessage = "§cYou are in " + partyManager.getCurrentHost() + "'s room! Only the host has control.";
+            statusMessage = "§eOnly host (" + partyManager.getCurrentHost() + ") controls playback! You can add songs to Queue ~ 🎵";
             statusMessageTime = System.currentTimeMillis();
             return true;
         }
@@ -1723,7 +1723,6 @@ public class MusicPlayerScreen extends Screen {
                     }
 
                     if (mx >= qBtnX - 3 && mx <= qBtnX + 23 && my >= itemY && my <= itemY + 22) {
-                        if (notifyIfGuestInRoom()) return true;
                         playClickSound();
                         audioManager.enqueueTrack(track);
                         int qPos = audioManager.getQueueSize();
@@ -1735,7 +1734,13 @@ public class MusicPlayerScreen extends Screen {
 
                     if ((mx >= playBtnX - 2 && mx <= playBtnX + 42 && my >= itemY && my <= itemY + 22) ||
                         (mx >= rx && mx <= heartBtnX - 4 && my >= itemY && my <= itemY + 22)) {
-                        if (notifyIfGuestInRoom()) return true;
+                        if (partyManager.isInRoom() && !partyManager.isHost()) {
+                            playClickSound();
+                            audioManager.enqueueTrack(track);
+                            statusMessage = "§a➕ Added to Room Queue: " + truncate(track.getTitle(), 18) + " ~ 🎵";
+                            statusMessageTime = System.currentTimeMillis();
+                            return true;
+                        }
                         playClickSound();
                         audioManager.playTrack(track);
                         statusMessage = "§a▶ Playing: " + truncate(track.getTitle(), 22) + " 💖";
@@ -1780,7 +1785,6 @@ public class MusicPlayerScreen extends Screen {
                     }
 
                     if (mx >= qBtnX - 3 && mx <= qBtnX + 23 && my >= itemY && my <= itemY + 22) {
-                        if (notifyIfGuestInRoom()) return true;
                         playClickSound();
                         audioManager.enqueueTrack(track);
                         int qPos = audioManager.getQueueSize();
@@ -1792,7 +1796,13 @@ public class MusicPlayerScreen extends Screen {
 
                     if ((mx >= playBtnX - 2 && mx <= playBtnX + 42 && my >= itemY && my <= itemY + 22) ||
                         (mx >= rx && mx <= heartBtnX - 4 && my >= itemY && my <= itemY + 22)) {
-                        if (notifyIfGuestInRoom()) return true;
+                        if (partyManager.isInRoom() && !partyManager.isHost()) {
+                            playClickSound();
+                            audioManager.enqueueTrack(track);
+                            statusMessage = "§a➕ Added to Room Queue: " + truncate(track.getTitle(), 18) + " ~ 🎵";
+                            statusMessageTime = System.currentTimeMillis();
+                            return true;
+                        }
                         playClickSound();
                         audioManager.playTrack(track);
                         statusMessage = "§a▶ Playing: " + truncate(track.getTitle(), 22) + " 💖";
@@ -1843,7 +1853,6 @@ public class MusicPlayerScreen extends Screen {
                     }
 
                     if (mx >= qBtnX - 3 && mx <= qBtnX + 23 && my >= itemY && my <= itemY + 22) {
-                        if (notifyIfGuestInRoom()) return true;
                         playClickSound();
                         audioManager.enqueueTrack(track);
                         int qPos = audioManager.getQueueSize();
@@ -1855,7 +1864,13 @@ public class MusicPlayerScreen extends Screen {
 
                     if ((mx >= playBtnX - 2 && mx <= playBtnX + 42 && my >= itemY && my <= itemY + 22) ||
                         (mx >= rx && mx <= heartBtnX - 4 && my >= itemY && my <= itemY + 22)) {
-                        if (notifyIfGuestInRoom()) return true;
+                        if (partyManager.isInRoom() && !partyManager.isHost()) {
+                            playClickSound();
+                            audioManager.enqueueTrack(track);
+                            statusMessage = "§a➕ Added to Room Queue: " + truncate(track.getTitle(), 18) + " ~ 🎵";
+                            statusMessageTime = System.currentTimeMillis();
+                            return true;
+                        }
                         playClickSound();
                         audioManager.playTrack(track);
                         statusMessage = "§a▶ Playing: " + truncate(track.getTitle(), 22) + " 💖";
@@ -1907,9 +1922,26 @@ public class MusicPlayerScreen extends Screen {
                 // "▶ Play" Button
                 int playBtnX = pasteBtnX + pasteBtnW + 4;
                 if (mx >= playBtnX && mx <= playBtnX + playBtnW && my >= inputY && my <= inputY + inputH) {
-                    if (notifyIfGuestInRoom()) return true;
                     playClickSound();
                     if (!customUrl.isBlank()) {
+                        if (partyManager.isInRoom() && !partyManager.isHost()) {
+                            statusMessage = "§e⚡ Resolving link to Room Queue... 💖";
+                            statusMessageTime = System.currentTimeMillis();
+                            String toQueue = customUrl.trim();
+                            RecentUrlManager.parseUrlOrPlaylistAsync(toQueue, tracks -> {
+                                if (!tracks.isEmpty()) {
+                                    for (AudioTrack t : tracks) {
+                                        audioManager.enqueueTrackLast(t);
+                                    }
+                                    statusMessage = "§a➕ Queued " + tracks.size() + " track(s) to Room Queue! 🎵";
+                                    statusMessageTime = System.currentTimeMillis();
+                                } else {
+                                    statusMessage = "§c✕ Could not resolve YouTube link or playlist.";
+                                    statusMessageTime = System.currentTimeMillis();
+                                }
+                            });
+                            return true;
+                        }
                         statusMessage = "§e⚡ Resolving YouTube link / playlist with love... 💖";
                         statusMessageTime = System.currentTimeMillis();
                         String toPlay = customUrl.trim();
@@ -1934,7 +1966,6 @@ public class MusicPlayerScreen extends Screen {
                 // "+Q" Queue Next Button
                 int qBtnX = playBtnX + playBtnW + 4;
                 if (mx >= qBtnX && mx <= qBtnX + qBtnW && my >= inputY && my <= inputY + inputH) {
-                    if (notifyIfGuestInRoom()) return true;
                     playClickSound();
                     if (!customUrl.isBlank()) {
                         statusMessage = "§e⚡ Resolving link / playlist to queue... 💖";
@@ -1971,7 +2002,6 @@ public class MusicPlayerScreen extends Screen {
 
                     // Row +Q Click
                     if (mx >= rowQX && mx <= rowQX + 22 && my >= recentY && my <= recentY + 18) {
-                        if (notifyIfGuestInRoom()) return true;
                         playClickSound();
                         String rUrl = recents.get(i);
                         statusMessage = "§e⚡ Queuing: " + truncate(rUrl, 20) + "...";
@@ -1990,9 +2020,22 @@ public class MusicPlayerScreen extends Screen {
 
                     // Row Play Click
                     if (mx >= rowPlayX && mx <= rowPlayX + 38 && my >= recentY && my <= recentY + 18) {
-                        if (notifyIfGuestInRoom()) return true;
                         playClickSound();
                         String rUrl = recents.get(i);
+                        if (partyManager.isInRoom() && !partyManager.isHost()) {
+                            statusMessage = "§e⚡ Resolving link to Room Queue... 💖";
+                            statusMessageTime = System.currentTimeMillis();
+                            RecentUrlManager.parseUrlOrPlaylistAsync(rUrl, tracks -> {
+                                if (!tracks.isEmpty()) {
+                                    for (AudioTrack t : tracks) {
+                                        audioManager.enqueueTrackLast(t);
+                                    }
+                                    statusMessage = "§a➕ Queued " + tracks.size() + " track(s) to Room Queue! 🎵";
+                                    statusMessageTime = System.currentTimeMillis();
+                                }
+                            });
+                            return true;
+                        }
                         statusMessage = "§e⚡ Loading: " + truncate(rUrl, 20) + "...";
                         statusMessageTime = System.currentTimeMillis();
                         RecentUrlManager.parseUrlOrPlaylistAsync(rUrl, tracks -> {
@@ -2531,6 +2574,24 @@ public class MusicPlayerScreen extends Screen {
             } else if (event.key() == GLFW.GLFW_KEY_ENTER || event.key() == GLFW.GLFW_KEY_KP_ENTER) {
                 if (!customUrl.isBlank()) {
                     playClickSound();
+                    if (partyManager.isInRoom() && !partyManager.isHost()) {
+                        statusMessage = "§e⚡ Resolving link to Room Queue... 💖";
+                        statusMessageTime = System.currentTimeMillis();
+                        String toQueue = customUrl.trim();
+                        RecentUrlManager.parseUrlOrPlaylistAsync(toQueue, tracks -> {
+                            if (!tracks.isEmpty()) {
+                                for (AudioTrack t : tracks) {
+                                    audioManager.enqueueTrackLast(t);
+                                }
+                                statusMessage = "§a➕ Queued " + tracks.size() + " track(s) to Room Queue! 🎵";
+                                statusMessageTime = System.currentTimeMillis();
+                            } else {
+                                statusMessage = "§c✕ Could not resolve YouTube link or playlist.";
+                                statusMessageTime = System.currentTimeMillis();
+                            }
+                        });
+                        return true;
+                    }
                     statusMessage = "§e⚡ Resolving YouTube link / playlist with love... 💖";
                     statusMessageTime = System.currentTimeMillis();
                     String toPlay = customUrl.trim();

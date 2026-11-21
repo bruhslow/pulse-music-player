@@ -530,7 +530,57 @@ public class PartyManager {
         }
         r.add("members", memArr);
 
+        // Serialize current upcoming queue to room
+        JsonArray qArr = new JsonArray();
+        for (AudioTrack qt : am.getUpcomingQueue()) {
+            JsonObject qObj = new JsonObject();
+            qObj.addProperty("title", qt.getTitle());
+            qObj.addProperty("artist", qt.getArtist());
+            qObj.addProperty("url", qt.getUrl());
+            qObj.addProperty("duration", qt.getDurationSeconds());
+            if (qt.getArtworkUrl() != null) qObj.addProperty("artworkUrl", qt.getArtworkUrl());
+            qArr.add(qObj);
+        }
+        r.add("queue", qArr);
+
         saveCloudRoom(roomCode, r);
+    }
+
+    public void addTrackToRoomQueue(AudioTrack track) {
+        if (!isInRoom() || track == null) return;
+        if (isHost) {
+            AudioManager.getInstance().enqueueTrackDirect(track);
+            publishHostRoomState();
+            return;
+        }
+
+        partyExecutor.submit(() -> {
+            try {
+                if (roomCode == null) return;
+                JsonObject rooms = fetchCloudRooms();
+                if (rooms.has(roomCode)) {
+                    JsonObject r = rooms.getAsJsonObject(roomCode);
+                    JsonArray qArr = r.has("queue") && r.get("queue").isJsonArray() ? r.getAsJsonArray("queue") : new JsonArray();
+
+                    JsonObject qObj = new JsonObject();
+                    qObj.addProperty("title", track.getTitle());
+                    qObj.addProperty("artist", track.getArtist());
+                    qObj.addProperty("url", track.getUrl());
+                    qObj.addProperty("duration", track.getDurationSeconds());
+                    if (track.getArtworkUrl() != null) qObj.addProperty("artworkUrl", track.getArtworkUrl());
+                    qObj.addProperty("addedBy", getPlayerName());
+                    qArr.add(qObj);
+
+                    r.add("queue", qArr);
+                    saveCloudRoom(roomCode, r);
+
+                    Minecraft client = Minecraft.getInstance();
+                    if (client.player != null) {
+                        client.player.sendSystemMessage(Component.literal("§a[Pulse] 🎵 Added '" + track.getTitle() + "' to the Room Queue!"));
+                    }
+                }
+            } catch (Throwable ignored) {}
+        });
     }
 
     private void syncFromRoomJson(JsonObject r) {
@@ -581,7 +631,7 @@ public class PartyManager {
 
                     publishHostRoomState();
 
-                    // Check for new members from cloud
+                    // Check for new members and queued tracks from cloud
                     if (roomCode != null) {
                         JsonObject rooms = fetchCloudRooms();
                         if (rooms.has(roomCode)) {
@@ -602,6 +652,50 @@ public class PartyManager {
                                             client.player.sendSystemMessage(Component.literal("§a[Pulse] 👥 §f" + mem + " §ajoined your room! 🎶"));
                                         }
                                     }
+                                }
+                            }
+
+                            // Host adopts tracks queued by members into upcomingQueue
+                            if (r.has("queue") && r.get("queue").isJsonArray()) {
+                                AudioManager hostAm = AudioManager.getInstance();
+                                JsonArray qArr = r.getAsJsonArray("queue");
+                                boolean hasNewQueueTrack = false;
+                                for (JsonElement qe : qArr) {
+                                    if (qe.isJsonObject()) {
+                                        JsonObject qo = qe.getAsJsonObject();
+                                        String qUrl = qo.has("url") ? qo.get("url").getAsString() : "";
+                                        String qTitle = qo.has("title") ? qo.get("title").getAsString() : "Track";
+                                        String qArtist = qo.has("artist") ? qo.get("artist").getAsString() : "Unknown";
+                                        long qDur = qo.has("duration") ? qo.get("duration").getAsLong() : -1;
+                                        String qArt = qo.has("artworkUrl") ? qo.get("artworkUrl").getAsString() : null;
+                                        String addedBy = qo.has("addedBy") ? qo.get("addedBy").getAsString() : "Member";
+
+                                        boolean exists = false;
+                                        for (AudioTrack existing : hostAm.getUpcomingQueue()) {
+                                            if (existing.getUrl().equals(qUrl)) {
+                                                exists = true;
+                                                break;
+                                            }
+                                        }
+                                        AudioTrack cur = hostAm.getCurrentTrack();
+                                        if (cur != null && cur.getUrl().equals(qUrl)) {
+                                            exists = true;
+                                        }
+
+                                        if (!exists && !qUrl.isEmpty()) {
+                                            AudioTrack qt = new AudioTrack(qTitle, qArtist, qUrl, false, qDur, "Room", qArt);
+                                            hostAm.enqueueTrackDirect(qt);
+                                            hasNewQueueTrack = true;
+
+                                            Minecraft client = Minecraft.getInstance();
+                                            if (client.player != null) {
+                                                client.player.sendSystemMessage(Component.literal("§a[Pulse] 📥 " + addedBy + " added '§f" + qTitle + "§a' to the Room Queue!"));
+                                            }
+                                        }
+                                    }
+                                }
+                                if (hasNewQueueTrack) {
+                                    publishHostRoomState();
                                 }
                             }
                         }
@@ -634,6 +728,27 @@ public class PartyManager {
                                 members.add(getPlayerName());
                             }
                         }
+
+                        // Guest syncs room queue to their local upcoming queue view
+                        if (r.has("queue") && r.get("queue").isJsonArray()) {
+                            JsonArray qArr = r.getAsJsonArray("queue");
+                            List<AudioTrack> guestQueue = new ArrayList<>();
+                            for (JsonElement qe : qArr) {
+                                if (qe.isJsonObject()) {
+                                    JsonObject qo = qe.getAsJsonObject();
+                                    String qUrl = qo.has("url") ? qo.get("url").getAsString() : "";
+                                    String qTitle = qo.has("title") ? qo.get("title").getAsString() : "Track";
+                                    String qArtist = qo.has("artist") ? qo.get("artist").getAsString() : "Unknown";
+                                    long qDur = qo.has("duration") ? qo.get("duration").getAsLong() : -1;
+                                    String qArt = qo.has("artworkUrl") ? qo.get("artworkUrl").getAsString() : null;
+                                    if (!qUrl.isEmpty()) {
+                                        guestQueue.add(new AudioTrack(qTitle, qArtist, qUrl, false, qDur, "Room", qArt));
+                                    }
+                                }
+                            }
+                            AudioManager.getInstance().syncGuestQueue(guestQueue);
+                        }
+
                         syncFromRoomJson(r);
                     } else {
                         // Room was disbanded by host
