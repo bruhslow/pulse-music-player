@@ -100,40 +100,32 @@ public class HudMoveScreen extends Screen {
 
         graphics.fill(previewX + 5, previewY + 1, previewX + hudW - 5, previewY + 2, 0x40FFFFFF);
 
-        // Left circle with moving animated wave line inside
-        int cx = previewX + 16;
+        // Left enlarged circle with moving animated wave line inside
+        int cx = previewX + 18;
         int cy = previewY + 16;
-        int circleRadius = 11;
+        int circleRadius = 13;
 
         // Dark circle interior & border ring
         HudOverlayRenderer.drawCircle(graphics, cx, cy, circleRadius, 0xFF141518);
+        HudOverlayRenderer.drawCircleRing(graphics, cx, cy, circleRadius - 3, 0x30FFFFFF);
         HudOverlayRenderer.drawCircleRing(graphics, cx, cy, circleRadius, borderCol);
 
         // Wave line preview
         double moveTime = System.currentTimeMillis() * 0.007;
-        for (int px = -8; px <= 8; px++) {
+        for (int px = -10; px <= 10; px++) {
             int curX = cx + px;
-            double normX = px / 8.0;
+            double normX = px / 10.0;
             double wave = Math.sin(normX * 4.2 + moveTime) * 0.7;
-            int curY = cy + (int) Math.round(wave * 3.5);
+            int curY = cy + (int) Math.round(wave * 4.0);
             graphics.fill(curX, curY - 1, curX + 1, curY, 0x60D97746);
             graphics.fill(curX, curY, curX + 1, curY + 1, 0xFFFFF0D0);
             graphics.fill(curX, curY + 1, curX + 1, curY + 2, 0x60D97746);
         }
         graphics.fill(cx - 1, cy - 1, cx + 2, cy + 2, 0xFFFFFFFF);
 
-        // Info Text
-        graphics.text(this.font, Component.literal("§f§l" + truncate(title, 20)), previewX + 32, previewY + 5, 0xFFFFFFFF, false);
-        graphics.text(this.font, Component.literal("§7" + truncate(artist, 22)), previewX + 32, previewY + 17, 0xFFA0988E, false);
-
-        // Mini dancing visualizer bars on right
-        int visX = previewX + hudW - 34;
-        int barBaseY = previewY + hudH - 7;
-        for (int i = 0; i < 6; i++) {
-            int bh = 4 + (i * 3 % 11);
-            graphics.fill(visX + (i * 5), barBaseY - bh, visX + (i * 5) + 3, barBaseY, 0xFFD97746);
-            graphics.fill(visX + (i * 5), barBaseY - bh, visX + (i * 5) + 3, barBaseY - bh + 1, 0xFFFFF0D0);
-        }
+        // Info Text (Full width across the pill without bars)
+        graphics.text(this.font, Component.literal("§f§l" + truncate(title, 26)), previewX + 38, previewY + 5, 0xFFFFFFFF, false);
+        graphics.text(this.font, Component.literal("§7" + truncate(artist + " • 2:45", 28)), previewX + 38, previewY + 17, 0xFFA0988E, false);
 
         // Bottom Controls: Snap Presets & Save Done
         int bottomY = this.height - 32;

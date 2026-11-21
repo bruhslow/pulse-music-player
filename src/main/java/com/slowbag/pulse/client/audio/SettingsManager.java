@@ -22,6 +22,7 @@ public class SettingsManager {
     private static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
     private static final SettingsManager INSTANCE = new SettingsManager();
 
+    public static final String VOICE_CHAT_DEVICE = "Simple Voice Chat (Mic)";
     private String outputDevice = "Default";
     private int preloadSeconds = 5;
     private boolean monoAudio = false;
@@ -46,14 +47,23 @@ public class SettingsManager {
         return outputDevice != null ? outputDevice : "Default";
     }
 
+    public synchronized boolean isVoiceChatOutput() {
+        if (!loaded) load();
+        return VOICE_CHAT_DEVICE.equalsIgnoreCase(outputDevice);
+    }
+
     public synchronized void setOutputDevice(String device) {
         this.outputDevice = (device != null && !device.isBlank()) ? device : "Default";
         save();
+        if (isVoiceChatOutput()) {
+            SimpleVoiceChatBridge.getInstance().notifyModeEnabled();
+        }
     }
 
     public synchronized List<String> getAvailableOutputDevices() {
         List<String> list = new ArrayList<>();
         list.add("Default");
+        list.add(VOICE_CHAT_DEVICE);
         Line.Info lineInfo = new Line.Info(SourceDataLine.class);
         for (Mixer.Info info : AudioSystem.getMixerInfo()) {
             try {
@@ -209,6 +219,9 @@ public class SettingsManager {
     public static SourceDataLine openLineForDevice(DataLine.Info info) throws LineUnavailableException {
         String device = getInstance().getOutputDevice();
         if (device != null && !device.equalsIgnoreCase("Default") && !device.isBlank()) {
+            if (device.equalsIgnoreCase(VOICE_CHAT_DEVICE)) {
+                return (SourceDataLine) AudioSystem.getLine(info);
+            }
             for (Mixer.Info mInfo : AudioSystem.getMixerInfo()) {
                 if (mInfo.getName().equalsIgnoreCase(device)) {
                     try {

@@ -1,12 +1,16 @@
 package com.slowbag.pulse.client.gui;
 
 import com.mojang.blaze3d.platform.NativeImage;
+import com.mojang.blaze3d.systems.RenderSystem;
+import com.mojang.blaze3d.textures.FilterMode;
 import com.slowbag.pulse.MusicPlayerMod;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.texture.DynamicTexture;
 import net.minecraft.resources.Identifier;
 
 import javax.imageio.ImageIO;
+import java.awt.Color;
+import java.awt.Font;
 import java.awt.Graphics2D;
 import java.awt.RenderingHints;
 import java.awt.geom.Ellipse2D;
@@ -20,6 +24,7 @@ import java.net.URI;
 import java.net.URL;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.function.Supplier;
 
 public class AlbumArtManager {
 
@@ -36,11 +41,22 @@ public class AlbumArtManager {
 
     private final Identifier albumArtId = Identifier.fromNamespaceAndPath(MusicPlayerMod.MOD_ID, "current_album_art");
     private final Identifier circleAlbumArtId = Identifier.fromNamespaceAndPath(MusicPlayerMod.MOD_ID, "current_album_art_circle");
+    private final Identifier defaultAlbumArtId = Identifier.fromNamespaceAndPath(MusicPlayerMod.MOD_ID, "default_album_art");
 
     private DynamicTexture currentSquareTexture = null;
     private DynamicTexture currentCircleTexture = null;
+    private DynamicTexture defaultTexture = null;
     private String currentUrl = null;
     private boolean isTextureReady = false;
+
+    public static class SmoothDynamicTexture extends DynamicTexture {
+        public SmoothDynamicTexture(Supplier<String> label, NativeImage image) {
+            super(label, image);
+            try {
+                this.sampler = RenderSystem.getSamplerCache().getClampToEdge(FilterMode.LINEAR);
+            } catch (Throwable ignored) {}
+        }
+    }
 
     private AlbumArtManager() {}
 
@@ -78,22 +94,22 @@ public class AlbumArtManager {
                         int cropY = (h - sqSize) / 2;
                         BufferedImage squareSrc = raw.getSubimage(cropX, cropY, sqSize, sqSize);
 
-                        int targetSize = 128;
+                        int targetSize = 256;
 
-                        // 1. Square image with smooth rounded corners matching concept UI
+                        // 1. Square image with smooth rounded corners and high-res bicubic interpolation
                         BufferedImage squareImg = new BufferedImage(targetSize, targetSize, BufferedImage.TYPE_INT_ARGB);
                         Graphics2D gSquare = squareImg.createGraphics();
-                        gSquare.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_BILINEAR);
+                        gSquare.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_BICUBIC);
                         gSquare.setRenderingHint(RenderingHints.KEY_RENDERING, RenderingHints.VALUE_RENDER_QUALITY);
                         gSquare.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
-                        gSquare.setClip(new RoundRectangle2D.Float(0, 0, targetSize, targetSize, 18, 18));
+                        gSquare.setClip(new RoundRectangle2D.Float(0, 0, targetSize, targetSize, 28, 28));
                         gSquare.drawImage(squareSrc, 0, 0, targetSize, targetSize, null);
                         gSquare.dispose();
 
-                        // 2. Circular masked image for outside HUD overlay
+                        // 2. Circular masked image for outside HUD overlay with smooth edges
                         BufferedImage circleImg = new BufferedImage(targetSize, targetSize, BufferedImage.TYPE_INT_ARGB);
                         Graphics2D gCircle = circleImg.createGraphics();
-                        gCircle.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_BILINEAR);
+                        gCircle.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_BICUBIC);
                         gCircle.setRenderingHint(RenderingHints.KEY_RENDERING, RenderingHints.VALUE_RENDER_QUALITY);
                         gCircle.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
                         gCircle.setClip(new Ellipse2D.Float(1, 1, targetSize - 2, targetSize - 2));
@@ -134,8 +150,9 @@ public class AlbumArtManager {
                         if (currentCircleTexture != null) {
                             currentCircleTexture.close();
                         }
-                        currentSquareTexture = new DynamicTexture(() -> "album_art_square", finalSquare);
-                        currentCircleTexture = new DynamicTexture(() -> "album_art_circle", finalCircle);
+                        // Use SmoothDynamicTexture for hardware linear antialiasing
+                        currentSquareTexture = new SmoothDynamicTexture(() -> "album_art_square", finalSquare);
+                        currentCircleTexture = new SmoothDynamicTexture(() -> "album_art_circle", finalCircle);
 
                         Minecraft.getInstance().getTextureManager().register(albumArtId, currentSquareTexture);
                         Minecraft.getInstance().getTextureManager().register(circleAlbumArtId, currentCircleTexture);
@@ -211,6 +228,64 @@ public class AlbumArtManager {
 
     public synchronized Identifier getCircleAlbumArtId() {
         return isTextureReady ? circleAlbumArtId : null;
+    }
+
+    public synchronized Identifier getDefaultAlbumArtId() {
+        if (defaultTexture == null) {
+            initDefaultArtwork();
+        }
+        return defaultAlbumArtId;
+    }
+
+    private void initDefaultArtwork() {
+        try {
+            int sz = 256;
+            BufferedImage img = new BufferedImage(sz, sz, BufferedImage.TYPE_INT_ARGB);
+            Graphics2D g = img.createGraphics();
+            g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+            g.setRenderingHint(RenderingHints.KEY_RENDERING, RenderingHints.VALUE_RENDER_QUALITY);
+
+            // Sleek dark vinyl background
+            g.setColor(new Color(0x18, 0x16, 0x14, 0xFF));
+            g.fillRoundRect(0, 0, sz, sz, 32, 32);
+
+            // Vinyl outer rim
+            g.setColor(new Color(0x28, 0x24, 0x20, 0xFF));
+            g.fillOval(12, 12, sz - 24, sz - 24);
+
+            // Concentric vinyl grooves
+            for (int r = 24; r < sz / 2 - 20; r += 12) {
+                g.setColor(new Color(0x35, 0x30, 0x2A, 0x60));
+                g.drawOval(sz / 2 - r, sz / 2 - r, r * 2, r * 2);
+            }
+
+            // Warm golden center label
+            int labelR = 48;
+            g.setColor(new Color(0xD9, 0x77, 0x46, 0xFF));
+            g.fillOval(sz / 2 - labelR, sz / 2 - labelR, labelR * 2, labelR * 2);
+
+            // Outer ring on label
+            g.setColor(new Color(0xFF, 0xA8, 0x60, 0xAA));
+            g.drawOval(sz / 2 - labelR, sz / 2 - labelR, labelR * 2, labelR * 2);
+
+            // Center spindle hole
+            int holeR = 12;
+            g.setColor(new Color(0x14, 0x13, 0x12, 0xFF));
+            g.fillOval(sz / 2 - holeR, sz / 2 - holeR, holeR * 2, holeR * 2);
+
+            g.dispose();
+
+            ByteArrayOutputStream baos = new ByteArrayOutputStream();
+            ImageIO.write(img, "PNG", baos);
+            NativeImage nativeDefault = NativeImage.read(new ByteArrayInputStream(baos.toByteArray()));
+
+            Minecraft.getInstance().execute(() -> {
+                defaultTexture = new SmoothDynamicTexture(() -> "default_album_art", nativeDefault);
+                Minecraft.getInstance().getTextureManager().register(defaultAlbumArtId, defaultTexture);
+            });
+        } catch (Throwable t) {
+            MusicPlayerMod.LOGGER.debug("[Music Player] Default artwork generation failed: " + t.getMessage());
+        }
     }
 
     public synchronized String getCurrentUrl() {

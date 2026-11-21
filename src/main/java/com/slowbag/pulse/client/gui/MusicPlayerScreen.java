@@ -385,12 +385,7 @@ public class MusicPlayerScreen extends Screen {
             graphics.blit(artId, artX + 1, artY + 1, artSize - 2, artSize - 2, 0.0f, 0.0f, 1.0f, 1.0f);
         } else {
             drawSoftBox(graphics, artX, artY, artSize, artSize, 4, 0xFF1C1A18, 0x40FFFFFF);
-            drawSoftBox(graphics, artX + 6, artY + 6, artSize - 12, artSize - 12, 3, 0, 0x25FFFFFF);
-
-            float peak = audioManager.getPeakLevel();
-            int centerColor = isBuffering ? 0xFFFFCC00 : (isPlaying ? AnimationUtil.colorLerp(0xFFD97746, 0xFFFFFFFF, peak) : 0xFF3D3630);
-            drawSoftBox(graphics, artX + 16, artY + 16, 12, 12, 2, centerColor, 0);
-            drawSoftBox(graphics, artX + 20, artY + 20, 4, 4, 1, 0xFF141312, 0);
+            graphics.blit(AlbumArtManager.getInstance().getDefaultAlbumArtId(), artX + 1, artY + 1, artSize - 2, artSize - 2, 0.0f, 0.0f, 1.0f, 1.0f);
         }
 
         // 2. Track Info & Source
@@ -868,8 +863,11 @@ public class MusicPlayerScreen extends Screen {
                     int btnH = 18;
 
                     int maxDescW = prevBtnX - (x + 14) - 6;
-                    graphics.text(this.font, Component.literal(truncateToWidth("§f🔊 Primary Audio Output:", maxDescW)), x + 14, itemY + 4, 0xFFFFFFFF, false);
-                    graphics.text(this.font, Component.literal(truncateToWidth("§8Route sound to speakers or headphones", maxDescW)), x + 14, itemY + 17, 0xFF888888, false);
+                    boolean isVoiceChat = curDev.equalsIgnoreCase(com.slowbag.pulse.client.audio.SettingsManager.VOICE_CHAT_DEVICE);
+                    String header = isVoiceChat ? "§f🎤 Voice Chat Microphone:" : "§f🔊 Primary Audio Output:";
+                    String sub = isVoiceChat ? "§6Direct in-game mic broadcast to nearby players" : "§8Route sound to speakers or headphones";
+                    graphics.text(this.font, Component.literal(truncateToWidth(header, maxDescW)), x + 14, itemY + 4, 0xFFFFFFFF, false);
+                    graphics.text(this.font, Component.literal(truncateToWidth(sub, maxDescW)), x + 14, itemY + 17, isVoiceChat ? 0xFFFFAA44 : 0xFF888888, false);
 
                     // Prev ◀
                     boolean prevHov = mouseX >= prevBtnX && mouseX <= prevBtnX + arrowBtnW && mouseY >= btnY && mouseY <= btnY + btnH;
@@ -1081,8 +1079,10 @@ public class MusicPlayerScreen extends Screen {
         drawSoftBox(graphics, thumbX, thumbY, 16, 16, 3, isCurrent ? 0xFF181614 : 0xFF1C1A18, isCurrent ? 0xFFD97746 : 0x35FFFFFF);
         if (isCurrent && AlbumArtManager.getInstance().getAlbumArtId() != null) {
             graphics.blit(AlbumArtManager.getInstance().getAlbumArtId(), thumbX + 1, thumbY + 1, 14, 14, 0.0f, 0.0f, 1.0f, 1.0f);
+        } else if (isCurrent) {
+            graphics.blit(AlbumArtManager.getInstance().getDefaultAlbumArtId(), thumbX + 1, thumbY + 1, 14, 14, 0.0f, 0.0f, 1.0f, 1.0f);
         } else {
-            graphics.text(this.font, Component.literal(isCurrent ? "§6♫" : "§7♫"), thumbX + 4, thumbY + 4, isCurrent ? 0xFFFFB366 : 0xFFA0988E, false);
+            graphics.text(this.font, Component.literal("§7♫"), thumbX + 4, thumbY + 4, 0xFFA0988E, false);
         }
 
         // Title and Subtitle: Razor-sharp clean rendering without drop shadows or blurry double layers

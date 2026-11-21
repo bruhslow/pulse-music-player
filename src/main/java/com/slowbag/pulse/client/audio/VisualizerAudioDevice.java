@@ -14,6 +14,7 @@ public class VisualizerAudioDevice extends AudioDeviceBase {
 
     private SourceDataLine line = null;
     private byte[] byteBuf = new byte[16384];
+    private volatile AudioFormat currentDirectFormat = null;
 
     private volatile float volume = 0.75f;
     private volatile boolean muted = false;
@@ -76,6 +77,7 @@ public class VisualizerAudioDevice extends AudioDeviceBase {
 
     public synchronized void openDirect(AudioFormat format) {
         closeImpl();
+        this.currentDirectFormat = format;
         try {
             prebuffering = true;
             prebufferBytes = 0;
@@ -165,6 +167,13 @@ public class VisualizerAudioDevice extends AudioDeviceBase {
 
         // 1. Analyze 16-band energy & peak for visualizer and HUD beat-reactivity
         calculateVisualizerEnergy(buffer, offset, length);
+
+        // Forward to Simple Voice Chat microphone streamer if enabled
+        if (SettingsManager.getInstance().isVoiceChatOutput()) {
+            int rate = currentDirectFormat != null ? (int) currentDirectFormat.getSampleRate() : 44100;
+            int ch = currentDirectFormat != null ? currentDirectFormat.getChannels() : 2;
+            SimpleVoiceChatBridge.getInstance().injectAudio(buffer, offset, length, rate, ch);
+        }
 
         if (line == null || !line.isOpen()) return;
 
@@ -364,6 +373,14 @@ public class VisualizerAudioDevice extends AudioDeviceBase {
     @Override
     protected void writeImpl(short[] samples, int offs, int len) throws JavaLayerException {
         if (len <= 0) return;
+
+        // Forward to Simple Voice Chat microphone streamer if enabled
+        if (SettingsManager.getInstance().isVoiceChatOutput()) {
+            Decoder dec = getDecoder();
+            int rate = (dec != null && dec.getOutputFrequency() > 0) ? dec.getOutputFrequency() : 44100;
+            int ch = (dec != null && dec.getOutputChannels() > 0) ? dec.getOutputChannels() : 2;
+            SimpleVoiceChatBridge.getInstance().injectAudio(samples, offs, len, rate, ch);
+        }
 
         ensureLineOpen();
         if (line == null || !line.isOpen()) return;

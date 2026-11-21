@@ -129,12 +129,12 @@ public class HudOverlayRenderer {
         }
 
         // 2. Circle on the Left with Animated Audio Wave Line Inside
-        int cx = posX + 16;
+        int cx = posX + 18;
         int cy = posY + 16;
-        int circleRadius = 11;
+        int circleRadius = 13;
 
-        // Bass pulse aura glow around the circle
-        int pulseRadius = circleRadius + (int) (smoothPeak * 2.5f);
+        // Bass pulse aura glow around the enlarged circle
+        int pulseRadius = circleRadius + (int) (smoothPeak * 2.0f);
         int glowColor = ((int) (alpha * (0.22f + smoothPeak * 0.40f)) << 24) | (borderR << 16) | (borderG << 8) | borderB;
         drawCircle(graphics, cx, cy, pulseRadius + 1, glowColor);
 
@@ -142,15 +142,18 @@ public class HudOverlayRenderer {
         int discColor = (alpha << 24) | 0x141518;
         drawCircle(graphics, cx, cy, circleRadius, discColor);
 
+        // Subtle concentric groove accent inside circle
+        drawCircleRing(graphics, cx, cy, circleRadius - 3, ((int) (alpha * 0.20f) << 24) | 0x40FFFFFF);
+
         // Circular ring border
         drawCircleRing(graphics, cx, cy, circleRadius, borderColor);
 
         // Moving animated audio line inside the circle
         double timeMs = System.currentTimeMillis();
         double wavePhase = timeMs * 0.007;
-        float amp = (isPlaying && !audio.isPaused()) ? (1.5f + smoothPeak * 4.5f) : 0.0f;
+        float amp = (isPlaying && !audio.isPaused()) ? (2.0f + smoothPeak * 5.0f) : 0.0f;
         int waveLineColor = (alpha << 24) | 0xFFFFF0D0;
-        int waveGlowColor = ((int) (alpha * 0.40f) << 24) | (borderR << 16) | (borderG << 8) | borderB;
+        int waveGlowColor = ((int) (alpha * 0.45f) << 24) | (borderR << 16) | (borderG << 8) | borderB;
 
         int prevX = cx - circleRadius + 2;
         int prevY = cy;
@@ -186,15 +189,14 @@ public class HudOverlayRenderer {
             graphics.fill(cx - 1, cy - 1, cx + 2, cy + 2, (alpha << 24) | 0xFFFFFFFF);
         } else if (audio.isPaused()) {
             // Little pause pause glyph in center
-            graphics.fill(cx - 2, cy - 2, cx - 1, cy + 3, (alpha << 24) | 0xFFD97746);
-            graphics.fill(cx + 1, cy - 2, cx + 2, cy + 3, (alpha << 24) | 0xFFD97746);
+            graphics.fill(cx - 2, cy - 3, cx - 1, cy + 4, (alpha << 24) | 0xFFD97746);
+            graphics.fill(cx + 1, cy - 3, cx + 2, cy + 4, (alpha << 24) | 0xFFD97746);
         }
 
-        // 3. Middle Text: Song Info
+        // 3. Middle Text: Song Info (Expands smoothly across entire pill width without bars crowding)
         Font font = client.font;
-        int textX = cx + circleRadius + 7;
-        int visW = 34; // width reserved for 6 dancing visualizer bars on the right
-        int availTextW = (posX + hudW - visW - 4) - textX;
+        int textX = cx + circleRadius + 8;
+        int availTextW = (posX + hudW - 10) - textX;
 
         if (availTextW > 20) {
             if (compactProgress < 0.6f) {
@@ -214,44 +216,6 @@ public class HudOverlayRenderer {
                 String safeText = truncateText(font, compactLabel, availTextW);
                 graphics.text(font, Component.literal("§f" + safeText), textX, posY + 12, (alpha << 24) | 0xFFFFFF, false);
             }
-        }
-
-        // 4. Right: Dynamic 6-Bar Dancing Equalizer (Fluid moving wave animation)
-        int visX = posX + hudW - visW - 2;
-        int maxBarH = 16;
-        int barBaseY = posY + hudH - 7;
-        float[] rawBands = audio.getVisualizerBands();
-        double t = timeMs / 1000.0;
-
-        for (int i = 0; i < 6; i++) {
-            float audioEnergy = (rawBands != null && (i * 2) < rawBands.length) ? rawBands[i * 2] : 0.0f;
-            audioEnergy = Math.max(0.0f, Math.min(1.0f, audioEnergy));
-
-            // Fluid sinusoidal multi-frequency wave motion so each bar has a distinct moving phase
-            double w1 = Math.sin(t * 4.0 - i * 0.65);
-            double w2 = Math.sin(t * 6.5 + i * 0.85) * 0.35;
-            double wave = 0.50 + (0.35 * w1) + w2;
-            wave = Math.max(0.08, Math.min(0.92, wave));
-
-            float target;
-            if (isPlaying && !audio.isPaused()) {
-                double energyMod = 0.32 + (0.40 * audioEnergy) + (0.28 * smoothPeak);
-                target = (float) (0.15 + (wave * energyMod));
-                target = Math.max(0.12f, Math.min(0.88f, target));
-            } else {
-                target = 0.06f; // resting baseline when stopped or paused
-            }
-
-            smoothBars[i] = AnimationUtil.lerp(smoothBars[i], target, 0.35f);
-            int barH = Math.max(2, Math.min(maxBarH, (int) (smoothBars[i] * maxBarH)));
-            int barX = visX + (i * 5);
-            int barY = barBaseY - barH;
-
-            // Vibrant warm golden-amber gradient
-            int barColor = (alpha << 24) | AnimationUtil.colorLerp(0xD97746, 0xFFA860, (float) i / 5.0f);
-            graphics.fill(barX, barY, barX + 3, barBaseY, barColor);
-            // Glowing golden peak tip cap
-            graphics.fill(barX, barY, barX + 3, barY + 1, (alpha << 24) | 0xFFFFF0D0);
         }
 
         graphics.disableScissor();
