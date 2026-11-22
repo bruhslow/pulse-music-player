@@ -144,10 +144,6 @@ public class AudioManager {
             this.currentIndex = playlist.size() - 1;
         }
 
-        if (!track.getUrl().startsWith("file:/")) {
-            RecentUrlManager.addRecentUrl(track.getUrl());
-        }
-
         // Trigger dynamic album art loading
         String artUrl = track.getArtworkUrl();
         if ((artUrl == null || artUrl.isBlank()) && YouTubeResolver.isYouTubeUrl(track.getUrl())) {

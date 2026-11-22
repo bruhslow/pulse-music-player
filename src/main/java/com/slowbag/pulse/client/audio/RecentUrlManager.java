@@ -42,6 +42,10 @@ public class RecentUrlManager {
     public static synchronized void addRecentUrl(String url) {
         if (url == null || url.isBlank()) return;
         String clean = url.trim();
+        // Ignore internal direct audio stream or local file links
+        if (clean.contains("googlevideo.com") || clean.startsWith("file:/")) {
+            return;
+        }
         recentUrls.remove(clean);
         recentUrls.add(0, clean);
         if (recentUrls.size() > 15) {
@@ -65,7 +69,11 @@ public class RecentUrlManager {
             List<String> list = GSON.fromJson(reader, new TypeToken<List<String>>(){}.getType());
             if (list != null) {
                 recentUrls.clear();
-                recentUrls.addAll(list);
+                for (String u : list) {
+                    if (u != null && !u.isBlank() && !u.contains("googlevideo.com") && !u.startsWith("file:/")) {
+                        recentUrls.add(u.trim());
+                    }
+                }
             }
         } catch (Exception e) {
             MusicPlayerMod.LOGGER.error("[Music Player] Failed to load recent URLs", e);
