@@ -188,20 +188,20 @@ public class MusicPlayerScreen extends Screen {
 
     // Responsive Layout Dimensions
     private int getPillY() {
-        return Math.max(4, isExpanded ? 6 : (this.height - 128) / 2 - 28);
+        return Math.max(4, isExpanded ? (getHeroY() - 25) : ((this.height - 106) / 2 - 28));
     }
 
     private int getExpTotalWidth() {
-        return Math.min(680, this.width - 20);
+        return Math.min(580, this.width - 24);
     }
 
     private int getExpLeftWidth() {
         int totalW = getExpTotalWidth();
-        return (this.width >= 500) ? (int) (totalW * 0.58) : totalW;
+        return (this.width >= 500) ? (int) (totalW * 0.53) : totalW;
     }
 
     private int getExpRightWidth() {
-        return (this.width >= 500) ? (getExpTotalWidth() - getExpLeftWidth() - 10) : 0;
+        return (this.width >= 500) ? (getExpTotalWidth() - getExpLeftWidth() - 8) : 0;
     }
 
     private int getExpStartX() {
@@ -216,9 +216,10 @@ public class MusicPlayerScreen extends Screen {
     }
 
     private int getHeroY() {
-        int compactH = 126;
+        int compactH = 106;
         int compactY = (this.height - compactH) / 2;
-        int expStartY = getPillY() + 26;
+        int totalExpH = getHeroHeight() + 6 + getDrawerHeight();
+        int expStartY = Math.max(30, (this.height - totalExpH) / 2 + 10);
         return (int) AnimationUtil.lerp(compactY, expStartY, expandProgress);
     }
 
@@ -229,7 +230,7 @@ public class MusicPlayerScreen extends Screen {
     }
 
     private int getHeroHeight() {
-        return 112;
+        return 102;
     }
 
     private int getDrawerY() {
@@ -237,7 +238,13 @@ public class MusicPlayerScreen extends Screen {
     }
 
     private int getDrawerHeight() {
-        return Math.max(140, this.height - getDrawerY() - 8);
+        return 134;
+    }
+
+    private int getVisibleSettingsCount() {
+        int rowH = 32;
+        int availH = getDrawerHeight() - 56;
+        return Math.max(2, availH / rowH);
     }
 
     private boolean isTwoColumn() {
@@ -273,7 +280,7 @@ public class MusicPlayerScreen extends Screen {
             expandProgress = AnimationUtil.lerp(expandProgress, isExpanded ? 1.0f : 0.0f, 0.22f);
 
             // 1. Dark semi-transparent backdrop (world subtly visible through)
-            int backdropAlpha = (int) (105 * ease);
+            int backdropAlpha = (int) (45 * ease);
             graphics.fill(0, 0, this.width, this.height, (backdropAlpha << 24));
 
             // 2. Top Floating Pill Bar ("~ PULSE")
@@ -303,9 +310,9 @@ public class MusicPlayerScreen extends Screen {
 
                 // Right Column: Volume Card & Queue Card
                 if (this.width >= 500 && rightW > 50) {
-                    int rightX = expStartX + leftW + 10;
+                    int rightX = expStartX + leftW + 8;
                     int volY = heroY;
-                    int volH = 30;
+                    int volH = 26;
                     renderVolumeCard(graphics, rightX, volY, rightW, volH, mouseX, mouseY);
 
                     int queueY = volY + volH + 6;
@@ -378,7 +385,7 @@ public class MusicPlayerScreen extends Screen {
     // Now Playing Hero Card (Top-Left or Centered)
     private void renderNowPlayingHero(GuiGraphicsExtractor graphics, int x, int y, int w, int h, int mouseX, int mouseY) {
         // Base dark container with polished warm obsidian glass (semi-transparent)
-        drawGlassCard(graphics, x, y, w, h, 0xDD16181B, 0x30FFFFFF, 0x15FFFFFF);
+        drawGlassCard(graphics, x, y, w, h, 0x78141619, 0x40FFFFFF, 0x18FFFFFF);
 
         AudioTrack track = audioManager.getCurrentTrack();
         boolean isPlaying = audioManager.isPlaying() && !audioManager.isPaused();
@@ -391,16 +398,16 @@ public class MusicPlayerScreen extends Screen {
         int ctrlAreaW = 118;
         int infoAreaW = w - ctrlAreaW - 6;
 
-        // Dedicated Frosted Deep Obsidian Container for Left section
+        // Dedicated Frosted Deep Obsidian Container for Left section (subtle translucent glass)
         int leftCardW = infoAreaW;
-        drawSoftBox(graphics, x + 3, y + 3, leftCardW, h - 6, 4, 0xDD1F2226, 0x25FFFFFF);
-        graphics.fill(x + 8, y + 4, x + leftCardW - 2, y + 5, 0x20FFFFFF);
+        drawSoftBox(graphics, x + 3, y + 3, leftCardW, h - 6, 4, 0x30181A1D, 0x25FFFFFF);
+        graphics.fill(x + 8, y + 4, x + leftCardW - 2, y + 5, 0x15FFFFFF);
 
-        // 1. Album Art Thumbnail (Left - 16:9 aspect frame: 72x48)
-        int artW = 72;
-        int artH = 48;
-        int artX = x + 8;
-        int artY = y + 8;
+        // 1. Album Art Thumbnail (Left - 16:9 aspect frame: 64x42)
+        int artW = 64;
+        int artH = 42;
+        int artX = x + 7;
+        int artY = y + 7;
 
         Identifier artId = AlbumArtManager.getInstance().getAlbumArtId();
         int borderColor = isBuffering ? 0xFFFFCC00 : (isPlaying ? 0xFFD97746 : 0x50FFFFFF);
@@ -420,22 +427,22 @@ public class MusicPlayerScreen extends Screen {
         String sourceTag = isBuffering ? "§e⏳ Buffering audio..." : ((track != null) ? (track.isLiveStream() ? "§c🔴 LIVE Stream" : "Source: " + track.getCategory()) : "Ready to play");
 
         String titlePrefix = isPlaying ? "§6§l" : "§f§l";
-        graphics.text(this.font, Component.literal(titlePrefix + truncateToWidth(title, maxTextW - 16)), infoX, y + 8, 0xFFFFFFFF, true);
-        graphics.text(this.font, Component.literal("§7" + truncateToWidth(artist, maxTextW - 16)), infoX, y + 20, 0xFFA0988E, false);
-        graphics.text(this.font, Component.literal("§8" + sourceTag), infoX, y + 31, 0xFF888888, false);
+        graphics.text(this.font, Component.literal(titlePrefix + truncateToWidth(title, maxTextW - 16)), infoX, y + 7, 0xFFFFFFFF, true);
+        graphics.text(this.font, Component.literal("§7" + truncateToWidth(artist, maxTextW - 16)), infoX, y + 19, 0xFFA0988E, false);
+        graphics.text(this.font, Component.literal("§8" + sourceTag), infoX, y + 29, 0xFF888888, false);
 
         // Heart favorite toggle on Hero card
         int heartX = x + leftCardW - 14;
-        int heartY = y + 8;
+        int heartY = y + 7;
         boolean isFav = com.slowbag.pulse.client.audio.FavoritesManager.getInstance().isFavorite(track);
         boolean heartHover = mouseX >= heartX && mouseX <= heartX + 14 && mouseY >= heartY && mouseY <= heartY + 14;
         String heartIcon = isFav ? "§6♥" : (heartHover ? "§6♡" : "§7♡");
         graphics.text(this.font, Component.literal(heartIcon), heartX, heartY, isFav || heartHover ? 0xFFD97746 : 0xFFFFFFFF, false);
 
         // 3. Time Display & Progress Scrubber
-        int scrubX = infoX + 28;
-        int scrubY = y + 46;
-        int scrubW = (leftCardW - (scrubX - x)) - 34;
+        int scrubX = infoX + 26;
+        int scrubY = y + 42;
+        int scrubW = (leftCardW - (scrubX - x)) - 32;
         int scrubH = 4;
 
         long curSecs = audioManager.getElapsedSeconds();
@@ -474,10 +481,10 @@ public class MusicPlayerScreen extends Screen {
 
         // 4. Live Audio Waveform Equalizer (Under scrubber)
         float[] rawBands = audioManager.getVisualizerBands();
-        int waveX = x + 10;
-        int waveY = y + h - 16;
-        int waveBars = Math.max(16, (leftCardW - 20) / 7);
-        int maxWaveH = 14;
+        int waveX = x + 8;
+        int waveY = y + 76;
+        int waveBars = Math.max(16, (leftCardW - 16) / 7);
+        int maxWaveH = 10;
         long timeMs = System.currentTimeMillis();
         double t = timeMs / 1000.0;
         float peak = audioManager.getPeakLevel();
@@ -515,15 +522,17 @@ public class MusicPlayerScreen extends Screen {
             graphics.fill(barX, barY, barX + 5, barY + 1, 0xFFFFD090);
         }
 
-        // 5. Expand / Collapse Drawer Button at bottom center
-        int toggleW = 86;
+        // 5. Expand / Collapse Drawer Button at bottom center (Lengthy pill bar with glowing rim)
+        int toggleW = isExpanded ? Math.min(200, w - 40) : Math.min(280, w - 40);
         int toggleH = 14;
         int toggleX = x + (w - toggleW) / 2;
-        int toggleY = y + h - 15;
+        int toggleY = y + h - 16;
         boolean toggleHov = mouseX >= toggleX && mouseX <= toggleX + toggleW && mouseY >= toggleY && mouseY <= toggleY + toggleH;
-        drawSoftBox(graphics, toggleX, toggleY, toggleW, toggleH, 4, toggleHov ? 0x90D97746 : 0x4016181B, 0xFFD97746);
-        String toggleText = isExpanded ? "§6▲ Collapse" : "§6▼ Expand";
-        graphics.centeredText(this.font, Component.literal(toggleText), toggleX + toggleW / 2, toggleY + 3, 0xFFFFFFFF);
+        int toggleBg = toggleHov ? 0x90D97746 : 0x4516181B;
+        int toggleBorder = toggleHov ? 0xFFFFA070 : 0x80D97746;
+        drawSoftBox(graphics, toggleX, toggleY, toggleW, toggleH, 4, toggleBg, toggleBorder);
+        String toggleText = isExpanded ? "§6▲  C O L L A P S E  ▲" : "§6▼  E X P A N D  L I B R A R Y  &  Q U E U E  ▼";
+        graphics.centeredText(this.font, Component.literal(toggleText), toggleX + toggleW / 2, toggleY + 3, toggleHov ? 0xFFFFFFFF : 0xFFFFD090);
 
         // 6. Right Section: Integrated Controls Panel
         int ctrlX = x + w - ctrlAreaW;
@@ -533,7 +542,7 @@ public class MusicPlayerScreen extends Screen {
         int prevX = ctrlX + 10;
         int playX = ctrlX + 42;
         int nextX = ctrlX + 82;
-        int playBtnY = y + 14;
+        int playBtnY = y + 10;
 
         drawGlassButton(graphics, prevX, playBtnY + 5, 24, 22, "§f⏮", 0x30FFFFFF, mouseX, mouseY);
 
@@ -550,21 +559,21 @@ public class MusicPlayerScreen extends Screen {
         drawGlassButton(graphics, nextX, playBtnY + 5, 24, 22, "§f⏭", 0x30FFFFFF, mouseX, mouseY);
 
         // Row 2: Secondary Controls: Loop & Star (Curvy rounded buttons)
-        int row2Y = y + 54;
+        int row2Y = y + 48;
         boolean loop = audioManager.isLoopCurrent();
         isFav = (track != null) && com.slowbag.pulse.client.audio.FavoritesManager.getInstance().isFavorite(track);
-        drawGlassButton(graphics, ctrlX + 8, row2Y, 48, 17, loop ? "§6🔁 Loop" : "§7🔁 Loop", loop ? 0xFFD97746 : 0x25FFFFFF, mouseX, mouseY);
-        drawGlassButton(graphics, ctrlX + 60, row2Y, 48, 17, isFav ? "§6★ Star" : "§7☆ Star", isFav ? 0xFFD97746 : 0x25FFFFFF, mouseX, mouseY);
+        drawGlassButton(graphics, ctrlX + 8, row2Y, 48, 16, loop ? "§6🔁 Loop" : "§7🔁 Loop", loop ? 0xFFD97746 : 0x25FFFFFF, mouseX, mouseY);
+        drawGlassButton(graphics, ctrlX + 60, row2Y, 48, 16, isFav ? "§6★ Star" : "§7☆ Star", isFav ? 0xFFD97746 : 0x25FFFFFF, mouseX, mouseY);
 
         // Row 3: Utility Controls: Refresh & + Queue (Curvy rounded buttons, text fits cleanly)
-        int row3Y = y + 76;
+        int row3Y = y + 68;
         drawGlassButton(graphics, ctrlX + 8, row3Y, 48, 16, "§7🔄 Refresh", 0x20FFFFFF, mouseX, mouseY);
         drawGlassButton(graphics, ctrlX + 60, row3Y, 48, 16, "§7➕ Queue", 0x20FFFFFF, mouseX, mouseY);
     }
 
     // Browser Card (Bottom-Left)
     private void renderBrowserCard(GuiGraphicsExtractor graphics, int x, int y, int w, int h, int mouseX, int mouseY) {
-        drawGlassCard(graphics, x, y, w, h, 0xEE16181B, 0x30FFFFFF, 0x15FFFFFF);
+        drawGlassCard(graphics, x, y, w, h, 0x78141619, 0x40FFFFFF, 0x18FFFFFF);
 
         // Top Tab Bar
         int tabCount = tabs.length;
@@ -803,10 +812,10 @@ public class MusicPlayerScreen extends Screen {
             graphics.text(this.font, Component.literal("§f§l⚙ Settings §8& §6Accessibility"), x + 10, curY, 0xFFFFFFFF, false);
             graphics.text(this.font, Component.literal("§7Choose audio output streams, devices & accessibility options."), x + 10, curY + 12, 0xFFA0988E, false);
 
-            int listStartY = curY + 28;
-            int rowH = 36;
+            int listStartY = curY + 26;
+            int rowH = 32;
             int totalSettings = 11;
-            int visibleSettings = Math.max(2, (h - 56) / rowH);
+            int visibleSettings = getVisibleSettingsCount();
             int startIdx = Math.min(settingsScrollOffset, Math.max(0, totalSettings - visibleSettings));
             int endIdx = Math.min(totalSettings, startIdx + visibleSettings);
 
@@ -814,6 +823,9 @@ public class MusicPlayerScreen extends Screen {
             for (int i = startIdx; i < endIdx; i++) {
                 int rowBg = 0x18FFFFFF;
                 drawSoftBox(graphics, x + 8, itemY, w - 16, rowH - 4, 3, rowBg, 0x25FFFFFF);
+
+                int btnY = itemY + 5;
+                int btnH = 18;
 
                 if (i == 0) {
                     // 1. Output Stream / Primary Audio Device
@@ -824,15 +836,13 @@ public class MusicPlayerScreen extends Screen {
                     int nextBtnX = rightEdge - arrowBtnW;
                     int labelBoxX = nextBtnX - labelW - 4;
                     int prevBtnX = labelBoxX - arrowBtnW - 4;
-                    int btnY = itemY + 8;
-                    int btnH = 18;
 
                     int maxDescW = prevBtnX - (x + 14) - 6;
                     boolean isVoiceChat = curDev.equalsIgnoreCase(com.slowbag.pulse.client.audio.SettingsManager.VOICE_CHAT_DEVICE);
                     String header = isVoiceChat ? "§f🎤 Voice Chat Microphone:" : "§f🔊 Primary Audio Output:";
                     String sub = isVoiceChat ? "§6Direct in-game mic broadcast to nearby players" : "§8Route sound to speakers or headphones";
-                    graphics.text(this.font, Component.literal(truncateToWidth(header, maxDescW)), x + 14, itemY + 4, 0xFFFFFFFF, false);
-                    graphics.text(this.font, Component.literal(truncateToWidth(sub, maxDescW)), x + 14, itemY + 17, isVoiceChat ? 0xFFFFA070 : 0xFF888888, false);
+                    graphics.text(this.font, Component.literal(truncateToWidth(header, maxDescW)), x + 14, itemY + 3, 0xFFFFFFFF, false);
+                    graphics.text(this.font, Component.literal(truncateToWidth(sub, maxDescW)), x + 14, itemY + 15, isVoiceChat ? 0xFFFFA070 : 0xFF888888, false);
 
                     // Prev ◀
                     boolean prevHov = mouseX >= prevBtnX && mouseX <= prevBtnX + arrowBtnW && mouseY >= btnY && mouseY <= btnY + btnH;
@@ -853,13 +863,11 @@ public class MusicPlayerScreen extends Screen {
                     // 2. Mono Audio Downmix (Accessibility)
                     boolean mono = sm.isMonoAudio();
                     int btnW = 86;
-                    int btnH = 18;
                     int btnX = x + w - btnW - 14;
-                    int btnY = itemY + 8;
 
                     int maxDescW = btnX - (x + 14) - 6;
-                    graphics.text(this.font, Component.literal(truncateToWidth("§f🎧 Mono Audio Downmix:", maxDescW)), x + 14, itemY + 4, 0xFFFFFFFF, false);
-                    graphics.text(this.font, Component.literal(truncateToWidth("§8Combines left & right channels for hearing", maxDescW)), x + 14, itemY + 17, 0xFF888888, false);
+                    graphics.text(this.font, Component.literal(truncateToWidth("§f🎧 Mono Audio Downmix:", maxDescW)), x + 14, itemY + 3, 0xFFFFFFFF, false);
+                    graphics.text(this.font, Component.literal(truncateToWidth("§8Combines left & right channels for hearing", maxDescW)), x + 14, itemY + 15, 0xFF888888, false);
 
                     boolean bHov = mouseX >= btnX && mouseX <= btnX + btnW && mouseY >= btnY && mouseY <= btnY + btnH;
                     drawSoftBox(graphics, btnX, btnY, btnW, btnH, 3, mono ? (bHov ? 0xFFE0783E : 0xFFD97746) : (bHov ? 0x50FFFFFF : 0x25FFFFFF), bHov ? 0xFFFFA070 : 0x35FFFFFF);
@@ -869,13 +877,11 @@ public class MusicPlayerScreen extends Screen {
                     // 3. Reduced Motion / Visualizer (Accessibility)
                     boolean reduced = sm.isReducedMotion();
                     int btnW = 86;
-                    int btnH = 18;
                     int btnX = x + w - btnW - 14;
-                    int btnY = itemY + 8;
 
                     int maxDescW = btnX - (x + 14) - 6;
-                    graphics.text(this.font, Component.literal(truncateToWidth("§f🌊 Waveform Motion:", maxDescW)), x + 14, itemY + 4, 0xFFFFFFFF, false);
-                    graphics.text(this.font, Component.literal(truncateToWidth("§8Pauses or softens dancing animations", maxDescW)), x + 14, itemY + 17, 0xFF888888, false);
+                    graphics.text(this.font, Component.literal(truncateToWidth("§f🌊 Waveform Motion:", maxDescW)), x + 14, itemY + 3, 0xFFFFFFFF, false);
+                    graphics.text(this.font, Component.literal(truncateToWidth("§8Pauses or softens dancing animations", maxDescW)), x + 14, itemY + 15, 0xFF888888, false);
 
                     boolean bHov = mouseX >= btnX && mouseX <= btnX + btnW && mouseY >= btnY && mouseY <= btnY + btnH;
                     drawSoftBox(graphics, btnX, btnY, btnW, btnH, 3, reduced ? (bHov ? 0xFFFFA070 : 0xFFD97746) : (bHov ? 0xFFE0783E : 0xFFD97746), bHov ? 0xFFFFFFFF : 0x35FFFFFF);
@@ -888,12 +894,10 @@ public class MusicPlayerScreen extends Screen {
                     int moveBtnX = x + w - moveBtnW - 14;
                     int modeBtnW = 54;
                     int modeBtnX = moveBtnX - modeBtnW - 6;
-                    int btnH = 18;
-                    int btnY = itemY + 8;
 
                     int maxDescW = modeBtnX - (x + 14) - 6;
-                    graphics.text(this.font, Component.literal(truncateToWidth("§f🎛 In-Game HUD Overlay:", maxDescW)), x + 14, itemY + 4, 0xFFFFFFFF, false);
-                    graphics.text(this.font, Component.literal(truncateToWidth("§8Floating now-playing HUD widget in game", maxDescW)), x + 14, itemY + 17, 0xFF888888, false);
+                    graphics.text(this.font, Component.literal(truncateToWidth("§f🎛 In-Game HUD Overlay:", maxDescW)), x + 14, itemY + 3, 0xFFFFFFFF, false);
+                    graphics.text(this.font, Component.literal(truncateToWidth("§8Floating now-playing HUD widget in game", maxDescW)), x + 14, itemY + 15, 0xFF888888, false);
 
                     String hudText = !hudCfg.isHudEnabled() ? "Disabled" : hudCfg.getPosition();
                     boolean modeHov = mouseX >= modeBtnX && mouseX <= modeBtnX + modeBtnW && mouseY >= btnY && mouseY <= btnY + btnH;
@@ -908,13 +912,11 @@ public class MusicPlayerScreen extends Screen {
                     // 5. Nametag Music Badge
                     boolean badge = com.slowbag.pulse.client.audio.MusicBadgeManager.isBadgeEnabled();
                     int btnW = 86;
-                    int btnH = 18;
                     int btnX = x + w - btnW - 14;
-                    int btnY = itemY + 8;
 
                     int maxDescW = btnX - (x + 14) - 6;
-                    graphics.text(this.font, Component.literal(truncateToWidth("§f♫ Player Nametag Badge:", maxDescW)), x + 14, itemY + 4, 0xFFFFFFFF, false);
-                    graphics.text(this.font, Component.literal(truncateToWidth("§8Animated music note above nametag", maxDescW)), x + 14, itemY + 17, 0xFF888888, false);
+                    graphics.text(this.font, Component.literal(truncateToWidth("§f♫ Player Nametag Badge:", maxDescW)), x + 14, itemY + 3, 0xFFFFFFFF, false);
+                    graphics.text(this.font, Component.literal(truncateToWidth("§8Animated music note above nametag", maxDescW)), x + 14, itemY + 15, 0xFF888888, false);
 
                     boolean bHov = mouseX >= btnX && mouseX <= btnX + btnW && mouseY >= btnY && mouseY <= btnY + btnH;
                     drawSoftBox(graphics, btnX, btnY, btnW, btnH, 3, badge ? (bHov ? 0xFFE0783E : 0xFFD97746) : (bHov ? 0x50FFFFFF : 0x25FFFFFF), bHov ? 0xFFFFA070 : 0x35FFFFFF);
@@ -924,13 +926,11 @@ public class MusicPlayerScreen extends Screen {
                     // 6. Background Playback
                     boolean bg = sm.isBackgroundPlayback();
                     int btnW = 86;
-                    int btnH = 18;
                     int btnX = x + w - btnW - 14;
-                    int btnY = itemY + 8;
 
                     int maxDescW = btnX - (x + 14) - 6;
-                    graphics.text(this.font, Component.literal(truncateToWidth("§f🖥 Background Audio Playback:", maxDescW)), x + 14, itemY + 4, 0xFFFFFFFF, false);
-                    graphics.text(this.font, Component.literal(truncateToWidth("§8Keep songs playing when unfocused", maxDescW)), x + 14, itemY + 17, 0xFF888888, false);
+                    graphics.text(this.font, Component.literal(truncateToWidth("§f🖥 Background Audio Playback:", maxDescW)), x + 14, itemY + 3, 0xFFFFFFFF, false);
+                    graphics.text(this.font, Component.literal(truncateToWidth("§8Keep songs playing when unfocused", maxDescW)), x + 14, itemY + 15, 0xFF888888, false);
 
                     boolean bHov = mouseX >= btnX && mouseX <= btnX + btnW && mouseY >= btnY && mouseY <= btnY + btnH;
                     drawSoftBox(graphics, btnX, btnY, btnW, btnH, 3, bg ? (bHov ? 0xFFE0783E : 0xFFD97746) : (bHov ? 0x50FFFFFF : 0x25FFFFFF), bHov ? 0xFFFFA070 : 0x35FFFFFF);
@@ -940,13 +940,11 @@ public class MusicPlayerScreen extends Screen {
                     // 7. Network Lag Buffer Cushion
                     int preloadSec = sm.getPreloadSeconds();
                     int btnW = 86;
-                    int btnH = 18;
                     int btnX = x + w - btnW - 14;
-                    int btnY = itemY + 8;
 
                     int maxDescW = btnX - (x + 14) - 6;
-                    graphics.text(this.font, Component.literal(truncateToWidth("§f⚡ Network Lag Buffer Shield:", maxDescW)), x + 14, itemY + 4, 0xFFFFFFFF, false);
-                    graphics.text(this.font, Component.literal(truncateToWidth("§8Preload audio to prevent lag stutter", maxDescW)), x + 14, itemY + 17, 0xFF888888, false);
+                    graphics.text(this.font, Component.literal(truncateToWidth("§f⚡ Network Lag Buffer Shield:", maxDescW)), x + 14, itemY + 3, 0xFFFFFFFF, false);
+                    graphics.text(this.font, Component.literal(truncateToWidth("§8Preload audio to prevent lag stutter", maxDescW)), x + 14, itemY + 15, 0xFF888888, false);
 
                     String bufLabel = (preloadSec == 2) ? "2s Fast" : ((preloadSec == 5) ? "✔ 5s Shield" : "🛡 10s Max");
                     boolean bHov = mouseX >= btnX && mouseX <= btnX + btnW && mouseY >= btnY && mouseY <= btnY + btnH;
@@ -957,13 +955,11 @@ public class MusicPlayerScreen extends Screen {
                     // 8. Toast Alerts & Notifications
                     boolean toast = sm.isToastNotifications();
                     int btnW = 86;
-                    int btnH = 18;
                     int btnX = x + w - btnW - 14;
-                    int btnY = itemY + 8;
 
                     int maxDescW = btnX - (x + 14) - 6;
-                    graphics.text(this.font, Component.literal(truncateToWidth("§f🔔 In-Game Toast Alerts:", maxDescW)), x + 14, itemY + 4, 0xFFFFFFFF, false);
-                    graphics.text(this.font, Component.literal(truncateToWidth("§8Display popups on track changes", maxDescW)), x + 14, itemY + 17, 0xFF888888, false);
+                    graphics.text(this.font, Component.literal(truncateToWidth("§f🔔 In-Game Toast Alerts:", maxDescW)), x + 14, itemY + 3, 0xFFFFFFFF, false);
+                    graphics.text(this.font, Component.literal(truncateToWidth("§8Display popups on track changes", maxDescW)), x + 14, itemY + 15, 0xFF888888, false);
 
                     boolean bHov = mouseX >= btnX && mouseX <= btnX + btnW && mouseY >= btnY && mouseY <= btnY + btnH;
                     drawSoftBox(graphics, btnX, btnY, btnW, btnH, 3, toast ? (bHov ? 0xFFE0783E : 0xFFD97746) : (bHov ? 0x50FFFFFF : 0x25FFFFFF), bHov ? 0xFFFFA070 : 0x35FFFFFF);
@@ -973,13 +969,11 @@ public class MusicPlayerScreen extends Screen {
                     // 9. Game Sound Auto-Ducking
                     boolean duck = sm.isAutoDucking();
                     int btnW = 86;
-                    int btnH = 18;
                     int btnX = x + w - btnW - 14;
-                    int btnY = itemY + 8;
 
                     int maxDescW = btnX - (x + 14) - 6;
-                    graphics.text(this.font, Component.literal(truncateToWidth("§f🔉 Game Sound Auto-Ducking:", maxDescW)), x + 14, itemY + 4, 0xFFFFFFFF, false);
-                    graphics.text(this.font, Component.literal(truncateToWidth("§8Lower ambient sounds during music", maxDescW)), x + 14, itemY + 17, 0xFF888888, false);
+                    graphics.text(this.font, Component.literal(truncateToWidth("§f🔉 Game Sound Auto-Ducking:", maxDescW)), x + 14, itemY + 3, 0xFFFFFFFF, false);
+                    graphics.text(this.font, Component.literal(truncateToWidth("§8Lower ambient sounds during music", maxDescW)), x + 14, itemY + 15, 0xFF888888, false);
 
                     boolean bHov = mouseX >= btnX && mouseX <= btnX + btnW && mouseY >= btnY && mouseY <= btnY + btnH;
                     drawSoftBox(graphics, btnX, btnY, btnW, btnH, 3, duck ? (bHov ? 0xFFE0783E : 0xFFD97746) : (bHov ? 0x50FFFFFF : 0x25FFFFFF), bHov ? 0xFFFFA070 : 0x35FFFFFF);
@@ -989,13 +983,11 @@ public class MusicPlayerScreen extends Screen {
                     // 10. Continuous Playback
                     boolean cont = sm.isContinuousPlayback();
                     int btnW = 86;
-                    int btnH = 18;
                     int btnX = x + w - btnW - 14;
-                    int btnY = itemY + 8;
 
                     int maxDescW = btnX - (x + 14) - 6;
-                    graphics.text(this.font, Component.literal(truncateToWidth("§f♾ Continuous Playback:", maxDescW)), x + 14, itemY + 4, 0xFFFFFFFF, false);
-                    graphics.text(this.font, Component.literal(truncateToWidth("§8Keep playing similar songs at end", maxDescW)), x + 14, itemY + 17, 0xFF888888, false);
+                    graphics.text(this.font, Component.literal(truncateToWidth("§f♾ Continuous Playback:", maxDescW)), x + 14, itemY + 3, 0xFFFFFFFF, false);
+                    graphics.text(this.font, Component.literal(truncateToWidth("§8Keep playing similar songs at end", maxDescW)), x + 14, itemY + 15, 0xFF888888, false);
 
                     boolean bHov = mouseX >= btnX && mouseX <= btnX + btnW && mouseY >= btnY && mouseY <= btnY + btnH;
                     drawSoftBox(graphics, btnX, btnY, btnW, btnH, 3, cont ? (bHov ? 0xFFE0783E : 0xFFD97746) : (bHov ? 0x50FFFFFF : 0x25FFFFFF), bHov ? 0xFFFFA070 : 0x35FFFFFF);
@@ -1004,13 +996,11 @@ public class MusicPlayerScreen extends Screen {
                 } else if (i == 10) {
                     // 11. Audio Cache Storage
                     int btnW = 86;
-                    int btnH = 18;
                     int btnX = x + w - btnW - 14;
-                    int btnY = itemY + 8;
 
                     int maxDescW = btnX - (x + 14) - 6;
-                    graphics.text(this.font, Component.literal(truncateToWidth("§f🧹 Audio Stream Cache:", maxDescW)), x + 14, itemY + 4, 0xFFFFFFFF, false);
-                    graphics.text(this.font, Component.literal(truncateToWidth("§8Clear temp audio chunks on disk", maxDescW)), x + 14, itemY + 17, 0xFF888888, false);
+                    graphics.text(this.font, Component.literal(truncateToWidth("§f🧹 Audio Stream Cache:", maxDescW)), x + 14, itemY + 3, 0xFFFFFFFF, false);
+                    graphics.text(this.font, Component.literal(truncateToWidth("§8Clear temp audio chunks on disk", maxDescW)), x + 14, itemY + 15, 0xFF888888, false);
 
                     boolean bHov = mouseX >= btnX && mouseX <= btnX + btnW && mouseY >= btnY && mouseY <= btnY + btnH;
                     drawSoftBox(graphics, btnX, btnY, btnW, btnH, 3, bHov ? 0x90FF3344 : 0x40FF3344, bHov ? 0xFFFF4455 : 0x60FF4455);
@@ -1084,17 +1074,17 @@ public class MusicPlayerScreen extends Screen {
 
     // Volume Card (Top-Right)
     private void renderVolumeCard(GuiGraphicsExtractor graphics, int x, int y, int w, int h, int mouseX, int mouseY) {
-        drawGlassCard(graphics, x, y, w, h, 0xEE16181B, 0x30FFFFFF, 0x15FFFFFF);
+        drawGlassCard(graphics, x, y, w, h, 0x78141619, 0x40FFFFFF, 0x18FFFFFF);
 
         float vol = audioManager.getVolume();
         boolean muted = audioManager.isMuted();
 
         String volIcon = (muted || vol == 0) ? "§c🔇" : (vol < 0.4f ? "§7🔈" : (vol < 0.8f ? "§f🔉" : "§6🔊"));
-        graphics.text(this.font, Component.literal(volIcon), x + 8, y + 10, 0xFFFFFFFF, false);
+        graphics.text(this.font, Component.literal(volIcon), x + 8, y + 8, 0xFFFFFFFF, false);
 
-        int sliderX = x + 28;
-        int sliderY = y + 14;
-        int sliderW = w - 78;
+        int sliderX = x + 26;
+        int sliderY = y + 11;
+        int sliderW = w - 74;
         int sliderH = 4;
 
         // Background groove (rounded soft edges)
@@ -1108,17 +1098,17 @@ public class MusicPlayerScreen extends Screen {
         drawSoftBox(graphics, sliderX + filled - 3, sliderY - 3, 7, sliderH + 6, 2, 0xFFF5F0E6, 0xFFD97746);
 
         String volText = (muted) ? "§c0%" : ((int) (vol * 100) + "%");
-        graphics.text(this.font, Component.literal("§7" + volText), sliderX + sliderW + 6, y + 10, 0xFFA0988E, false);
+        graphics.text(this.font, Component.literal("§7" + volText), sliderX + sliderW + 6, y + 8, 0xFFA0988E, false);
 
         // Mute button toggle on far right
         int muteBtnX = x + w - 18;
-        boolean muteHover = mouseX >= muteBtnX && mouseX <= muteBtnX + 14 && mouseY >= y + 8 && mouseY <= y + 22;
-        graphics.text(this.font, Component.literal(muted ? "§6🔊" : "§7🔇"), muteBtnX, y + 10, 0xFFFFFFFF, false);
+        boolean muteHover = mouseX >= muteBtnX && mouseX <= muteBtnX + 14 && mouseY >= y + 6 && mouseY <= y + 20;
+        graphics.text(this.font, Component.literal(muted ? "§6🔊" : "§7🔇"), muteBtnX, y + 8, 0xFFFFFFFF, false);
     }
 
     // Mini Waveform Card (Middle-Right)
     private void renderMiniWaveformCard(GuiGraphicsExtractor graphics, int x, int y, int w, int h, int mouseX, int mouseY) {
-        drawGlassCard(graphics, x, y, w, h, 0xEE16181B, 0x30FFFFFF, 0x15FFFFFF);
+        drawGlassCard(graphics, x, y, w, h, 0x78141619, 0x40FFFFFF, 0x18FFFFFF);
 
         graphics.text(this.font, Component.literal("§6🔊"), x + 8, y + 12, 0xFFD97746, false);
 
@@ -1148,13 +1138,13 @@ public class MusicPlayerScreen extends Screen {
 
     // Queue Card (Bottom-Right)
     private void renderQueueCard(GuiGraphicsExtractor graphics, int x, int y, int w, int h, int mouseX, int mouseY) {
-        drawGlassCard(graphics, x, y, w, h, 0xDD16181B, 0x30FFFFFF, 0x15FFFFFF);
+        drawGlassCard(graphics, x, y, w, h, 0x78141619, 0x40FFFFFF, 0x18FFFFFF);
 
         List<AudioTrack> upNext = audioManager.getUpcomingQueue();
         int upNextCount = upNext.size();
 
-        String queueHeader = (upNextCount > 0) ? ("§f§lQueue §7- " + upNextCount + (upNextCount == 1 ? " track" : " tracks")) : "§f§lQueue §7(Empty)";
-        graphics.text(this.font, Component.literal(queueHeader), x + 8, y + 8, 0xFFFFFFFF, true);
+        String queueHeader = (upNextCount > 0) ? ("§f§lQueue §7(" + upNextCount + ")") : "§f§lQueue §7(Empty)";
+        graphics.text(this.font, Component.literal(queueHeader), x + 8, y + 7, 0xFFFFFFFF, true);
 
         // Clear & Shuffle queue buttons
         if (upNextCount > 0) {
@@ -1177,28 +1167,28 @@ public class MusicPlayerScreen extends Screen {
             graphics.centeredText(this.font, Component.literal("§7Queue is empty."), x + w / 2, itemY + 20, 0xFFA0988E);
             graphics.centeredText(this.font, Component.literal("§8Click +Q on any song to queue it!"), x + w / 2, itemY + 34, 0xFF706860);
         } else {
-            int visibleRows = Math.max(2, (h - 28) / 28);
+            int visibleRows = Math.max(2, (h - 26) / 26);
             int startIdx = Math.min(queueScrollOffset, Math.max(0, upNext.size() - visibleRows));
             int endIdx = Math.min(upNext.size(), startIdx + visibleRows);
 
             for (int i = startIdx; i < endIdx; i++) {
                 AudioTrack t = upNext.get(i);
-                boolean rHover = mouseX >= x + 6 && mouseX <= x + w - 6 && mouseY >= itemY && mouseY <= itemY + 26;
+                boolean rHover = mouseX >= x + 6 && mouseX <= x + w - 6 && mouseY >= itemY && mouseY <= itemY + 24;
 
                 int rowBg = (i == 0) ? 0x25D97746 : (rHover ? 0x25FFFFFF : 0x10FFFFFF);
                 int rowOutline = (i == 0) ? 0x50D97746 : (rHover ? 0x30FFFFFF : 0);
-                drawSoftBox(graphics, x + 6, itemY, w - 12, 26, 3, rowBg, rowOutline);
+                drawSoftBox(graphics, x + 6, itemY, w - 12, 24, 3, rowBg, rowOutline);
 
                 // Queue position badge
                 int thumbX = x + 8;
-                int thumbY = itemY + 5;
-                drawSoftBox(graphics, thumbX, thumbY, 16, 16, 3, 0xFF181A1B, 0x30FFFFFF);
-                graphics.centeredText(this.font, Component.literal("§6#" + (i + 1)), thumbX + 8, thumbY + 4, 0xFFFFFFFF);
+                int thumbY = itemY + 4;
+                drawSoftBox(graphics, thumbX, thumbY, 15, 15, 3, 0xFF181A1B, 0x30FFFFFF);
+                graphics.centeredText(this.font, Component.literal("§6" + (i + 1)), thumbX + 7, thumbY + 3, 0xFFFFFFFF);
 
                 // Action buttons on right: [▲] [▼] [▶] [✕]
-                int btnW = 16;
-                int btnH = 16;
-                int btnY = itemY + 5;
+                int btnW = 15;
+                int btnH = 15;
+                int btnY = itemY + 4;
                 int gap = 3;
 
                 int removeX = x + w - 8 - btnW;
@@ -1210,32 +1200,32 @@ public class MusicPlayerScreen extends Screen {
                 boolean canMoveUp = (i > 0);
                 boolean upHover = canMoveUp && mouseX >= upX && mouseX <= upX + btnW && mouseY >= btnY && mouseY <= btnY + btnH;
                 drawSoftBox(graphics, upX, btnY, btnW, btnH, 3, upHover ? 0x60D97746 : 0x20FFFFFF, upHover ? 0xFFFFA070 : 0x25FFFFFF);
-                graphics.centeredText(this.font, Component.literal(canMoveUp ? (upHover ? "§6▲" : "§f▲") : "§8▲"), upX + btnW / 2, btnY + 4, 0xFFFFFFFF);
+                graphics.centeredText(this.font, Component.literal(canMoveUp ? (upHover ? "§6▲" : "§f▲") : "§8▲"), upX + btnW / 2, btnY + 3, 0xFFFFFFFF);
 
                 // Move Down button
                 boolean canMoveDown = (i < upNext.size() - 1);
                 boolean downHover = canMoveDown && mouseX >= downX && mouseX <= downX + btnW && mouseY >= btnY && mouseY <= btnY + btnH;
                 drawSoftBox(graphics, downX, btnY, btnW, btnH, 3, downHover ? 0x60D97746 : 0x20FFFFFF, downHover ? 0xFFFFA070 : 0x25FFFFFF);
-                graphics.centeredText(this.font, Component.literal(canMoveDown ? (downHover ? "§6▼" : "§f▼") : "§8▼"), downX + btnW / 2, btnY + 4, 0xFFFFFFFF);
+                graphics.centeredText(this.font, Component.literal(canMoveDown ? (downHover ? "§6▼" : "§f▼") : "§8▼"), downX + btnW / 2, btnY + 3, 0xFFFFFFFF);
 
                 // Play triangle
                 boolean playHover = mouseX >= playX && mouseX <= playX + btnW && mouseY >= btnY && mouseY <= btnY + btnH;
                 drawSoftBox(graphics, playX, btnY, btnW, btnH, 3, playHover ? 0x60D97746 : 0x20FFFFFF, playHover ? 0xFFFFA070 : 0x25FFFFFF);
-                graphics.centeredText(this.font, Component.literal(playHover ? "§6▶" : "§f▶"), playX + btnW / 2, btnY + 4, 0xFFFFFFFF);
+                graphics.centeredText(this.font, Component.literal(playHover ? "§6▶" : "§f▶"), playX + btnW / 2, btnY + 3, 0xFFFFFFFF);
 
                 // Remove X button
                 boolean remHover = mouseX >= removeX && mouseX <= removeX + btnW && mouseY >= btnY && mouseY <= btnY + btnH;
                 drawSoftBox(graphics, removeX, btnY, btnW, btnH, 3, remHover ? 0x80FF3344 : 0x20FFFFFF, remHover ? 0xFFFF4455 : 0x25FFFFFF);
-                graphics.centeredText(this.font, Component.literal(remHover ? "§c✕" : "§7✕"), removeX + btnW / 2, btnY + 4, 0xFFFFFFFF);
+                graphics.centeredText(this.font, Component.literal(remHover ? "§c✕" : "§7✕"), removeX + btnW / 2, btnY + 3, 0xFFFFFFFF);
 
-                // Song Title and Subtitle - Bounded so it NEVER overlaps the buttons
-                int textX = thumbX + 22;
-                int textW = upX - textX - 8;
-                graphics.text(this.font, Component.literal("§f§l" + truncateToWidth(t.getTitle(), textW)), textX, itemY + 4, 0xFFFFFFFF, false);
-                String sub = (i == 0 ? "§6Next" : "§7Queued") + " • " + truncateToWidth(t.getArtist(), Math.max(20, textW - 40));
-                graphics.text(this.font, Component.literal(sub), textX, itemY + 15, 0xFFA0988E, false);
+                // Song Title and Subtitle - Generously bounded, never overlapping buttons
+                int textX = thumbX + 19;
+                int textW = upX - textX - 6;
+                graphics.text(this.font, Component.literal("§f§l" + truncateToWidth(t.getTitle(), textW)), textX, itemY + 3, 0xFFFFFFFF, false);
+                String sub = (i == 0 ? "§6Next" : "§8Queued") + " • §7" + truncateToWidth(t.getArtist(), Math.max(30, textW - 35));
+                graphics.text(this.font, Component.literal(sub), textX, itemY + 13, 0xFFA0988E, false);
 
-                itemY += 28;
+                itemY += 26;
             }
         }
     }
@@ -1394,9 +1384,9 @@ public class MusicPlayerScreen extends Screen {
                 int drawerH = getDrawerHeight();
 
                 // Right column queue scroll
-                if (this.width >= 500 && rightW > 50 && mouseX >= expStartX + leftW + 10 && mouseX <= expStartX + leftW + 10 + rightW) {
+                if (this.width >= 500 && rightW > 50 && mouseX >= expStartX + leftW + 8 && mouseX <= expStartX + leftW + 8 + rightW) {
                     List<AudioTrack> upNext = audioManager.getUpcomingQueue();
-                    int visibleQ = Math.max(2, (drawerH - 28) / 28);
+                    int visibleQ = Math.max(2, (drawerH - 26) / 26);
                     if (verticalAmount > 0) {
                         queueScrollOffset = Math.max(0, queueScrollOffset - 1);
                     } else if (verticalAmount < 0) {
@@ -1440,7 +1430,8 @@ public class MusicPlayerScreen extends Screen {
                         return true;
                     } else if (selectedTab == 4) {
                         int totalSettings = 11;
-                        int maxScroll = Math.max(0, totalSettings - Math.max(2, (drawerH - 56) / 36));
+                        int visible = getVisibleSettingsCount();
+                        int maxScroll = Math.max(0, totalSettings - visible);
                         if (verticalAmount > 0) {
                             settingsScrollOffset = Math.max(0, settingsScrollOffset - 1);
                         } else if (verticalAmount < 0) {
@@ -1525,10 +1516,10 @@ public class MusicPlayerScreen extends Screen {
             int leftCardW = heroW - ctrlAreaW - 6;
 
             // Expand / Collapse Drawer Button at bottom center
-            int toggleW = 86;
+            int toggleW = isExpanded ? Math.min(200, heroW - 40) : Math.min(280, heroW - 40);
             int toggleH = 14;
             int toggleX = heroX + (heroW - toggleW) / 2;
-            int toggleY = heroY + heroH - 15;
+            int toggleY = heroY + heroH - 16;
             if (mx >= toggleX && mx <= toggleX + toggleW && my >= toggleY && my <= toggleY + toggleH) {
                 playClickSound();
                 isExpanded = !isExpanded;
@@ -1537,7 +1528,7 @@ public class MusicPlayerScreen extends Screen {
 
             // Heart favorite on Hero
             int heartX = heroX + leftCardW - 14;
-            int heartY = heroY + 8;
+            int heartY = heroY + 7;
             if (mx >= heartX && mx <= heartX + 14 && my >= heartY && my <= heartY + 14) {
                 if (audioManager.getCurrentTrack() != null) {
                     playClickSound();
@@ -1549,11 +1540,11 @@ public class MusicPlayerScreen extends Screen {
             }
 
             // Timeline Progress Scrubber
-            int artW = 72;
-            int infoX = heroX + 8 + artW + 8;
-            int scrubX = infoX + 28;
-            int scrubY = heroY + 46;
-            int scrubW = (leftCardW - (scrubX - heroX)) - 34;
+            int artW = 64;
+            int infoX = heroX + 7 + artW + 8;
+            int scrubX = infoX + 26;
+            int scrubY = heroY + 42;
+            int scrubW = (leftCardW - (scrubX - heroX)) - 32;
             int scrubH = 4;
 
             if (mx >= scrubX - 6 && mx <= scrubX + scrubW + 6 && my >= scrubY - 8 && my <= scrubY + scrubH + 8) {
@@ -1571,7 +1562,7 @@ public class MusicPlayerScreen extends Screen {
             int prevX = ctrlX + 10;
             int playX = ctrlX + 42;
             int nextX = ctrlX + 82;
-            int playBtnY = heroY + 14;
+            int playBtnY = heroY + 10;
 
             if (mx >= prevX && mx <= prevX + 24 && my >= playBtnY + 5 && my <= playBtnY + 27) {
                 playClickSound();
@@ -1596,9 +1587,9 @@ public class MusicPlayerScreen extends Screen {
                 return true;
             }
 
-            int row2Y = heroY + 54;
+            int row2Y = heroY + 48;
             // 1. Loop Button
-            if (mx >= ctrlX + 8 && mx <= ctrlX + 56 && my >= row2Y && my <= row2Y + 17) {
+            if (mx >= ctrlX + 8 && mx <= ctrlX + 56 && my >= row2Y && my <= row2Y + 16) {
                 playClickSound();
                 audioManager.toggleLoop();
                 statusMessage = audioManager.isLoopCurrent() ? "§a🔁 Loop: On (Repeating track)" : "§7🔁 Loop: Off";
@@ -1607,7 +1598,7 @@ public class MusicPlayerScreen extends Screen {
             }
 
             // 2. Star / Favorite Button
-            if (mx >= ctrlX + 60 && mx <= ctrlX + 108 && my >= row2Y && my <= row2Y + 17) {
+            if (mx >= ctrlX + 60 && mx <= ctrlX + 108 && my >= row2Y && my <= row2Y + 16) {
                 playClickSound();
                 AudioTrack cur = audioManager.getCurrentTrack();
                 if (cur != null) {
@@ -1621,7 +1612,7 @@ public class MusicPlayerScreen extends Screen {
                 return true;
             }
 
-            int row3Y = heroY + 76;
+            int row3Y = heroY + 68;
             // 3. Refresh Button
             if (mx >= ctrlX + 8 && mx <= ctrlX + 56 && my >= row3Y && my <= row3Y + 16) {
                 triggerRefresh();
@@ -1756,7 +1747,6 @@ public class MusicPlayerScreen extends Screen {
             }
             List<AudioTrack> locals = cachedLocalTracks;
                 int itemY = headerY + 22;
-                browserH = Math.max(145, Math.min(185, this.height - browserY - 8));
                 int visibleRows = Math.max(3, (browserH - 54) / 24);
                 int startIdx = Math.min(localScrollOffset, Math.max(0, locals.size() - visibleRows));
                 int endIdx = Math.min(locals.size(), startIdx + visibleRows);
@@ -1817,7 +1807,6 @@ public class MusicPlayerScreen extends Screen {
 
                 List<AudioTrack> favs = com.slowbag.pulse.client.audio.FavoritesManager.getInstance().getFavorites();
                 int itemY = headerY + 22;
-                browserH = Math.max(145, Math.min(185, this.height - browserY - 8));
                 int visibleRows = Math.max(3, (browserH - 54) / 24);
                 int startIdx = Math.min(favoriteScrollOffset, Math.max(0, favs.size() - visibleRows));
                 int endIdx = Math.min(favs.size(), startIdx + visibleRows);
@@ -1962,7 +1951,6 @@ public class MusicPlayerScreen extends Screen {
                 int recentHeaderY = btnRowY + 24;
                 int recentListY = recentHeaderY + 13;
                 List<String> recents = RecentUrlManager.getRecentUrls();
-                browserH = Math.max(145, Math.min(185, this.height - browserY - 8));
                 int maxRecents = Math.min(recents.size(), Math.max(1, (browserH - (recentListY - browserY)) / 22));
 
                 for (int i = 0; i < maxRecents; i++) {
@@ -2025,18 +2013,18 @@ public class MusicPlayerScreen extends Screen {
             // Tab 4: Settings & Accessibility
             if (selectedTab == 4) {
                 int curY = browserY + 28;
-                int listStartY = curY + 28;
-                int rowH = 36;
+                int listStartY = curY + 26;
+                int rowH = 32;
                 int totalSettings = 11;
-                browserH = Math.max(145, Math.min(185, this.height - browserY - 8));
-                int visibleSettings = Math.max(2, (browserH - 56) / rowH);
+                int visibleSettings = getVisibleSettingsCount();
                 int startIdx = Math.min(settingsScrollOffset, Math.max(0, totalSettings - visibleSettings));
                 int endIdx = Math.min(totalSettings, startIdx + visibleSettings);
 
                 int itemY = listStartY;
                 for (int i = startIdx; i < endIdx; i++) {
-                    int btnY = itemY + 8;
+                    int btnY = itemY + 5;
                     int btnH = 18;
+                    boolean rowClicked = (mx >= startX + 8 && mx <= startX + leftW - 8 && my >= itemY && my <= itemY + rowH - 4);
 
                     if (i == 0) {
                         // Output Device: Prev ◀ | Name | Next ▶
@@ -2070,7 +2058,7 @@ public class MusicPlayerScreen extends Screen {
                         // Mono Audio Downmix
                         int btnW = 86;
                         int btnX = startX + leftW - btnW - 14;
-                        if (mx >= btnX && mx <= btnX + btnW && my >= btnY && my <= btnY + btnH) {
+                        if (rowClicked || (mx >= btnX && mx <= btnX + btnW && my >= btnY && my <= btnY + btnH)) {
                             playClickSound();
                             boolean mono = SettingsManager.getInstance().toggleMonoAudio();
                             statusMessage = mono ? "§e🎧 Mono Audio enabled for accessibility! 🎚" : "§a🎧 Stereo Audio restored! 🎶";
@@ -2082,7 +2070,7 @@ public class MusicPlayerScreen extends Screen {
                         // Reduced Motion
                         int btnW = 86;
                         int btnX = startX + leftW - btnW - 14;
-                        if (mx >= btnX && mx <= btnX + btnW && my >= btnY && my <= btnY + btnH) {
+                        if (rowClicked || (mx >= btnX && mx <= btnX + btnW && my >= btnY && my <= btnY + btnH)) {
                             playClickSound();
                             boolean red = SettingsManager.getInstance().toggleReducedMotion();
                             statusMessage = red ? "§e⏸ Reduced motion enabled for comfort! ✨" : "§a🌊 Dynamic waveform motion enabled! 🎶";
@@ -2103,7 +2091,7 @@ public class MusicPlayerScreen extends Screen {
                             return true;
                         }
 
-                        if (mx >= modeBtnX && mx <= modeBtnX + modeBtnW && my >= btnY && my <= btnY + btnH) {
+                        if (rowClicked || (mx >= modeBtnX && mx <= modeBtnX + modeBtnW && my >= btnY && my <= btnY + btnH)) {
                             playClickSound();
                             String setting = HudConfigManager.getInstance().cycleSetting();
                             statusMessage = "§b🎛 In-Game HUD: " + setting + " ~ Looking gorgeous! ✨";
@@ -2115,7 +2103,7 @@ public class MusicPlayerScreen extends Screen {
                         // Nametag Music Badge
                         int btnW = 86;
                         int btnX = startX + leftW - btnW - 14;
-                        if (mx >= btnX && mx <= btnX + btnW && my >= btnY && my <= btnY + btnH) {
+                        if (rowClicked || (mx >= btnX && mx <= btnX + btnW && my >= btnY && my <= btnY + btnH)) {
                             playClickSound();
                             boolean enabled = com.slowbag.pulse.client.audio.MusicBadgeManager.toggleBadgeEnabled();
                             statusMessage = enabled ? "§a✔ Nametag Music Badge: Enabled ~ Shining bright! ✨" : "§7✕ Nametag Music Badge: Disabled 💕";
@@ -2127,7 +2115,7 @@ public class MusicPlayerScreen extends Screen {
                         // Background Playback
                         int btnW = 86;
                         int btnX = startX + leftW - btnW - 14;
-                        if (mx >= btnX && mx <= btnX + btnW && my >= btnY && my <= btnY + btnH) {
+                        if (rowClicked || (mx >= btnX && mx <= btnX + btnW && my >= btnY && my <= btnY + btnH)) {
                             playClickSound();
                             boolean bg = SettingsManager.getInstance().toggleBackgroundPlayback();
                             statusMessage = bg ? "§a🖥 Background music playback: Always Play! 🎶" : "§c🔇 Mute music when game is unfocused! 🌙";
@@ -2139,7 +2127,7 @@ public class MusicPlayerScreen extends Screen {
                         // Network Buffer Cushion
                         int btnW = 86;
                         int btnX = startX + leftW - btnW - 14;
-                        if (mx >= btnX && mx <= btnX + btnW && my >= btnY && my <= btnY + btnH) {
+                        if (rowClicked || (mx >= btnX && mx <= btnX + btnW && my >= btnY && my <= btnY + btnH)) {
                             playClickSound();
                             int sec = SettingsManager.getInstance().cyclePreloadSeconds();
                             statusMessage = "§a⚡ Network buffer cushion: " + sec + "s preload protection against lag! 🛡";
@@ -2151,7 +2139,7 @@ public class MusicPlayerScreen extends Screen {
                         // Toast Alerts
                         int btnW = 86;
                         int btnX = startX + leftW - btnW - 14;
-                        if (mx >= btnX && mx <= btnX + btnW && my >= btnY && my <= btnY + btnH) {
+                        if (rowClicked || (mx >= btnX && mx <= btnX + btnW && my >= btnY && my <= btnY + btnH)) {
                             playClickSound();
                             boolean toast = SettingsManager.getInstance().toggleToastNotifications();
                             statusMessage = toast ? "§a🔔 In-game toast popups enabled! ✨" : "§7🔔 In-game toast popups muted. 🌙";
@@ -2163,7 +2151,7 @@ public class MusicPlayerScreen extends Screen {
                         // Game Sound Ducking
                         int btnW = 86;
                         int btnX = startX + leftW - btnW - 14;
-                        if (mx >= btnX && mx <= btnX + btnW && my >= btnY && my <= btnY + btnH) {
+                        if (rowClicked || (mx >= btnX && mx <= btnX + btnW && my >= btnY && my <= btnY + btnH)) {
                             playClickSound();
                             boolean duck = SettingsManager.getInstance().toggleAutoDucking();
                             statusMessage = duck ? "§a🔉 Game sound ducking active during music! 🎧" : "§7🔉 Game sound ducking disabled.";
@@ -2175,7 +2163,7 @@ public class MusicPlayerScreen extends Screen {
                         // Continuous Playback
                         int btnW = 86;
                         int btnX = startX + leftW - btnW - 14;
-                        if (mx >= btnX && mx <= btnX + btnW && my >= btnY && my <= btnY + btnH) {
+                        if (rowClicked || (mx >= btnX && mx <= btnX + btnW && my >= btnY && my <= btnY + btnH)) {
                             playClickSound();
                             boolean cont = SettingsManager.getInstance().toggleContinuousPlayback();
                             statusMessage = cont ? "§a♾ Continuous playback active: Never-ending music! 🎶" : "§7♾ Continuous playback disabled.";
@@ -2187,7 +2175,7 @@ public class MusicPlayerScreen extends Screen {
                         // Clear Cache
                         int btnW = 86;
                         int btnX = startX + leftW - btnW - 14;
-                        if (mx >= btnX && mx <= btnX + btnW && my >= btnY && my <= btnY + btnH) {
+                        if (rowClicked || (mx >= btnX && mx <= btnX + btnW && my >= btnY && my <= btnY + btnH)) {
                             playClickSound();
                             long freed = SettingsManager.getInstance().clearCache();
                             statusMessage = "§a🧹 Audio cache cleaned! Freed storage. ✨";
@@ -2202,14 +2190,14 @@ public class MusicPlayerScreen extends Screen {
 
             // 4. Right Column: Volume Card, Queue Card (Expanded mode only)
             if (twoCol && rightW > 50) {
-                int rightX = startX + leftW + 10;
+                int rightX = startX + leftW + 8;
                 int volY = heroY;
-                int volH = 30;
-                int sliderX = rightX + 28;
-                int sliderW = rightW - 78;
+                int volH = 26;
+                int sliderX = rightX + 26;
+                int sliderW = rightW - 74;
 
                 // Volume slider
-                if (mx >= sliderX - 4 && mx <= sliderX + sliderW + 4 && my >= volY + 6 && my <= volY + 24) {
+                if (mx >= sliderX - 4 && mx <= sliderX + sliderW + 4 && my >= volY + 4 && my <= volY + 22) {
                     isDraggingVolume = true;
                     float newVol = (float) Math.max(0.0, Math.min(1.0, (mx - sliderX) / (double) sliderW));
                     audioManager.setVolume(newVol);
@@ -2218,7 +2206,7 @@ public class MusicPlayerScreen extends Screen {
 
                 // Mute button
                 int muteBtnX = rightX + rightW - 18;
-                if (mx >= muteBtnX && mx <= muteBtnX + 16 && my >= volY + 6 && my <= volY + 24) {
+                if (mx >= muteBtnX && mx <= muteBtnX + 14 && my >= volY + 4 && my <= volY + 22) {
                     playClickSound();
                     audioManager.setMuted(!audioManager.isMuted());
                     statusMessage = audioManager.isMuted() ? "§e🔇 Shh... Audio muted gently! 🤫" : "§a🔊 Audio restored! Let the music dance ~ 🎵";
@@ -2259,16 +2247,16 @@ public class MusicPlayerScreen extends Screen {
                     }
                 }
 
-                int visibleRows = Math.max(2, (queueH - 28) / 28);
+                int visibleRows = Math.max(2, (queueH - 26) / 26);
                 int startIdx = Math.min(queueScrollOffset, Math.max(0, upNext.size() - visibleRows));
                 int endIdx = Math.min(upNext.size(), startIdx + visibleRows);
                 int qItemY = queueY + 24;
 
                 for (int i = startIdx; i < endIdx; i++) {
                     AudioTrack t = upNext.get(i);
-                    int btnW = 16;
-                    int btnH = 16;
-                    int btnY = qItemY + 5;
+                    int btnW = 15;
+                    int btnH = 15;
+                    int btnY = qItemY + 4;
                     int gap = 3;
 
                     int qRemoveX = rightX + rightW - 8 - btnW;
@@ -2318,8 +2306,8 @@ public class MusicPlayerScreen extends Screen {
                     }
 
                     // Click row body text area to play
-                    int textX = rightX + 8 + 18 + 4;
-                    if (mx >= textX && mx < qUpX - 4 && my >= qItemY + 2 && my <= qItemY + 26) {
+                    int textX = rightX + 8 + 15 + 4;
+                    if (mx >= textX && mx < qUpX - 4 && my >= qItemY + 2 && my <= qItemY + 24) {
                         playClickSound();
                         audioManager.removeFromQueue(i);
                         audioManager.playTrack(t);
@@ -2328,7 +2316,7 @@ public class MusicPlayerScreen extends Screen {
                         return true;
                     }
 
-                    qItemY += 28;
+                    qItemY += 26;
                 }
             }
             } // if (isExpanded)
@@ -2367,20 +2355,20 @@ public class MusicPlayerScreen extends Screen {
                 int heroW = getHeroWidth();
                 int ctrlAreaW = 118;
                 int leftCardW = heroW - ctrlAreaW - 6;
-                int artW = 72;
-                int infoX = heroX + 8 + artW + 8;
-                int scrubX = infoX + 28;
-                int scrubW = (leftCardW - (scrubX - heroX)) - 34;
+                int artW = 64;
+                int infoX = heroX + 7 + artW + 8;
+                int scrubX = infoX + 26;
+                int scrubW = (leftCardW - (scrubX - heroX)) - 32;
                 draggedScrubRatio = Math.max(0.0, Math.min(1.0, (event.x() - scrubX) / (double) scrubW));
                 return true;
             }
             if (isDraggingVolume && isExpanded && this.width >= 500) {
                 int expStartX = getExpStartX();
                 int leftW = getExpLeftWidth();
-                int rightX = expStartX + leftW + 10;
+                int rightX = expStartX + leftW + 8;
                 int rightW = getExpRightWidth();
-                int sliderX = rightX + 28;
-                int sliderW = rightW - 78;
+                int sliderX = rightX + 26;
+                int sliderW = rightW - 74;
                 float newVol = (float) Math.max(0.0, Math.min(1.0, (event.x() - sliderX) / (double) sliderW));
                 audioManager.setVolume(newVol);
                 return true;
