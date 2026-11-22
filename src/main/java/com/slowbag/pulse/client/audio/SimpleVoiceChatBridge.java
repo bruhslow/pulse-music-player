@@ -80,7 +80,18 @@ public class SimpleVoiceChatBridge {
 
     public void injectAudio(short[] samples, int offset, int length, int sampleRate, int channels) {
         if (samples == null || length <= 0) return;
-        short[] mono48k = resampleTo48kMono(samples, offset, length, sampleRate, channels);
+        AudioManager am = AudioManager.getInstance();
+        if (am.isMuted()) {
+            clearBuffer();
+            return;
+        }
+        float vol = am.getVolume();
+        if (vol <= 0.001f) {
+            clearBuffer();
+            return;
+        }
+
+        short[] mono48k = resampleTo48kMono(samples, offset, length, sampleRate, channels, vol);
         if (mono48k != null && mono48k.length > 0) {
             // Buffer up to ~2 seconds of audio (100 frames) to prevent memory buildup
             if (pcmQueue.size() < 100) {
@@ -91,6 +102,11 @@ public class SimpleVoiceChatBridge {
 
     public void injectAudio(byte[] pcmBytes, int offset, int length, int sampleRate, int channels) {
         if (pcmBytes == null || length < 2) return;
+        AudioManager am = AudioManager.getInstance();
+        if (am.isMuted() || am.getVolume() <= 0.001f) {
+            clearBuffer();
+            return;
+        }
         int sampleCount = length / 2;
         short[] samples = new short[sampleCount];
         for (int i = 0; i < sampleCount; i++) {
@@ -100,17 +116,20 @@ public class SimpleVoiceChatBridge {
         injectAudio(samples, 0, sampleCount, sampleRate, channels);
     }
 
-    private short[] resampleTo48kMono(short[] src, int offset, int len, int srcRate, int channels) {
+    private short[] resampleTo48kMono(short[] src, int offset, int len, int srcRate, int channels, float volume) {
         if (srcRate <= 0) srcRate = 44100;
         if (channels <= 0) channels = 2;
 
         int frameCount = len / channels;
         if (frameCount <= 0) return null;
 
-        // 1. Downmix to mono
+        // 1. Downmix to mono and apply player volume scaling
         short[] monoSrc = new short[frameCount];
         if (channels == 1) {
-            System.arraycopy(src, offset, monoSrc, 0, frameCount);
+            for (int i = 0; i < frameCount; i++) {
+                int s = Math.round(src[offset + i] * volume);
+                monoSrc[i] = (short) Math.max(-32768, Math.min(32767, s));
+            }
         } else {
             for (int i = 0; i < frameCount; i++) {
                 int base = offset + i * channels;
@@ -118,7 +137,9 @@ public class SimpleVoiceChatBridge {
                 for (int c = 0; c < channels; c++) {
                     sum += src[base + c];
                 }
-                monoSrc[i] = (short) (sum / channels);
+                int avg = sum / channels;
+                int s = Math.round(avg * volume);
+                monoSrc[i] = (short) Math.max(-32768, Math.min(32767, s));
             }
         }
 
@@ -151,6 +172,11 @@ public class SimpleVoiceChatBridge {
     private short[] remainder = new short[0];
 
     public short[] pollFrame() {
+        AudioManager am = AudioManager.getInstance();
+        if (am.isMuted() || am.getVolume() <= 0.001f) {
+            clearBuffer();
+            return null;
+        }
         synchronized (frameLock) {
             if (pcmQueue.isEmpty() && remainder.length == 0) {
                 return null;
@@ -320,6 +346,9 @@ public class SimpleVoiceChatBridge {
     }
 
     public void clearBuffer() {
-        pcmQueue.clear();
+        synchronized (frameLock) {
+            pcmQueue.clear();
+            remainder = new short[0];
+        }
     }
 }

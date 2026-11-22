@@ -829,12 +829,18 @@ public class AudioManager {
         if (activeDevice != null) {
             activeDevice.setMuted(muted);
         }
+        if (muted) {
+            SimpleVoiceChatBridge.getInstance().clearBuffer();
+        }
     }
 
     public void setVolume(float volume) {
         this.volume = Math.max(0.0f, Math.min(1.0f, volume));
         if (activeDevice != null) {
             activeDevice.setVolume(this.volume);
+        }
+        if (this.volume <= 0.001f) {
+            SimpleVoiceChatBridge.getInstance().clearBuffer();
         }
         if (wavLine != null && wavLine.isOpen()) {
             try {

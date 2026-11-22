@@ -227,6 +227,13 @@ public class YouTubeResolver {
                     return;
                 }
             }
+            if (obj.has("lockupViewModel")) {
+                AudioTrack track = parseLockupViewModel(obj.getAsJsonObject("lockupViewModel"), "YouTube Playlist");
+                if (track != null) {
+                    tracks.add(track);
+                    return;
+                }
+            }
             for (String key : obj.keySet()) {
                 collectPlaylistVideos(obj.get(key), tracks, limit);
             }
@@ -235,6 +242,132 @@ public class YouTubeResolver {
                 collectPlaylistVideos(item, tracks, limit);
             }
         }
+    }
+
+    public static AudioTrack parseLockupViewModel(JsonObject lvm, String category) {
+        if (lvm == null) return null;
+
+        if (lvm.has("contentType")) {
+            String ct = lvm.get("contentType").getAsString();
+            if (!"LOCKUP_CONTENT_TYPE_VIDEO".equalsIgnoreCase(ct)) {
+                return null;
+            }
+        }
+
+        String videoId = null;
+        if (lvm.has("contentId") && !lvm.get("contentId").isJsonNull()) {
+            videoId = lvm.get("contentId").getAsString();
+        }
+        if ((videoId == null || videoId.isEmpty()) && lvm.has("rendererContext")) {
+            try {
+                videoId = lvm.getAsJsonObject("rendererContext")
+                             .getAsJsonObject("commandContext")
+                             .getAsJsonObject("onTap")
+                             .getAsJsonObject("innertubeCommand")
+                             .getAsJsonObject("watchEndpoint")
+                             .get("videoId").getAsString();
+            } catch (Throwable ignored) {}
+        }
+
+        if (videoId == null || !videoId.matches("^[a-zA-Z0-9_-]{11}$")) {
+            return null;
+        }
+
+        String title = "YouTube Track";
+        String artist = "YouTube";
+
+        if (lvm.has("metadata")) {
+            JsonObject md = lvm.getAsJsonObject("metadata");
+            if (md.has("lockupMetadataViewModel")) {
+                JsonObject lmd = md.getAsJsonObject("lockupMetadataViewModel");
+                if (lmd.has("title") && lmd.getAsJsonObject("title").has("content")) {
+                    title = lmd.getAsJsonObject("title").get("content").getAsString();
+                }
+                if (lmd.has("metadata")) {
+                    JsonObject cmd = lmd.getAsJsonObject("metadata");
+                    if (cmd.has("contentMetadataViewModel")) {
+                        JsonObject cmvm = cmd.getAsJsonObject("contentMetadataViewModel");
+                        if (cmvm.has("metadataRows")) {
+                            JsonArray rows = cmvm.getAsJsonArray("metadataRows");
+                            if (rows.size() > 0 && rows.get(0).isJsonObject()) {
+                                JsonObject r0 = rows.get(0).getAsJsonObject();
+                                if (r0.has("metadataParts")) {
+                                    JsonArray parts = r0.getAsJsonArray("metadataParts");
+                                    if (parts.size() > 0 && parts.get(0).isJsonObject()) {
+                                        JsonObject p0 = parts.get(0).getAsJsonObject();
+                                        if (p0.has("text") && p0.getAsJsonObject("text").has("content")) {
+                                            artist = p0.getAsJsonObject("text").get("content").getAsString();
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        if ("YouTube Track".equals(title) && lvm.has("rendererContext")) {
+            try {
+                JsonObject a11y = lvm.getAsJsonObject("rendererContext").getAsJsonObject("accessibilityContext");
+                if (a11y.has("label")) {
+                    String lbl = a11y.get("label").getAsString();
+                    if (lbl != null && !lbl.isBlank()) {
+                        title = lbl;
+                    }
+                }
+            } catch (Throwable ignored) {}
+        }
+
+        long duration = 180;
+        String thumb = "https://i.ytimg.com/vi/" + videoId + "/hqdefault.jpg";
+
+        if (lvm.has("contentImage")) {
+            JsonObject ci = lvm.getAsJsonObject("contentImage");
+            if (ci.has("thumbnailViewModel")) {
+                JsonObject tvm = ci.getAsJsonObject("thumbnailViewModel");
+                if (tvm.has("image")) {
+                    JsonObject img = tvm.getAsJsonObject("image");
+                    if (img.has("sources")) {
+                        JsonArray sources = img.getAsJsonArray("sources");
+                        if (sources.size() > 0) {
+                            thumb = sources.get(sources.size() - 1).getAsJsonObject().get("url").getAsString();
+                        }
+                    }
+                }
+                if (tvm.has("overlays")) {
+                    JsonArray overlays = tvm.getAsJsonArray("overlays");
+                    for (JsonElement ovEl : overlays) {
+                        if (ovEl.isJsonObject()) {
+                            JsonObject ov = ovEl.getAsJsonObject();
+                            if (ov.has("thumbnailBottomOverlayViewModel")) {
+                                JsonObject tbovm = ov.getAsJsonObject("thumbnailBottomOverlayViewModel");
+                                if (tbovm.has("badges")) {
+                                    JsonArray badges = tbovm.getAsJsonArray("badges");
+                                    for (JsonElement bEl : badges) {
+                                        if (bEl.isJsonObject()) {
+                                            JsonObject b = bEl.getAsJsonObject();
+                                            if (b.has("thumbnailBadgeViewModel")) {
+                                                JsonObject tbvm = b.getAsJsonObject("thumbnailBadgeViewModel");
+                                                if (tbvm.has("text")) {
+                                                    String t = tbvm.get("text").getAsString();
+                                                    if (t != null && t.contains(":")) {
+                                                        duration = parseDurationToSeconds(t);
+                                                        break;
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        return new AudioTrack(title, artist, "https://www.youtube.com/watch?v=" + videoId, false, duration, category, thumb);
     }
 
     public static List<AudioTrack> search(String query, int limit) {
@@ -304,6 +437,17 @@ public class YouTubeResolver {
                     if (results.size() >= limit) return;
                     if (!itemEl.isJsonObject()) continue;
                     JsonObject itemObj = itemEl.getAsJsonObject();
+
+                    if (itemObj.has("lockupViewModel")) {
+                        AudioTrack track = parseLockupViewModel(itemObj.getAsJsonObject("lockupViewModel"), "YouTube");
+                        if (track != null) {
+                            if (track.getDurationSeconds() >= 30 && track.getDurationSeconds() <= 720) {
+                                results.add(track);
+                            }
+                        }
+                        continue;
+                    }
+
                     if (!itemObj.has("videoRenderer")) continue;
 
                     JsonObject vr = itemObj.getAsJsonObject("videoRenderer");
