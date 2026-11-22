@@ -188,16 +188,16 @@ public class MusicPlayerScreen extends Screen {
 
     // Responsive Layout Dimensions
     private int getPillY() {
-        return Math.max(4, isExpanded ? (getHeroY() - 25) : ((this.height - 106) / 2 - 28));
+        return Math.max(4, isExpanded ? (getHeroY() - 25) : ((this.height - 108) / 2 - 28));
     }
 
     private int getExpTotalWidth() {
-        return Math.min(580, this.width - 24);
+        return Math.min(640, this.width - 24);
     }
 
     private int getExpLeftWidth() {
         int totalW = getExpTotalWidth();
-        return (this.width >= 500) ? (int) (totalW * 0.53) : totalW;
+        return (this.width >= 500) ? (int) (totalW * 0.58) : totalW;
     }
 
     private int getExpRightWidth() {
@@ -209,32 +209,32 @@ public class MusicPlayerScreen extends Screen {
     }
 
     private int getHeroX() {
-        int compactW = Math.min(460, this.width - 24);
+        int compactW = Math.min(480, this.width - 24);
         int compactX = (this.width - compactW) / 2;
         int expStartX = getExpStartX();
         return (int) AnimationUtil.lerp(compactX, expStartX, expandProgress);
     }
 
     private int getHeroY() {
-        int compactH = 106;
+        int compactH = 108;
         int compactY = (this.height - compactH) / 2;
-        int totalExpH = getHeroHeight() + 6 + getDrawerHeight();
-        int expStartY = Math.max(30, (this.height - totalExpH) / 2 + 10);
+        int totalExpH = getHeroHeight() + 8 + getDrawerHeight();
+        int expStartY = Math.max(26, (this.height - totalExpH) / 2 + 10);
         return (int) AnimationUtil.lerp(compactY, expStartY, expandProgress);
     }
 
     private int getHeroWidth() {
-        int compactW = Math.min(460, this.width - 24);
+        int compactW = Math.min(480, this.width - 24);
         int expLeftW = getExpLeftWidth();
         return (int) AnimationUtil.lerp(compactW, expLeftW, expandProgress);
     }
 
     private int getHeroHeight() {
-        return 102;
+        return 108;
     }
 
     private int getDrawerY() {
-        return getHeroY() + getHeroHeight() + 6;
+        return getHeroY() + getHeroHeight() + 8;
     }
 
     private int getDrawerHeight() {
@@ -400,7 +400,7 @@ public class MusicPlayerScreen extends Screen {
 
         // Dedicated Frosted Deep Obsidian Container for Left section (subtle translucent glass)
         int leftCardW = infoAreaW;
-        drawSoftBox(graphics, x + 3, y + 3, leftCardW, h - 6, 4, 0x30181A1D, 0x25FFFFFF);
+        drawSoftBox(graphics, x + 3, y + 3, leftCardW, 83, 4, 0x30181A1D, 0x25FFFFFF);
         graphics.fill(x + 8, y + 4, x + leftCardW - 2, y + 5, 0x15FFFFFF);
 
         // 1. Album Art Thumbnail (Left - 16:9 aspect frame: 64x42)
@@ -482,9 +482,9 @@ public class MusicPlayerScreen extends Screen {
         // 4. Live Audio Waveform Equalizer (Under scrubber)
         float[] rawBands = audioManager.getVisualizerBands();
         int waveX = x + 8;
-        int waveY = y + 76;
+        int waveY = y + 74;
         int waveBars = Math.max(16, (leftCardW - 16) / 7);
-        int maxWaveH = 10;
+        int maxWaveH = 8;
         long timeMs = System.currentTimeMillis();
         double t = timeMs / 1000.0;
         float peak = audioManager.getPeakLevel();
@@ -522,21 +522,25 @@ public class MusicPlayerScreen extends Screen {
             graphics.fill(barX, barY, barX + 5, barY + 1, 0xFFFFD090);
         }
 
+        // Horizontal separator above the expand/collapse footer
+        graphics.fill(x + 6, y + 87, x + w - 6, y + 88, 0x14FFFFFF);
+
         // 5. Expand / Collapse Drawer Button at bottom center (Lengthy pill bar with glowing rim)
-        int toggleW = isExpanded ? Math.min(200, w - 40) : Math.min(280, w - 40);
-        int toggleH = 14;
+        int toggleW = isExpanded ? Math.min(180, w - 40) : Math.min(220, w - 40);
+        int toggleH = 15;
         int toggleX = x + (w - toggleW) / 2;
-        int toggleY = y + h - 16;
+        int toggleY = y + 89;
         boolean toggleHov = mouseX >= toggleX && mouseX <= toggleX + toggleW && mouseY >= toggleY && mouseY <= toggleY + toggleH;
         int toggleBg = toggleHov ? 0x90D97746 : 0x4516181B;
         int toggleBorder = toggleHov ? 0xFFFFA070 : 0x80D97746;
         drawSoftBox(graphics, toggleX, toggleY, toggleW, toggleH, 4, toggleBg, toggleBorder);
-        String toggleText = isExpanded ? "§6▲  C O L L A P S E  ▲" : "§6▼  E X P A N D  L I B R A R Y  &  Q U E U E  ▼";
-        graphics.centeredText(this.font, Component.literal(toggleText), toggleX + toggleW / 2, toggleY + 3, toggleHov ? 0xFFFFFFFF : 0xFFFFD090);
+        String toggleText = isExpanded ? "§6▲  C O L L A P S E  ▲" : "§6▼  E X P A N D  ▼";
+        graphics.centeredText(this.font, Component.literal(toggleText), toggleX + toggleW / 2, toggleY + 4, toggleHov ? 0xFFFFFFFF : 0xFFFFD090);
 
         // 6. Right Section: Integrated Controls Panel
         int ctrlX = x + w - ctrlAreaW;
-        graphics.fill(ctrlX, y + 4, ctrlX + 1, y + h - 4, 0x18FFFFFF);
+        drawSoftBox(graphics, ctrlX + 2, y + 3, ctrlAreaW - 5, 83, 4, 0x20181A1D, 0x20FFFFFF);
+        graphics.fill(ctrlX, y + 6, ctrlX + 1, y + 84, 0x18FFFFFF);
 
         // Row 1: Previous | Big Play/Pause | Next
         int prevX = ctrlX + 10;
@@ -577,8 +581,7 @@ public class MusicPlayerScreen extends Screen {
 
         // Top Tab Bar
         int tabCount = tabs.length;
-        int actionIconsW = 38;
-        int tabW = (w - 16 - actionIconsW) / tabCount;
+        int tabW = (w - 16) / tabCount;
         int tabY = y + 5;
 
         for (int i = 0; i < tabCount; i++) {
@@ -598,14 +601,6 @@ public class MusicPlayerScreen extends Screen {
             }
             graphics.centeredText(this.font, Component.literal(tabLabel), tx + (tabW - 4) / 2, tabY + 5, isSel ? 0xFFFFFFFF : 0xFFA0988E);
         }
-
-        // Action icons on right of Tab Bar: 🔔 Notifications & ⚙ Settings
-        int bellX = x + w - 34;
-        int gearX = x + w - 18;
-        boolean bellHov = mouseX >= bellX && mouseX <= bellX + 14 && mouseY >= tabY && mouseY <= tabY + 18;
-        boolean gearHov = mouseX >= gearX && mouseX <= gearX + 14 && mouseY >= tabY && mouseY <= tabY + 18;
-        graphics.text(this.font, Component.literal(bellHov ? "§6🔔" : "§7🔔"), bellX, tabY + 4, 0xFFFFFFFF, false);
-        graphics.text(this.font, Component.literal(gearHov || selectedTab == 4 ? "§6⚙" : "§7⚙"), gearX, tabY + 4, 0xFFFFFFFF, false);
 
         // Tab Content
         renderTabContent(graphics, x, y + 26, w, h - 28, mouseX, mouseY);
@@ -1516,10 +1511,10 @@ public class MusicPlayerScreen extends Screen {
             int leftCardW = heroW - ctrlAreaW - 6;
 
             // Expand / Collapse Drawer Button at bottom center
-            int toggleW = isExpanded ? Math.min(200, heroW - 40) : Math.min(280, heroW - 40);
-            int toggleH = 14;
+            int toggleW = isExpanded ? Math.min(180, heroW - 40) : Math.min(220, heroW - 40);
+            int toggleH = 15;
             int toggleX = heroX + (heroW - toggleW) / 2;
-            int toggleY = heroY + heroH - 16;
+            int toggleY = heroY + 89;
             if (mx >= toggleX && mx <= toggleX + toggleW && my >= toggleY && my <= toggleY + toggleH) {
                 playClickSound();
                 isExpanded = !isExpanded;
@@ -1639,36 +1634,19 @@ public class MusicPlayerScreen extends Screen {
                 int browserY = getDrawerY();
                 int browserH = getDrawerHeight();
                 int tabCount = tabs.length;
-                int actionIconsW = 38;
-                int tabW = (leftW - 16 - actionIconsW) / tabCount;
+                int tabW = (leftW - 16) / tabCount;
                 int tabY = browserY + 5;
 
-            for (int i = 0; i < tabCount; i++) {
-                int tx = startX + 8 + (i * tabW);
-                if (mx >= tx && mx <= tx + tabW - 4 && my >= tabY && my <= tabY + 18) {
-                    playClickSound();
-                    selectedTab = i;
-                    isSearchFocused = (i == 0);
-                    isUrlFocused = (i == 3);
-                    return true;
+                for (int i = 0; i < tabCount; i++) {
+                    int tx = startX + 8 + (i * tabW);
+                    if (mx >= tx && mx <= tx + tabW - 4 && my >= tabY && my <= tabY + 18) {
+                        playClickSound();
+                        selectedTab = i;
+                        isSearchFocused = (i == 0);
+                        isUrlFocused = (i == 3);
+                        return true;
+                    }
                 }
-            }
-
-            int bellX = startX + leftW - 34;
-            int gearX = startX + leftW - 18;
-            if (mx >= bellX && mx <= bellX + 14 && my >= tabY && my <= tabY + 18) {
-                playClickSound();
-                statusMessage = "§a🔔 No new notifications ~ Listening smoothly!";
-                statusMessageTime = System.currentTimeMillis();
-                return true;
-            }
-            if (mx >= gearX && mx <= gearX + 14 && my >= tabY && my <= tabY + 18) {
-                playClickSound();
-                selectedTab = (selectedTab == 4) ? 0 : 4;
-                isSearchFocused = false;
-                isUrlFocused = false;
-                return true;
-            }
 
             // Tab 0: Search
             if (selectedTab == 0) {
