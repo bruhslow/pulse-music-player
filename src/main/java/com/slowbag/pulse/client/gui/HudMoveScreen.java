@@ -52,9 +52,9 @@ public class HudMoveScreen extends Screen {
         int headerH = 34;
         int headerX = (this.width - headerW) / 2;
         int headerY = 10;
-        MusicPlayerScreen.drawSoftBox(graphics, headerX, headerY, headerW, headerH, 5, 0xF0141C16, 0xFF7EBA8C);
-        graphics.centeredText(this.font, Component.literal("§a§l✦ DRAG HUD ANYWHERE ON SCREEN ✦"), this.width / 2, headerY + 6, 0xFFFFFFFF);
-        graphics.centeredText(this.font, Component.literal("§7Click and hold the music card to drag • Release to save position"), this.width / 2, headerY + 19, 0xFFA0C0AB);
+        MusicPlayerScreen.drawSoftBox(graphics, headerX, headerY, headerW, headerH, 5, 0xF0181A1B, 0xFFD97746);
+        graphics.centeredText(this.font, Component.literal("§6§l✦ DRAG HUD ANYWHERE ON SCREEN ✦"), this.width / 2, headerY + 6, 0xFFFFFFFF);
+        graphics.centeredText(this.font, Component.literal("§7Click and hold the music card to drag • Release to save position"), this.width / 2, headerY + 19, 0xFFA0988E);
 
         // Render HUD Card Preview
         HudConfigManager cfg = HudConfigManager.getInstance();
@@ -64,8 +64,8 @@ public class HudMoveScreen extends Screen {
         String artist = track != null ? track.getArtist() : "Lofi Girl Records";
 
         // HUD Capsule Body (Rounded pill with soft 5px curved corners)
-        int cardBg = isDragging ? 0xF018241D : 0xEE141C16;
-        int borderCol = isDragging ? 0xFF8DE4A2 : 0xFF7EBA8C;
+        int cardBg = isDragging ? 0xF02A241F : 0xEE141618;
+        int borderCol = isDragging ? 0xFFFFD700 : 0xFFD97746;
 
         graphics.fill(previewX + 5, previewY, previewX + hudW - 5, previewY + 1, cardBg);
         graphics.fill(previewX + 3, previewY + 1, previewX + hudW - 3, previewY + 2, cardBg);
@@ -117,15 +117,15 @@ public class HudMoveScreen extends Screen {
             double normX = px / 10.0;
             double wave = Math.sin(normX * 4.2 + moveTime) * 0.7;
             int curY = cy + (int) Math.round(wave * 4.0);
-            graphics.fill(curX, curY - 1, curX + 1, curY, 0x607EBA8C);
-            graphics.fill(curX, curY, curX + 1, curY + 1, 0xFFE8F7ED);
-            graphics.fill(curX, curY + 1, curX + 1, curY + 2, 0x607EBA8C);
+            graphics.fill(curX, curY - 1, curX + 1, curY, 0x60D97746);
+            graphics.fill(curX, curY, curX + 1, curY + 1, 0xFFFFF0D0);
+            graphics.fill(curX, curY + 1, curX + 1, curY + 2, 0x60D97746);
         }
         graphics.fill(cx - 1, cy - 1, cx + 2, cy + 2, 0xFFFFFFFF);
 
         // Info Text (Full width across the pill without bars)
         graphics.text(this.font, Component.literal("§f§l" + truncate(title, 26)), previewX + 38, previewY + 5, 0xFFFFFFFF, false);
-        graphics.text(this.font, Component.literal("§7" + truncate(artist + " • 2:45", 28)), previewX + 38, previewY + 17, 0xFFA0C0AB, false);
+        graphics.text(this.font, Component.literal("§7" + truncate(artist + " • 2:45", 28)), previewX + 38, previewY + 17, 0xFFA0988E, false);
 
         // Bottom Controls: Snap Presets & Save Done
         int bottomY = this.height - 32;
@@ -165,23 +165,23 @@ public class HudMoveScreen extends Screen {
         int compBtnW = 110;
         int compBtnX = 12 + (btnW + 6) * 4;
         boolean compHov = mouseX >= compBtnX && mouseX <= compBtnX + compBtnW && mouseY >= bottomY && mouseY <= bottomY + btnH;
-        MusicPlayerScreen.drawSoftBox(graphics, compBtnX, bottomY, compBtnW, btnH, 3, compactOn ? (compHov ? 0xFF61B279 : 0xFF539E69) : (compHov ? 0x60FFFFFF : 0x25FFFFFF), compHov ? 0xFFFFFFFF : 0x35FFFFFF);
+        MusicPlayerScreen.drawSoftBox(graphics, compBtnX, bottomY, compBtnW, btnH, 3, compactOn ? (compHov ? 0xFFE0783E : 0xFFD97746) : (compHov ? 0x60FFFFFF : 0x25FFFFFF), compHov ? 0xFFFFFFFF : 0x35FFFFFF);
         graphics.centeredText(this.font, Component.literal(compactOn ? "§fAuto-Compact: §aON" : "§7Auto-Compact: §cOFF"), compBtnX + compBtnW / 2, bottomY + 6, 0xFFFFFFFF);
 
         // Save & Done Button (Green pill on far right)
         int doneW = 86;
         int doneX = this.width - doneW - 12;
         boolean doneHov = mouseX >= doneX && mouseX <= doneX + doneW && mouseY >= bottomY && mouseY <= bottomY + btnH;
-        MusicPlayerScreen.drawSoftBox(graphics, doneX, bottomY, doneW, btnH, 3, doneHov ? 0xFF61B279 : 0xFF539E69, doneHov ? 0xFFD5F7E1 : 0x807EBA8C);
+        MusicPlayerScreen.drawSoftBox(graphics, doneX, bottomY, doneW, btnH, 3, doneHov ? 0xFF22C55E : 0xFF16A34A, doneHov ? 0xFFFFFFFF : 0x50FFFFFF);
         graphics.centeredText(this.font, Component.literal("§f✔ Save & Done"), doneX + doneW / 2, bottomY + 6, 0xFFFFFFFF);
 
         // Coordinates display
-        graphics.text(this.font, Component.literal("§7Position: §aX=" + previewX + ", Y=" + previewY), previewX, previewY - 10, 0xFFFFFFFF, false);
+        graphics.text(this.font, Component.literal("§7Position: §6X=" + previewX + ", Y=" + previewY), previewX, previewY - 10, 0xFFFFFFFF, false);
     }
 
     private void drawSnapButton(GuiGraphicsExtractor graphics, int bx, int by, int bw, int bh, String label, int mx, int my, Runnable action) {
         boolean hov = mx >= bx && mx <= bx + bw && my >= by && my <= by + bh;
-        MusicPlayerScreen.drawSoftBox(graphics, bx, by, bw, bh, 3, hov ? 0x807EBA8C : 0x25FFFFFF, hov ? 0xFF7EBA8C : 0x30FFFFFF);
+        MusicPlayerScreen.drawSoftBox(graphics, bx, by, bw, bh, 3, hov ? 0x80D97746 : 0x25FFFFFF, hov ? 0xFFD97746 : 0x30FFFFFF);
         graphics.centeredText(this.font, Component.literal("§f" + label), bx + bw / 2, by + 6, 0xFFFFFFFF);
     }
 

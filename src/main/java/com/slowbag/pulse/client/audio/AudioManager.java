@@ -962,6 +962,39 @@ public class AudioManager {
         }
     }
 
+    public synchronized boolean moveQueueItem(int fromIndex, int toIndex) {
+        if (!checkHostPermission("manage the queue")) return false;
+        if (fromIndex < 0 || fromIndex >= upcomingQueue.size() || toIndex < 0 || toIndex >= upcomingQueue.size()) {
+            return false;
+        }
+        AudioTrack track = upcomingQueue.remove(fromIndex);
+        upcomingQueue.add(toIndex, track);
+        return true;
+    }
+
+    public synchronized boolean moveQueueItemUp(int index) {
+        if (index > 0 && index < upcomingQueue.size()) {
+            return moveQueueItem(index, index - 1);
+        }
+        return false;
+    }
+
+    public synchronized boolean moveQueueItemDown(int index) {
+        if (index >= 0 && index < upcomingQueue.size() - 1) {
+            return moveQueueItem(index, index + 1);
+        }
+        return false;
+    }
+
+    public synchronized boolean shuffleQueue() {
+        if (!checkHostPermission("shuffle the queue")) return false;
+        if (upcomingQueue.size() > 1) {
+            java.util.Collections.shuffle(upcomingQueue);
+            return true;
+        }
+        return false;
+    }
+
     public synchronized void clearQueue() {
         if (!checkHostPermission("clear the queue")) return;
         upcomingQueue.clear();
