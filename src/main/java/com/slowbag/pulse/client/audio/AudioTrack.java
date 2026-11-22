@@ -76,7 +76,7 @@ public class AudioTrack {
             if (u.contains("plaza.one")) return "https://plaza.one/apple-touch-icon.png";
             if (u.contains("rsj") || u.contains("swissjazz")) return "https://somafm.com/img3/secretagent120.png";
             if (u.contains("rsc") || u.contains("swissclassic")) return "https://somafm.com/img3/thistle120.png";
-            if (u.contains("youtube.com") || u.contains("youtu.be")) {
+            if (u.contains("youtube.com") || u.contains("youtu.be") || u.startsWith("yt:") || (category != null && category.toLowerCase().contains("youtube"))) {
                 String vid = YouTubeResolver.extractVideoId(url);
                 if (vid != null && !vid.isBlank()) {
                     return "https://i.ytimg.com/vi/" + vid + "/hqdefault.jpg";

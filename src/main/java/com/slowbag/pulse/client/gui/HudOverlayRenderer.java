@@ -103,14 +103,14 @@ public class HudOverlayRenderer {
         int posY = baseY;
 
         int alpha = (int) (240 * ease);
-        int bg = (alpha << 24) | 0x141618;
+        int bg = (alpha << 24) | 0x141C16;
 
         float peak = audio.getPeakLevel();
         smoothPeak = AnimationUtil.lerp(smoothPeak, peak, 0.35f);
 
-        int borderR = (int) AnimationUtil.lerp(0xD9, 0xFF, smoothPeak);
-        int borderG = (int) AnimationUtil.lerp(0x77, 0xA8, smoothPeak);
-        int borderB = (int) AnimationUtil.lerp(0x46, 0x60, smoothPeak);
+        int borderR = (int) AnimationUtil.lerp(0x7E, 0x9A, smoothPeak);
+        int borderG = (int) AnimationUtil.lerp(0xBA, 0xEA, smoothPeak);
+        int borderB = (int) AnimationUtil.lerp(0x8C, 0xB2, smoothPeak);
         int borderColor = (alpha << 24) | (borderR << 16) | (borderG << 8) | borderB;
 
         // 1. Sleek Curvy Pill Card Background & Amber Border
@@ -186,8 +186,8 @@ public class HudOverlayRenderer {
             graphics.fill(cx - 1, cy - 1, cx + 2, cy + 2, (alpha << 24) | 0xFFFFFFFF);
         } else if (audio.isPaused()) {
             // Little pause pause glyph in center
-            graphics.fill(cx - 2, cy - 3, cx - 1, cy + 4, (alpha << 24) | 0xFFD97746);
-            graphics.fill(cx + 1, cy - 3, cx + 2, cy + 4, (alpha << 24) | 0xFFD97746);
+            graphics.fill(cx - 2, cy - 3, cx - 1, cy + 4, (alpha << 24) | 0xFF7EBA8C);
+            graphics.fill(cx + 1, cy - 3, cx + 2, cy + 4, (alpha << 24) | 0xFF7EBA8C);
         }
 
         // 3. Middle Text: Song Info with Smooth Marquee Scrolling (Right to Left)

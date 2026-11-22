@@ -99,9 +99,9 @@ jar {
             }
         }
 
-        // 1. Build exclusively for Minecraft 1.21.1
+        // 1. Build exclusively for Minecraft 1.21.1 / 1.21.11
         def jar121 = new File(libsDir, "pulse-music-player-${mod_version}-mc1.21.jar")
-        patchJar(jar121, "1.21.1")
+        patchJar(jar121, ">=1.21.1 <=1.21.11")
 
         // 2. Build for any version of 26.x (>=26)
         def jar26 = new File(libsDir, "pulse-music-player-${mod_version}-mc26.jar")

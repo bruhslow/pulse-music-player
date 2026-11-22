@@ -127,31 +127,47 @@ public class AlbumArtManager {
                     if (raw != null) {
                         int w = raw.getWidth();
                         int h = raw.getHeight();
-                        int sqSize = Math.min(w, h);
-                        int cropX = (w - sqSize) / 2;
-                        int cropY = (h - sqSize) / 2;
-                        BufferedImage squareSrc = raw.getSubimage(cropX, cropY, sqSize, sqSize);
 
-                        int targetSize = 256;
+                        // 1. Wide image (ratio ~1.44:1 matching 66x46 box) to fit the full YouTube thumbnail
+                        int targetW = 256;
+                        int targetH = 178;
+                        double targetAspect = (double) targetW / targetH;
+                        double imgAspect = (double) w / h;
+                        int cropW, cropH;
+                        if (imgAspect > targetAspect) {
+                            cropH = h;
+                            cropW = (int) (h * targetAspect);
+                        } else {
+                            cropW = w;
+                            cropH = (int) (w / targetAspect);
+                        }
+                        int cropX = Math.max(0, (w - cropW) / 2);
+                        int cropY = Math.max(0, (h - cropH) / 2);
+                        BufferedImage rectSrc = raw.getSubimage(cropX, cropY, cropW, cropH);
 
-                        // 1. Square image with smooth rounded corners and high-res bicubic interpolation
-                        BufferedImage squareImg = new BufferedImage(targetSize, targetSize, BufferedImage.TYPE_INT_ARGB);
+                        BufferedImage squareImg = new BufferedImage(targetW, targetH, BufferedImage.TYPE_INT_ARGB);
                         Graphics2D gSquare = squareImg.createGraphics();
                         gSquare.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_BICUBIC);
                         gSquare.setRenderingHint(RenderingHints.KEY_RENDERING, RenderingHints.VALUE_RENDER_QUALITY);
                         gSquare.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
-                        gSquare.setClip(new RoundRectangle2D.Float(0, 0, targetSize, targetSize, 28, 28));
-                        gSquare.drawImage(squareSrc, 0, 0, targetSize, targetSize, null);
+                        gSquare.setClip(new RoundRectangle2D.Float(0, 0, targetW, targetH, 20, 20));
+                        gSquare.drawImage(rectSrc, 0, 0, targetW, targetH, null);
                         gSquare.dispose();
 
                         // 2. Circular masked image for outside HUD overlay with smooth edges
-                        BufferedImage circleImg = new BufferedImage(targetSize, targetSize, BufferedImage.TYPE_INT_ARGB);
+                        int sqSize = Math.min(w, h);
+                        int circCropX = (w - sqSize) / 2;
+                        int circCropY = (h - sqSize) / 2;
+                        BufferedImage squareSrc = raw.getSubimage(circCropX, circCropY, sqSize, sqSize);
+
+                        int circSize = 256;
+                        BufferedImage circleImg = new BufferedImage(circSize, circSize, BufferedImage.TYPE_INT_ARGB);
                         Graphics2D gCircle = circleImg.createGraphics();
                         gCircle.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_BICUBIC);
                         gCircle.setRenderingHint(RenderingHints.KEY_RENDERING, RenderingHints.VALUE_RENDER_QUALITY);
                         gCircle.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
-                        gCircle.setClip(new Ellipse2D.Float(1, 1, targetSize - 2, targetSize - 2));
-                        gCircle.drawImage(squareSrc, 0, 0, targetSize, targetSize, null);
+                        gCircle.setClip(new Ellipse2D.Float(1, 1, circSize - 2, circSize - 2));
+                        gCircle.drawImage(squareSrc, 0, 0, circSize, circSize, null);
                         gCircle.dispose();
 
                         ByteArrayOutputStream squareBaos = new ByteArrayOutputStream();
@@ -287,32 +303,32 @@ public class AlbumArtManager {
             g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
             g.setRenderingHint(RenderingHints.KEY_RENDERING, RenderingHints.VALUE_RENDER_QUALITY);
 
-            // Sleek dark vinyl background
-            g.setColor(new Color(0x18, 0x16, 0x14, 0xFF));
+            // Sleek dark forest obsidian vinyl background
+            g.setColor(new Color(0x12, 0x1A, 0x15, 0xFF));
             g.fillRoundRect(0, 0, sz, sz, 32, 32);
 
             // Vinyl outer rim
-            g.setColor(new Color(0x28, 0x24, 0x20, 0xFF));
+            g.setColor(new Color(0x1E, 0x2C, 0x23, 0xFF));
             g.fillOval(12, 12, sz - 24, sz - 24);
 
             // Concentric vinyl grooves
             for (int r = 24; r < sz / 2 - 20; r += 12) {
-                g.setColor(new Color(0x35, 0x30, 0x2A, 0x60));
+                g.setColor(new Color(0x2E, 0x3E, 0x34, 0x60));
                 g.drawOval(sz / 2 - r, sz / 2 - r, r * 2, r * 2);
             }
 
-            // Warm golden center label
+            // Pale sage / matcha green center label
             int labelR = 48;
-            g.setColor(new Color(0xD9, 0x77, 0x46, 0xFF));
+            g.setColor(new Color(0x6A, 0xB0, 0x7C, 0xFF));
             g.fillOval(sz / 2 - labelR, sz / 2 - labelR, labelR * 2, labelR * 2);
 
             // Outer ring on label
-            g.setColor(new Color(0xFF, 0xA8, 0x60, 0xAA));
+            g.setColor(new Color(0x9A, 0xEA, 0xB2, 0xAA));
             g.drawOval(sz / 2 - labelR, sz / 2 - labelR, labelR * 2, labelR * 2);
 
             // Center spindle hole
             int holeR = 12;
-            g.setColor(new Color(0x14, 0x13, 0x12, 0xFF));
+            g.setColor(new Color(0x0E, 0x14, 0x10, 0xFF));
             g.fillOval(sz / 2 - holeR, sz / 2 - holeR, holeR * 2, holeR * 2);
 
             g.dispose();
