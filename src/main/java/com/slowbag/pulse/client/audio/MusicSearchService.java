@@ -32,11 +32,32 @@ public class MusicSearchService {
 
     static {
         DEFAULT_HITS.add(new AudioTrack("Die With A Smile", "Lady Gaga & Bruno Mars", "https://www.youtube.com/watch?v=kPa7bsKwL-8", false, 251, "English Hits", "https://i.ytimg.com/vi/kPa7bsKwL-8/hqdefault.jpg"));
-        DEFAULT_HITS.add(new AudioTrack("Blinding Lights", "The Weeknd", "https://www.youtube.com/watch?v=4NRXx6U8ABQ", false, 200, "English Hits", "https://i.ytimg.com/vi/4NRXx6U8ABQ/hqdefault.jpg"));
-        DEFAULT_HITS.add(new AudioTrack("Kill Bill", "SZA", "https://www.youtube.com/watch?v=SQnc1Q361mg", false, 153, "English Hits", "https://i.ytimg.com/vi/SQnc1Q361mg/hqdefault.jpg"));
-        DEFAULT_HITS.add(new AudioTrack("Starboy", "The Weeknd ft. Daft Punk", "https://www.youtube.com/watch?v=34Na4j8AVgA", false, 230, "English Hits", "https://i.ytimg.com/vi/34Na4j8AVgA/hqdefault.jpg"));
         DEFAULT_HITS.add(new AudioTrack("Locked Out of Heaven", "Bruno Mars", "https://www.youtube.com/watch?v=e-fA-gBCkj0", false, 233, "English Hits", "https://i.ytimg.com/vi/e-fA-gBCkj0/hqdefault.jpg"));
+        DEFAULT_HITS.add(new AudioTrack("24K Magic", "Bruno Mars", "https://www.youtube.com/watch?v=UqyT8IEBkvY", false, 227, "English Hits", "https://i.ytimg.com/vi/UqyT8IEBkvY/hqdefault.jpg"));
+        DEFAULT_HITS.add(new AudioTrack("That's What I Like", "Bruno Mars", "https://www.youtube.com/watch?v=PMivT7MJ41M", false, 206, "English Hits", "https://i.ytimg.com/vi/PMivT7MJ41M/hqdefault.jpg"));
+        DEFAULT_HITS.add(new AudioTrack("Blinding Lights", "The Weeknd", "https://www.youtube.com/watch?v=4NRXx6U8ABQ", false, 200, "English Hits", "https://i.ytimg.com/vi/4NRXx6U8ABQ/hqdefault.jpg"));
+        DEFAULT_HITS.add(new AudioTrack("Starboy", "The Weeknd ft. Daft Punk", "https://www.youtube.com/watch?v=34Na4j8AVgA", false, 230, "English Hits", "https://i.ytimg.com/vi/34Na4j8AVgA/hqdefault.jpg"));
+        DEFAULT_HITS.add(new AudioTrack("Save Your Tears", "The Weeknd", "https://www.youtube.com/watch?v=XXYlFuWEuKI", false, 216, "English Hits", "https://i.ytimg.com/vi/XXYlFuWEuKI/hqdefault.jpg"));
+        DEFAULT_HITS.add(new AudioTrack("Kill Bill", "SZA", "https://www.youtube.com/watch?v=SQnc1Q361mg", false, 153, "English Hits", "https://i.ytimg.com/vi/SQnc1Q361mg/hqdefault.jpg"));
         DEFAULT_HITS.add(new AudioTrack("Snooze", "SZA", "https://www.youtube.com/watch?v=mDOqU7a1eYk", false, 201, "English Hits", "https://i.ytimg.com/vi/mDOqU7a1eYk/hqdefault.jpg"));
+        DEFAULT_HITS.add(new AudioTrack("Shape of You", "Ed Sheeran", "https://www.youtube.com/watch?v=JGwWNGJdvx8", false, 234, "English Hits", "https://i.ytimg.com/vi/JGwWNGJdvx8/hqdefault.jpg"));
+        DEFAULT_HITS.add(new AudioTrack("Bad Habits", "Ed Sheeran", "https://www.youtube.com/watch?v=orJSJGHjBLI", false, 231, "English Hits", "https://i.ytimg.com/vi/orJSJGHjBLI/hqdefault.jpg"));
+        DEFAULT_HITS.add(new AudioTrack("Cruel Summer", "Taylor Swift", "https://www.youtube.com/watch?v=ic8j13piAhQ", false, 178, "English Hits", "https://i.ytimg.com/vi/ic8j13piAhQ/hqdefault.jpg"));
+        DEFAULT_HITS.add(new AudioTrack("Anti-Hero", "Taylor Swift", "https://www.youtube.com/watch?v=b1kbLwvqugk", false, 201, "English Hits", "https://i.ytimg.com/vi/b1kbLwvqugk/hqdefault.jpg"));
+        DEFAULT_HITS.add(new AudioTrack("Birds of a Feather", "Billie Eilish", "https://www.youtube.com/watch?v=V9PVRfjEBTI", false, 197, "English Hits", "https://i.ytimg.com/vi/V9PVRfjEBTI/hqdefault.jpg"));
+        DEFAULT_HITS.add(new AudioTrack("Bad Guy", "Billie Eilish", "https://www.youtube.com/watch?v=DyDfgMOUjCI", false, 194, "English Hits", "https://i.ytimg.com/vi/DyDfgMOUjCI/hqdefault.jpg"));
+        DEFAULT_HITS.add(new AudioTrack("Levitating", "Dua Lipa", "https://www.youtube.com/watch?v=TUVcZfQe-Kw", false, 203, "English Hits", "https://i.ytimg.com/vi/TUVcZfQe-Kw/hqdefault.jpg"));
+        DEFAULT_HITS.add(new AudioTrack("Don't Start Now", "Dua Lipa", "https://www.youtube.com/watch?v=oygrmJFKYZY", false, 183, "English Hits", "https://i.ytimg.com/vi/oygrmJFKYZY/hqdefault.jpg"));
+        DEFAULT_HITS.add(new AudioTrack("Circles", "Post Malone", "https://www.youtube.com/watch?v=wXhTHyIgQ_U", false, 215, "English Hits", "https://i.ytimg.com/vi/wXhTHyIgQ_U/hqdefault.jpg"));
+        DEFAULT_HITS.add(new AudioTrack("Sunflower", "Post Malone & Swae Lee", "https://www.youtube.com/watch?v=ApXoWvfEYVU", false, 158, "English Hits", "https://i.ytimg.com/vi/ApXoWvfEYVU/hqdefault.jpg"));
+        DEFAULT_HITS.add(new AudioTrack("Stay", "The Kid LAROI & Justin Bieber", "https://www.youtube.com/watch?v=kTJczUoc268", false, 141, "English Hits", "https://i.ytimg.com/vi/kTJczUoc268/hqdefault.jpg"));
+        DEFAULT_HITS.add(new AudioTrack("As It Was", "Harry Styles", "https://www.youtube.com/watch?v=H5v3kku4y6Q", false, 167, "English Hits", "https://i.ytimg.com/vi/H5v3kku4y6Q/hqdefault.jpg"));
+        DEFAULT_HITS.add(new AudioTrack("Viva La Vida", "Coldplay", "https://www.youtube.com/watch?v=dvgZkm1xWPE", false, 242, "English Hits", "https://i.ytimg.com/vi/dvgZkm1xWPE/hqdefault.jpg"));
+        DEFAULT_HITS.add(new AudioTrack("Believer", "Imagine Dragons", "https://www.youtube.com/watch?v=7wtfhZwyrcc", false, 204, "English Hits", "https://i.ytimg.com/vi/7wtfhZwyrcc/hqdefault.jpg"));
+    }
+
+    public static List<AudioTrack> getDefaultHits() {
+        return new ArrayList<>(DEFAULT_HITS);
     }
 
     public static void searchSongsAsync(String query, Consumer<List<AudioTrack>> callback) {
