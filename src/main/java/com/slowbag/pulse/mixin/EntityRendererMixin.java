@@ -13,7 +13,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 @Mixin(EntityRenderer.class)
 public abstract class EntityRendererMixin {
 
-    @Inject(method = "getNameTag", at = @At("RETURN"), cancellable = true)
+    @Inject(method = "getNameTag", at = @At("RETURN"), cancellable = true, require = 0)
     private void musicplayer$appendNametagBadge(Entity entity, CallbackInfoReturnable<Component> cir) {
         if (entity instanceof Player player) {
             Component original = cir.getReturnValue();

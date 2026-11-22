@@ -219,7 +219,7 @@ public class MusicPlayerScreen extends Screen {
         int compactH = 108;
         int compactY = (this.height - compactH) / 2;
         int totalExpH = getHeroHeight() + 8 + getDrawerHeight();
-        int expStartY = Math.max(26, (this.height - totalExpH) / 2 + 10);
+        int expStartY = Math.max(16, (this.height - totalExpH) / 2);
         return (int) AnimationUtil.lerp(compactY, expStartY, expandProgress);
     }
 
@@ -238,7 +238,8 @@ public class MusicPlayerScreen extends Screen {
     }
 
     private int getDrawerHeight() {
-        return 134;
+        int avail = this.height - getHeroHeight() - 36;
+        return Math.max(140, Math.min(210, avail));
     }
 
     private int getVisibleSettingsCount() {
@@ -346,8 +347,8 @@ public class MusicPlayerScreen extends Screen {
         drawSoftBox(graphics, x, y, w, h, 5, 0xF0181A1B, 0x30FFFFFF);
         graphics.fill(x + 6, y + 1, x + w - 6, y + 2, 0x20FFFFFF);
 
-        // Mini pulse wave icon + title in signature amber orange
-        graphics.text(this.font, Component.literal("§6∿ §f§lPULSE"), x + 8, y + 6, 0xFFFFFFFF, true);
+        // Music note icon + title in signature amber orange
+        graphics.text(this.font, Component.literal("§6♫ §f§lPULSE"), x + 8, y + 6, 0xFFFFFFFF, true);
 
         // Right Action Icons: ⚙ Settings | 📌 Pin HUD | ♫ Tag Badge | ✕ Close
         HudConfigManager hudCfg = HudConfigManager.getInstance();
@@ -1180,15 +1181,14 @@ public class MusicPlayerScreen extends Screen {
                 drawSoftBox(graphics, thumbX, thumbY, 15, 15, 3, 0xFF181A1B, 0x30FFFFFF);
                 graphics.centeredText(this.font, Component.literal("§6" + (i + 1)), thumbX + 7, thumbY + 3, 0xFFFFFFFF);
 
-                // Action buttons on right: [▲] [▼] [▶] [✕]
+                // Action buttons on right: [▲] [▼] [✕]
                 int btnW = 15;
                 int btnH = 15;
                 int btnY = itemY + 4;
                 int gap = 3;
 
                 int removeX = x + w - 8 - btnW;
-                int playX = removeX - gap - btnW;
-                int downX = playX - gap - btnW;
+                int downX = removeX - gap - btnW;
                 int upX = downX - gap - btnW;
 
                 // Move Up button
@@ -1203,11 +1203,6 @@ public class MusicPlayerScreen extends Screen {
                 drawSoftBox(graphics, downX, btnY, btnW, btnH, 3, downHover ? 0x60D97746 : 0x20FFFFFF, downHover ? 0xFFFFA070 : 0x25FFFFFF);
                 graphics.centeredText(this.font, Component.literal(canMoveDown ? (downHover ? "§6▼" : "§f▼") : "§8▼"), downX + btnW / 2, btnY + 3, 0xFFFFFFFF);
 
-                // Play triangle
-                boolean playHover = mouseX >= playX && mouseX <= playX + btnW && mouseY >= btnY && mouseY <= btnY + btnH;
-                drawSoftBox(graphics, playX, btnY, btnW, btnH, 3, playHover ? 0x60D97746 : 0x20FFFFFF, playHover ? 0xFFFFA070 : 0x25FFFFFF);
-                graphics.centeredText(this.font, Component.literal(playHover ? "§6▶" : "§f▶"), playX + btnW / 2, btnY + 3, 0xFFFFFFFF);
-
                 // Remove X button
                 boolean remHover = mouseX >= removeX && mouseX <= removeX + btnW && mouseY >= btnY && mouseY <= btnY + btnH;
                 drawSoftBox(graphics, removeX, btnY, btnW, btnH, 3, remHover ? 0x80FF3344 : 0x20FFFFFF, remHover ? 0xFFFF4455 : 0x25FFFFFF);
@@ -1215,9 +1210,9 @@ public class MusicPlayerScreen extends Screen {
 
                 // Song Title and Subtitle - Generously bounded, never overlapping buttons
                 int textX = thumbX + 19;
-                int textW = upX - textX - 6;
-                graphics.text(this.font, Component.literal("§f§l" + truncateToWidth(t.getTitle(), textW)), textX, itemY + 3, 0xFFFFFFFF, false);
-                String sub = (i == 0 ? "§6Next" : "§8Queued") + " • §7" + truncateToWidth(t.getArtist(), Math.max(30, textW - 35));
+                int textW = upX - textX - 8;
+                graphics.text(this.font, Component.literal("§f" + truncateToWidth(t.getTitle(), textW, false)), textX, itemY + 3, 0xFFFFFFFF, false);
+                String sub = (i == 0 ? "§6Next" : "§8Queued") + " • §7" + truncateToWidth(t.getArtist(), Math.max(20, textW - 35), false);
                 graphics.text(this.font, Component.literal(sub), textX, itemY + 13, 0xFFA0988E, false);
 
                 itemY += 26;
@@ -1342,13 +1337,27 @@ public class MusicPlayerScreen extends Screen {
     }
 
     private String truncateToWidth(String text, int maxWidth) {
+        return truncateToWidth(text, maxWidth, false);
+    }
+
+    private String truncateToWidth(String text, int maxWidth, boolean bold) {
         if (text == null || text.isEmpty()) return "";
-        if (maxWidth <= 20) return "";
+        if (maxWidth <= 15) return "";
         String clean = text.replaceAll("§[0-9a-fk-or]", "");
-        if (this.font.width(clean) <= maxWidth) return text;
-        int dotsW = this.font.width("..");
-        String trimmed = this.font.plainSubstrByWidth(clean, Math.max(10, maxWidth - dotsW));
-        return trimmed + "..";
+        String formatted = bold ? ("§l" + clean) : clean;
+        if (this.font.width(Component.literal(formatted)) <= maxWidth) return text;
+        int dotsW = this.font.width(Component.literal(bold ? "§l.." : ".."));
+        int avail = Math.max(8, maxWidth - dotsW - 3);
+        StringBuilder sb = new StringBuilder();
+        for (int i = 0; i < clean.length(); i++) {
+            sb.append(clean.charAt(i));
+            String candidate = bold ? ("§l" + sb.toString()) : sb.toString();
+            if (this.font.width(Component.literal(candidate)) > avail) {
+                if (sb.length() > 1) sb.deleteCharAt(sb.length() - 1);
+                break;
+            }
+        }
+        return sb.toString().trim() + "..";
     }
 
     private void drawGlassButton(GuiGraphicsExtractor graphics, int bx, int by, int bw, int bh, String text, int accent, int mx, int my) {
@@ -2238,8 +2247,7 @@ public class MusicPlayerScreen extends Screen {
                     int gap = 3;
 
                     int qRemoveX = rightX + rightW - 8 - btnW;
-                    int qPlayX = qRemoveX - gap - btnW;
-                    int qDownX = qPlayX - gap - btnW;
+                    int qDownX = qRemoveX - gap - btnW;
                     int qUpX = qDownX - gap - btnW;
 
                     // Remove from queue
@@ -2247,16 +2255,6 @@ public class MusicPlayerScreen extends Screen {
                         playClickSound();
                         audioManager.removeFromQueue(i);
                         statusMessage = "§7✕ Removed from queue: " + truncate(t.getTitle(), 18);
-                        statusMessageTime = System.currentTimeMillis();
-                        return true;
-                    }
-
-                    // Play immediately
-                    if (mx >= qPlayX && mx <= qPlayX + btnW && my >= btnY && my <= btnY + btnH) {
-                        playClickSound();
-                        audioManager.removeFromQueue(i);
-                        audioManager.playTrack(t);
-                        statusMessage = "§a▶ Now playing: " + truncate(t.getTitle(), 18) + " ~ Enjoy! 🎶";
                         statusMessageTime = System.currentTimeMillis();
                         return true;
                     }
@@ -2283,9 +2281,8 @@ public class MusicPlayerScreen extends Screen {
                         }
                     }
 
-                    // Click row body text area to play
-                    int textX = rightX + 8 + 15 + 4;
-                    if (mx >= textX && mx < qUpX - 4 && my >= qItemY + 2 && my <= qItemY + 24) {
+                    // Click row body to play immediately
+                    if (mx >= rightX + 6 && mx < qUpX - 4 && my >= qItemY + 2 && my <= qItemY + 24) {
                         playClickSound();
                         audioManager.removeFromQueue(i);
                         audioManager.playTrack(t);

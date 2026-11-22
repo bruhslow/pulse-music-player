@@ -9,10 +9,10 @@ plugins {
 }
 
 def minecraft_version = "26.2"
-def loader_version = "0.20.1"
+def loader_version = "0.15.0"
 def fabric_api_version = "0.161.0+26.2"
 
-def mod_version = "1.6.5"
+def mod_version = "1.6.6"
 def mod_id = "musicplayer"
 
 group = "com.slowbag"
@@ -90,6 +90,7 @@ jar {
                     if (Files.exists(modJsonPath)) {
                         String content = new String(Files.readAllBytes(modJsonPath), StandardCharsets.UTF_8)
                         String updated = content.replaceAll(/"minecraft":\s*"[^"]*"/, "\"minecraft\": \"${mcRange}\"")
+                        updated = updated.replaceAll(/"fabricloader":\s*"[^"]*"/, "\"fabricloader\": \">=0.15.0\"")
                         updated = updated.replaceAll(/"java":\s*"[^"]*"/, "\"java\": \">=21\"")
                         Files.write(modJsonPath, updated.getBytes(StandardCharsets.UTF_8), StandardOpenOption.TRUNCATE_EXISTING)
                     }
@@ -103,9 +104,9 @@ jar {
         def jar121 = new File(libsDir, "pulse-music-player-${mod_version}-mc1.21.jar")
         patchJar(jar121, ">=1.21.1 <=1.21.11")
 
-        // 2. Build for any version of 26.x (>=26)
+        // 2. Build for any version of 26.x series (26.1, 26.2, 26.3, 26.4, etc.)
         def jar26 = new File(libsDir, "pulse-music-player-${mod_version}-mc26.jar")
-        patchJar(jar26, ">=26")
+        patchJar(jar26, "*")
 
         // Remove intermediate generic unversioned jar so only the two target jars remain
         try {
