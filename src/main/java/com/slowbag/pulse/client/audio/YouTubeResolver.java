@@ -506,101 +506,109 @@ public class YouTubeResolver {
         String videoId = extractVideoId(videoIdOrUrl);
         if (videoId == null) return null;
 
-        try {
-            JsonObject context = new JsonObject();
-            JsonObject client = new JsonObject();
-            client.addProperty("clientName", "ANDROID");
-            client.addProperty("clientVersion", "20.10.38");
-            client.addProperty("androidSdkVersion", 30);
-            client.addProperty("hl", "en");
-            client.addProperty("gl", "US");
-            context.add("client", client);
+        for (int attempt = 1; attempt <= 4; attempt++) {
+            try {
+                JsonObject context = new JsonObject();
+                JsonObject client = new JsonObject();
+                client.addProperty("clientName", "ANDROID");
+                client.addProperty("clientVersion", "20.10.38");
+                client.addProperty("androidSdkVersion", 30);
+                client.addProperty("hl", "en");
+                client.addProperty("gl", "US");
+                context.add("client", client);
 
-            JsonObject payload = new JsonObject();
-            payload.add("context", context);
-            payload.addProperty("videoId", videoId);
-            payload.addProperty("racyCheckOk", true);
-            payload.addProperty("contentCheckOk", true);
+                JsonObject payload = new JsonObject();
+                payload.add("context", context);
+                payload.addProperty("videoId", videoId);
+                payload.addProperty("racyCheckOk", true);
+                payload.addProperty("contentCheckOk", true);
 
-            byte[] postData = payload.toString().getBytes(StandardCharsets.UTF_8);
+                byte[] postData = payload.toString().getBytes(StandardCharsets.UTF_8);
 
-            URL url = new URI(PLAYER_ENDPOINT).toURL();
-            HttpURLConnection conn = (HttpURLConnection) url.openConnection();
-            conn.setRequestMethod("POST");
-            conn.setRequestProperty("Content-Type", "application/json");
-            conn.setRequestProperty("User-Agent", "com.google.android.youtube/20.10.38 (Linux; U; Android 11) gzip");
-            conn.setDoOutput(true);
-            conn.setConnectTimeout(4500);
-            conn.setReadTimeout(6000);
+                URL url = new URI(PLAYER_ENDPOINT).toURL();
+                HttpURLConnection conn = (HttpURLConnection) url.openConnection();
+                conn.setRequestMethod("POST");
+                conn.setRequestProperty("Content-Type", "application/json");
+                conn.setRequestProperty("User-Agent", "com.google.android.youtube/20.10.38 (Linux; U; Android 11) gzip");
+                conn.setDoOutput(true);
+                conn.setConnectTimeout(8000);
+                conn.setReadTimeout(12000);
 
-            try (OutputStream os = conn.getOutputStream()) {
-                os.write(postData);
-            }
+                try (OutputStream os = conn.getOutputStream()) {
+                    os.write(postData);
+                }
 
-            if (conn.getResponseCode() == 200) {
-                try (InputStreamReader reader = new InputStreamReader(conn.getInputStream(), StandardCharsets.UTF_8)) {
-                    JsonObject root = JsonParser.parseReader(reader).getAsJsonObject();
-                    if (root.has("streamingData")) {
-                        JsonObject sd = root.getAsJsonObject("streamingData");
+                if (conn.getResponseCode() == 200) {
+                    try (InputStreamReader reader = new InputStreamReader(conn.getInputStream(), StandardCharsets.UTF_8)) {
+                        JsonObject root = JsonParser.parseReader(reader).getAsJsonObject();
+                        if (root.has("streamingData")) {
+                            JsonObject sd = root.getAsJsonObject("streamingData");
 
-                        // 1. Prioritize Progressive Formats (itag 18 - 360p MP4 with AAC audio)
-                        // Itag 18 has NO 1MB cutoff, no Range restrictions, and downloads full songs reliably with code 200
-                        if (sd.has("formats") && sd.get("formats").isJsonArray()) {
-                            JsonArray muxed = sd.getAsJsonArray("formats");
-                            for (JsonElement el : muxed) {
-                                if (!el.isJsonObject()) continue;
-                                JsonObject f = el.getAsJsonObject();
-                                if (f.has("url")) {
-                                    int itag = f.has("itag") ? f.get("itag").getAsInt() : 0;
-                                    String mime = f.has("mimeType") ? f.get("mimeType").getAsString() : "";
-                                    if (itag == 18 || (mime.contains("mp4") && mime.contains("mp4a"))) {
-                                        return f.get("url").getAsString();
+                            // 1. Prioritize Progressive Formats (itag 18 - 360p MP4 with AAC audio)
+                            // Itag 18 has NO 1MB cutoff, no Range restrictions, and downloads full songs reliably with code 200
+                            if (sd.has("formats") && sd.get("formats").isJsonArray()) {
+                                JsonArray muxed = sd.getAsJsonArray("formats");
+                                for (JsonElement el : muxed) {
+                                    if (!el.isJsonObject()) continue;
+                                    JsonObject f = el.getAsJsonObject();
+                                    if (f.has("url")) {
+                                        int itag = f.has("itag") ? f.get("itag").getAsInt() : 0;
+                                        String mime = f.has("mimeType") ? f.get("mimeType").getAsString() : "";
+                                        if (itag == 18 || (mime.contains("mp4") && mime.contains("mp4a"))) {
+                                            return f.get("url").getAsString();
+                                        }
                                     }
                                 }
                             }
-                        }
 
-                        // 2. Fallback to adaptiveFormats (itag 140)
-                        if (sd.has("adaptiveFormats") && sd.get("adaptiveFormats").isJsonArray()) {
-                            JsonArray formats = sd.getAsJsonArray("adaptiveFormats");
-                            String fallbackAudioUrl = null;
-                            for (JsonElement el : formats) {
-                                if (!el.isJsonObject()) continue;
-                                JsonObject f = el.getAsJsonObject();
-                                if (f.has("url")) {
-                                    int itag = f.has("itag") ? f.get("itag").getAsInt() : 0;
-                                    String mime = f.has("mimeType") ? f.get("mimeType").getAsString() : "";
-                                    if (itag == 140) {
-                                        return f.get("url").getAsString();
-                                    }
-                                    if (mime.startsWith("audio/mp4") || mime.contains("mp4a")) {
-                                        fallbackAudioUrl = f.get("url").getAsString();
-                                    } else if (fallbackAudioUrl == null && mime.startsWith("audio/")) {
-                                        fallbackAudioUrl = f.get("url").getAsString();
+                            // 2. Fallback to adaptiveFormats (itag 140)
+                            if (sd.has("adaptiveFormats") && sd.get("adaptiveFormats").isJsonArray()) {
+                                JsonArray formats = sd.getAsJsonArray("adaptiveFormats");
+                                String fallbackAudioUrl = null;
+                                for (JsonElement el : formats) {
+                                    if (!el.isJsonObject()) continue;
+                                    JsonObject f = el.getAsJsonObject();
+                                    if (f.has("url")) {
+                                        int itag = f.has("itag") ? f.get("itag").getAsInt() : 0;
+                                        String mime = f.has("mimeType") ? f.get("mimeType").getAsString() : "";
+                                        if (itag == 140) {
+                                            return f.get("url").getAsString();
+                                        }
+                                        if (mime.startsWith("audio/mp4") || mime.contains("mp4a")) {
+                                            fallbackAudioUrl = f.get("url").getAsString();
+                                        } else if (fallbackAudioUrl == null && mime.startsWith("audio/")) {
+                                            fallbackAudioUrl = f.get("url").getAsString();
+                                        }
                                     }
                                 }
+                                if (fallbackAudioUrl != null) {
+                                    return fallbackAudioUrl;
+                                }
                             }
-                            if (fallbackAudioUrl != null) {
-                                return fallbackAudioUrl;
-                            }
-                        }
 
-                        // 3. Fallback for Live Streams: Extract from HLS Manifest
-                        if (sd.has("hlsManifestUrl")) {
-                            String hlsManifest = sd.get("hlsManifestUrl").getAsString();
-                            String liveAudio = extractHlsAudioStream(hlsManifest);
-                            if (liveAudio != null) {
-                                return liveAudio;
+                            // 3. Fallback for Live Streams: Extract from HLS Manifest
+                            if (sd.has("hlsManifestUrl")) {
+                                String hlsManifest = sd.get("hlsManifestUrl").getAsString();
+                                String liveAudio = extractHlsAudioStream(hlsManifest);
+                                if (liveAudio != null) {
+                                    return liveAudio;
+                                }
+                                return hlsManifest;
                             }
-                            return hlsManifest;
                         }
                     }
+                } else {
+                    MusicPlayerMod.LOGGER.warn("[YouTube] Player HTTP response code on attempt " + attempt + ": " + conn.getResponseCode());
                 }
-            } else {
-                MusicPlayerMod.LOGGER.warn("[YouTube] Player HTTP response code: " + conn.getResponseCode());
+            } catch (Throwable t) {
+                MusicPlayerMod.LOGGER.warn("[YouTube] Stream resolve attempt " + attempt + " error: " + t.getMessage());
             }
-        } catch (Throwable t) {
-            MusicPlayerMod.LOGGER.warn("[YouTube] Resolve audio error: " + t.getMessage());
+
+            if (attempt < 4) {
+                try {
+                    Thread.sleep(attempt * 400L);
+                } catch (InterruptedException ignored) {}
+            }
         }
 
         return null;

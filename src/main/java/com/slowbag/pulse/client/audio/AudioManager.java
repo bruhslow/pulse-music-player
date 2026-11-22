@@ -247,44 +247,55 @@ public class AudioManager {
     }
 
     private InputStream openSingleHttpStream(String urlStr, long byteOffset) throws Exception {
-        URL url = new URI(urlStr).toURL();
-        for (int redirect = 0; redirect < 6; redirect++) {
-            HttpURLConnection conn = (HttpURLConnection) url.openConnection();
-            conn.setRequestProperty("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36");
-            conn.setRequestProperty("Accept", "*/*");
-            conn.setRequestProperty("Connection", "keep-alive");
-            if (byteOffset > 0) {
-                conn.setRequestProperty("Range", "bytes=" + byteOffset + "-");
-            }
-            conn.setRequestProperty("Icy-MetaData", "0");
-            conn.setInstanceFollowRedirects(true);
-            conn.setConnectTimeout(8000);
-            conn.setReadTimeout(30000);
-
-            int code = conn.getResponseCode();
-            if (code == 416 && byteOffset > 0) {
-                // Live streams (Icecast/Shoutcast) do not support byte offsets; reconnect to live stream directly
-                return openSingleHttpStream(urlStr, 0);
-            }
-            if (code == 301 || code == 302 || code == 303 || code == 307 || code == 308) {
-                String loc = conn.getHeaderField("Location");
-                if (loc != null && !loc.isBlank()) {
-                    try {
-                        url = url.toURI().resolve(loc).toURL();
-                    } catch (Throwable t) {
-                        url = new URI(loc).toURL();
+        Exception lastException = null;
+        for (int retry = 1; retry <= 5; retry++) {
+            try {
+                URL url = new URI(urlStr).toURL();
+                for (int redirect = 0; redirect < 6; redirect++) {
+                    HttpURLConnection conn = (HttpURLConnection) url.openConnection();
+                    conn.setRequestProperty("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36");
+                    conn.setRequestProperty("Accept", "*/*");
+                    conn.setRequestProperty("Connection", "keep-alive");
+                    if (byteOffset > 0) {
+                        conn.setRequestProperty("Range", "bytes=" + byteOffset + "-");
                     }
-                    continue;
+                    conn.setRequestProperty("Icy-MetaData", "0");
+                    conn.setInstanceFollowRedirects(true);
+                    conn.setConnectTimeout(12000);
+                    conn.setReadTimeout(45000);
+
+                    int code = conn.getResponseCode();
+                    if (code == 416 && byteOffset > 0) {
+                        // Live streams (Icecast/Shoutcast) do not support byte offsets; reconnect to live stream directly
+                        return openSingleHttpStream(urlStr, 0);
+                    }
+                    if (code == 301 || code == 302 || code == 303 || code == 307 || code == 308) {
+                        String loc = conn.getHeaderField("Location");
+                        if (loc != null && !loc.isBlank()) {
+                            try {
+                                url = url.toURI().resolve(loc).toURL();
+                            } catch (Throwable t) {
+                                url = new URI(loc).toURL();
+                            }
+                            continue;
+                        }
+                    }
+
+                    if (code >= 200 && code < 300) {
+                        return conn.getInputStream();
+                    }
+
+                    throw new IOException("HTTP code " + code + " from audio server (" + url + ")");
+                }
+                throw new IOException("Too many redirects");
+            } catch (Exception ex) {
+                lastException = ex;
+                if (retry < 5) {
+                    try { Thread.sleep(retry * 350L); } catch (InterruptedException ignored) {}
                 }
             }
-
-            if (code >= 200 && code < 300) {
-                return conn.getInputStream();
-            }
-
-            throw new IOException("HTTP code " + code + " from audio server (" + url + ")");
         }
-        throw new IOException("Too many redirects");
+        throw (lastException != null) ? lastException : new IOException("Failed to connect to stream server after 5 attempts");
     }
 
     private void startPlayback(AudioTrack track, int sessionId, long seekSeconds) {
@@ -296,13 +307,20 @@ public class AudioManager {
 
             if (YouTubeResolver.isYouTubeUrl(urlStr)) {
                 String videoId = YouTubeResolver.extractVideoId(urlStr);
-                String directUrl = YouTubeResolver.resolveAudioStreamUrl(videoId);
+                String directUrl = null;
+                for (int attempt = 1; attempt <= 3 && directUrl == null; attempt++) {
+                    directUrl = YouTubeResolver.resolveAudioStreamUrl(videoId);
+                    if (directUrl == null && attempt < 3) {
+                        try { Thread.sleep(attempt * 500L); } catch (InterruptedException ignored) {}
+                    }
+                }
                 if (directUrl == null) {
                     throw new IOException("Unable to resolve audio stream for YouTube track: " + track.getTitle());
                 }
                 System.out.println("[Music Player] Streaming direct YouTube audio stream with 16MB auto-reconnecting jitter cushion for: " + track.getTitle());
-                InputStream rawHttp = openDirectAudioStream(directUrl, 0);
-                InputStream bufferedHttp = new AsyncAudioBufferStream(rawHttp, offset -> openDirectAudioStream(directUrl, offset));
+                final String finalDirectUrl = directUrl;
+                InputStream rawHttp = openDirectAudioStream(finalDirectUrl, 0);
+                InputStream bufferedHttp = new AsyncAudioBufferStream(rawHttp, offset -> openDirectAudioStream(finalDirectUrl, offset));
                 activeStream = bufferedHttp;
 
                 if (sessionId != sessionCounter.get()) {
@@ -461,37 +479,48 @@ public class AudioManager {
     }
 
     private InputStream openDirectAudioStream(String urlStr, long byteOffset) throws Exception {
-        URL url = new URI(urlStr).toURL();
-        for (int redirect = 0; redirect < 6; redirect++) {
-            HttpURLConnection conn = (HttpURLConnection) url.openConnection();
-            conn.setRequestProperty("User-Agent", "com.google.android.youtube/20.10.38 (Linux; U; Android 11) gzip");
-            conn.setRequestProperty("Accept", "*/*");
-            conn.setRequestProperty("Connection", "keep-alive");
-            conn.setRequestProperty("Range", "bytes=" + byteOffset + "-");
-            conn.setInstanceFollowRedirects(true);
-            conn.setConnectTimeout(8000);
-            conn.setReadTimeout(30000);
+        Exception lastException = null;
+        for (int retry = 1; retry <= 5; retry++) {
+            try {
+                URL url = new URI(urlStr).toURL();
+                for (int redirect = 0; redirect < 6; redirect++) {
+                    HttpURLConnection conn = (HttpURLConnection) url.openConnection();
+                    conn.setRequestProperty("User-Agent", "com.google.android.youtube/20.10.38 (Linux; U; Android 11) gzip");
+                    conn.setRequestProperty("Accept", "*/*");
+                    conn.setRequestProperty("Connection", "keep-alive");
+                    conn.setRequestProperty("Range", "bytes=" + byteOffset + "-");
+                    conn.setInstanceFollowRedirects(true);
+                    conn.setConnectTimeout(12000);
+                    conn.setReadTimeout(45000);
 
-            int code = conn.getResponseCode();
-            if (code == 301 || code == 302 || code == 303 || code == 307 || code == 308) {
-                String loc = conn.getHeaderField("Location");
-                if (loc != null && !loc.isBlank()) {
-                    try {
-                        url = url.toURI().resolve(loc).toURL();
-                    } catch (Throwable t) {
-                        url = new URI(loc).toURL();
+                    int code = conn.getResponseCode();
+                    if (code == 301 || code == 302 || code == 303 || code == 307 || code == 308) {
+                        String loc = conn.getHeaderField("Location");
+                        if (loc != null && !loc.isBlank()) {
+                            try {
+                                url = url.toURI().resolve(loc).toURL();
+                            } catch (Throwable t) {
+                                url = new URI(loc).toURL();
+                            }
+                            continue;
+                        }
                     }
-                    continue;
+
+                    if (code >= 200 && code < 300) {
+                        return conn.getInputStream();
+                    }
+
+                    throw new IOException("HTTP code " + code + " from YouTube audio server");
+                }
+                throw new IOException("Too many redirects from YouTube server");
+            } catch (Exception ex) {
+                lastException = ex;
+                if (retry < 5) {
+                    try { Thread.sleep(retry * 350L); } catch (InterruptedException ignored) {}
                 }
             }
-
-            if (code >= 200 && code < 300) {
-                return conn.getInputStream();
-            }
-
-            throw new IOException("HTTP code " + code + " from YouTube audio server");
         }
-        throw new IOException("Too many redirects from YouTube server");
+        throw (lastException != null) ? lastException : new IOException("Failed to connect to YouTube audio server after 5 attempts");
     }
 
     private void playAacDash(InputStream stream, int sessionId, AudioTrack track, long seekSeconds, File cacheFile) throws Exception {

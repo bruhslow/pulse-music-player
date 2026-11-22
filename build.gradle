@@ -12,7 +12,7 @@ def minecraft_version = "26.2"
 def loader_version = "0.15.0"
 def fabric_api_version = "0.161.0+26.2"
 
-def mod_version = "1.6.6"
+def mod_version = "1.6.7"
 def mod_id = "musicplayer"
 
 group = "com.slowbag"
@@ -67,21 +67,20 @@ loom {
 
 processResources {
     filesMatching('fabric.mod.json') {
-        expand "mod_version": mod_version, "mod_id": mod_id, "loader_version": loader_version, "minecraft_dependency": ">=1.21 <=26.4"
+        expand "mod_version": mod_version, "mod_id": mod_id, "loader_version": "0.15.0", "minecraft_dependency": "*"
     }
 }
 
 jar {
     archiveBaseName.set("pulse-music-player")
-    archiveVersion.set(mod_version)
+    archiveVersion.set(mod_version + "+26.x")
 
     doLast {
         def builtJar = archiveFile.get().asFile
         def libsDir = builtJar.parentFile
 
-        // Helper to patch fabric.mod.json inside a jar copy
-        def patchJar = { File targetJar, String mcRange ->
-            Files.copy(builtJar.toPath(), targetJar.toPath(), StandardCopyOption.REPLACE_EXISTING)
+        // Helper to patch fabric.mod.json inside the jar
+        def patchJar = { File targetJar ->
             def jarUri = URI.create("jar:" + targetJar.toURI().toString())
             def env = [create: "false"]
             try {
@@ -89,34 +88,25 @@ jar {
                     def modJsonPath = fs.getPath("fabric.mod.json")
                     if (Files.exists(modJsonPath)) {
                         String content = new String(Files.readAllBytes(modJsonPath), StandardCharsets.UTF_8)
-                        String updated = content.replaceAll(/"minecraft":\s*"[^"]*"/, "\"minecraft\": \"${mcRange}\"")
+                        String updated = content.replaceAll(/"minecraft":\s*"[^"]*"/, "\"minecraft\": \"*\"")
                         updated = updated.replaceAll(/"fabricloader":\s*"[^"]*"/, "\"fabricloader\": \">=0.15.0\"")
                         updated = updated.replaceAll(/"java":\s*"[^"]*"/, "\"java\": \">=21\"")
                         Files.write(modJsonPath, updated.getBytes(StandardCharsets.UTF_8), StandardOpenOption.TRUNCATE_EXISTING)
                     }
                 }
             } catch (Throwable t) {
-                println("[Pulse Build] Warning patching jar " + targetJar.name + ": " + t.getMessage())
+                println("[Pulse Build] Warning patching jar: " + t.getMessage())
             }
         }
 
-        // 1. Build exclusively for Minecraft 1.21.1 / 1.21.11
-        def jar121 = new File(libsDir, "pulse-music-player-${mod_version}-mc1.21.jar")
-        patchJar(jar121, ">=1.21.1 <=1.21.11")
+        patchJar(builtJar)
 
-        // 2. Build for any version of 26.x series (26.1, 26.2, 26.3, 26.4, etc.)
+        // Also create a copy named -mc26.jar for backward compatibility
         def jar26 = new File(libsDir, "pulse-music-player-${mod_version}-mc26.jar")
-        patchJar(jar26, "*")
+        Files.copy(builtJar.toPath(), jar26.toPath(), StandardCopyOption.REPLACE_EXISTING)
 
-        // Remove intermediate generic unversioned jar so only the two target jars remain
-        try {
-            if (builtJar.exists()) {
-                builtJar.delete()
-            }
-        } catch (Throwable ignored) {}
-
-        println("[Pulse Build] Successfully generated dual releases:")
-        println("  -> " + jar121.name + " (Minecraft 1.21.1 exclusively, Java 21+)")
-        println("  -> " + jar26.name + " (Minecraft 26.x: >=26, Java 21+)")
+        println("[Pulse Build] Successfully built dedicated 26.x release:")
+        println("  -> " + builtJar.name + " (Minecraft 26.x series: 26.1, 26.2, 26.3, 26.4+)")
+        println("  -> " + jar26.name)
     }
 }

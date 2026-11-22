@@ -72,16 +72,16 @@ public class AsyncAudioBufferStream extends InputStream {
             } catch (IOException e) {
                 if (closed) break;
 
-                // Connection dropped, timed out, or reset by CDN/remote server
+                // Connection dropped, timed out, or reset by CDN/remote server - robust retry loop
                 boolean reconnected = false;
                 if (opener != null) {
-                    for (int attempt = 1; attempt <= 4 && !closed; attempt++) {
+                    for (int attempt = 1; attempt <= 10 && !closed; attempt++) {
                         try {
                             try { source.close(); } catch (Throwable ignored) {}
-                            Thread.sleep(attempt * 250L);
+                            Thread.sleep(Math.min(2500L, attempt * 350L));
                             source = opener.open(totalBytesDownloaded);
                             reconnected = true;
-                            System.out.println("[Music Player] Auto-reconnected audio stream at offset " + totalBytesDownloaded);
+                            System.out.println("[Music Player] Auto-reconnected audio stream at offset " + totalBytesDownloaded + " (attempt " + attempt + ")");
                             break;
                         } catch (Throwable retryEx) {
                             // Back off and try next attempt
@@ -130,7 +130,7 @@ public class AsyncAudioBufferStream extends InputStream {
         int preloadSec = SettingsManager.getInstance().getPreloadSeconds();
         // 24KB - 64KB initial data cushion begins smooth uninterrupted playback
         int targetPreload = Math.max(24576, Math.min(65536, preloadSec * 16 * 1024));
-        long timeoutMs = Math.max(1200, preloadSec * 300L);
+        long timeoutMs = Math.max(3000, preloadSec * 600L);
 
         while (availableBytes < targetPreload && !sourceEof && !closed && readerException == null) {
             if (System.currentTimeMillis() - start > timeoutMs) {
@@ -147,7 +147,7 @@ public class AsyncAudioBufferStream extends InputStream {
 
     private synchronized void awaitBufferData(int minRequired) throws IOException {
         long start = System.currentTimeMillis();
-        long timeoutMs = 8000;
+        long timeoutMs = 20000; // 20s network buffer recovery window
         boolean announcedBuffering = false;
 
         while (availableBytes < minRequired && !closed && !sourceEof && readerException == null) {

@@ -784,9 +784,11 @@ public class MusicPlayerScreen extends Screen {
                     int rowPlayX = inputX + rowW - rowPlayW - 4;
                     int rowQX = rowPlayX - rowQW - 4;
 
-                    // Text bounded so it NEVER overlaps buttons:
-                    int maxTextW = rowQX - (inputX + 6) - 4;
-                    graphics.text(this.font, Component.literal(badge + "§f" + truncateToWidth(rUrl, maxTextW)), inputX + 6, curRowY + 5, 0xFFFFFFFF, false);
+                    // Text bounded so it NEVER overlaps buttons (deducting badge width):
+                    int availRowW = rowQX - (inputX + 6) - 8;
+                    int badgeW = this.font.width(Component.literal(badge));
+                    int maxUrlW = Math.max(20, availRowW - badgeW - 4);
+                    graphics.text(this.font, Component.literal(badge + "§f" + truncateToWidth(rUrl, maxUrlW, false)), inputX + 6, curRowY + 5, 0xFFFFFFFF, false);
 
                     // Row +Q button
                     boolean rowQHover = mouseX >= rowQX && mouseX <= rowQX + rowQW && mouseY >= curRowY + 2 && mouseY <= curRowY + 16;
@@ -1038,14 +1040,14 @@ public class MusicPlayerScreen extends Screen {
 
         // Title and Subtitle: Razor-sharp clean rendering without drop shadows or blurry double layers
         int textX = thumbX + 22;
-        int maxTitleW = rw - 110;
+        int heartX = rx + rw - 86;
+        int maxTitleW = Math.max(30, heartX - textX - 6);
         String titlePrefix = isCurrent ? "§6§l" : "§f";
         String artistPrefix = isCurrent ? "§e" : "§7";
-        graphics.text(this.font, Component.literal(titlePrefix + truncate(t.getTitle(), maxTitleW / 6)), textX, ry + 3, isCurrent ? 0xFFFFD090 : 0xFFFFFFFF, false);
-        graphics.text(this.font, Component.literal(artistPrefix + truncate(t.getArtist() + " • " + t.getCategory(), maxTitleW / 5)), textX, ry + 13, isCurrent ? 0xFFFFA070 : 0xFFA0988E, false);
+        graphics.text(this.font, Component.literal(titlePrefix + truncateToWidth(t.getTitle(), maxTitleW, isCurrent)), textX, ry + 3, isCurrent ? 0xFFFFD090 : 0xFFFFFFFF, false);
+        graphics.text(this.font, Component.literal(artistPrefix + truncateToWidth(t.getArtist() + " • " + t.getCategory(), maxTitleW, false)), textX, ry + 13, isCurrent ? 0xFFFFA070 : 0xFFA0988E, false);
 
         // Heart Icon: Amber heart
-        int heartX = rx + rw - 86;
         int heartY = ry + 4;
         boolean heartHover = mouseX >= heartX && mouseX <= heartX + 14 && mouseY >= heartY && mouseY <= heartY + 14;
         String heartStr = isFav ? "§6♥" : (heartHover ? "§6♡" : (isCurrent ? "§6♡" : "§7♡"));
