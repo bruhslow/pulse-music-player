@@ -23,7 +23,7 @@ public class YouTubeResolver {
     private static final String BROWSE_ENDPOINT = "https://www.youtube.com/youtubei/v1/browse?prettyPrint=false";
     private static final String PLAYER_ENDPOINT = "https://www.youtube.com/youtubei/v1/player?key=AIzaSyA8eiZmM1FaDVjRy-df2KTyQ_vz_yYM39w";
 
-    private static final Pattern VIDEO_ID_PATTERN = Pattern.compile("(?:v=|\\/|youtu\\.be\\/|embed\\/|shorts\\/)([a-zA-Z0-9_-]{11})");
+    private static final Pattern VIDEO_ID_PATTERN = Pattern.compile("(?:v=|youtu\\.be\\/|embed\\/|shorts\\/|live\\/|\\/)([a-zA-Z0-9_-]{11})");
     private static final Pattern PLAYLIST_ID_PATTERN = Pattern.compile("(?:list=|p=)([a-zA-Z0-9_-]+)");
 
     public static String extractVideoId(String urlOrId) {
@@ -100,8 +100,10 @@ public class YouTubeResolver {
                         JsonObject vd = root.getAsJsonObject("videoDetails");
                         String title = vd.has("title") ? vd.get("title").getAsString() : "YouTube Track";
                         String author = vd.has("author") ? vd.get("author").getAsString() : "YouTube";
-                        long duration = 180;
-                        if (vd.has("lengthSeconds")) {
+                        boolean isLive = (vd.has("isLive") && vd.get("isLive").getAsBoolean())
+                                || (vd.has("isLiveContent") && vd.get("isLiveContent").getAsBoolean());
+                        long duration = isLive ? -1 : 180;
+                        if (!isLive && vd.has("lengthSeconds")) {
                             try {
                                 duration = Long.parseLong(vd.get("lengthSeconds").getAsString());
                             } catch (Throwable ignored) {}
@@ -116,7 +118,7 @@ public class YouTubeResolver {
                                 }
                             }
                         }
-                        return new AudioTrack(title, author, "https://www.youtube.com/watch?v=" + videoId, false, duration, "YouTube", thumb);
+                        return new AudioTrack(title, author, "https://www.youtube.com/watch?v=" + videoId, isLive, duration, isLive ? "YouTube Live" : "YouTube", thumb);
                     }
                 }
             }
@@ -582,6 +584,16 @@ public class YouTubeResolver {
                                 return fallbackAudioUrl;
                             }
                         }
+
+                        // 3. Fallback for Live Streams: Extract from HLS Manifest
+                        if (sd.has("hlsManifestUrl")) {
+                            String hlsManifest = sd.get("hlsManifestUrl").getAsString();
+                            String liveAudio = extractHlsAudioStream(hlsManifest);
+                            if (liveAudio != null) {
+                                return liveAudio;
+                            }
+                            return hlsManifest;
+                        }
                     }
                 }
             } else {
@@ -591,6 +603,33 @@ public class YouTubeResolver {
             MusicPlayerMod.LOGGER.warn("[YouTube] Resolve audio error: " + t.getMessage());
         }
 
+        return null;
+    }
+
+    private static String extractHlsAudioStream(String hlsManifestUrl) {
+        try {
+            URL u = new URI(hlsManifestUrl).toURL();
+            HttpURLConnection conn = (HttpURLConnection) u.openConnection();
+            conn.setRequestProperty("User-Agent", "Mozilla/5.0");
+            conn.setConnectTimeout(4000);
+            conn.setReadTimeout(5000);
+            if (conn.getResponseCode() == 200) {
+                try (java.io.BufferedReader reader = new java.io.BufferedReader(new InputStreamReader(conn.getInputStream(), StandardCharsets.UTF_8))) {
+                    String line;
+                    String lastUrl = null;
+                    while ((line = reader.readLine()) != null) {
+                        line = line.trim();
+                        if (line.startsWith("http://") || line.startsWith("https://")) {
+                            lastUrl = line;
+                            if (line.contains("audio") || line.contains("itag/140") || line.contains("itag/91")) {
+                                return line;
+                            }
+                        }
+                    }
+                    if (lastUrl != null) return lastUrl;
+                }
+            }
+        } catch (Throwable ignored) {}
         return null;
     }
 

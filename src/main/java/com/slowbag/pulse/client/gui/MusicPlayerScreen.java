@@ -102,7 +102,7 @@ public class MusicPlayerScreen extends Screen {
             if (!cachedLocalTracks.isEmpty()) {
                 searchResults.addAll(cachedLocalTracks);
             }
-            performSearch(searchQuery.isEmpty() ? "lofi" : searchQuery);
+            performSearch(searchQuery.isEmpty() ? "top english hits" : searchQuery);
         }
     }
 
@@ -146,7 +146,7 @@ public class MusicPlayerScreen extends Screen {
         } catch (Throwable ignored) {}
 
         if (selectedTab == 0) {
-            performSearch(searchQuery.isEmpty() ? "lofi" : searchQuery);
+            performSearch(searchQuery.isEmpty() ? "top english hits" : searchQuery);
         }
     }
 

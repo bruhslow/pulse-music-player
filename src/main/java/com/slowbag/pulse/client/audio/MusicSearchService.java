@@ -31,12 +31,12 @@ public class MusicSearchService {
     private static final List<AudioTrack> DEFAULT_HITS = new ArrayList<>();
 
     static {
-        DEFAULT_HITS.add(new AudioTrack("Worry", "The Fretless", "https://ice1.somafm.com/thistle-128-mp3", true, -1, "Acoustic Folk", "https://somafm.com/img3/thistle120.png"));
-        DEFAULT_HITS.add(new AudioTrack("Lofi Hip Hop Chill Beats", "Lofi Girl", "https://ec3.yesstreaming.net:3755/stream", true, -1, "Lofi Chill", "https://somafm.com/img3/groovesalad120.png"));
-        DEFAULT_HITS.add(new AudioTrack("Vaporwave & Synthwave", "Nightwave Plaza 24/7", "https://radio.plaza.one/mp3", true, -1, "Synthwave", "https://plaza.one/apple-touch-icon.png"));
-        DEFAULT_HITS.add(new AudioTrack("Space Station Ambient", "SomaFM Deep Space", "https://ice1.somafm.com/spacestation-128-mp3", true, -1, "Ambient", "https://somafm.com/img3/spacestation120.png"));
-        DEFAULT_HITS.add(new AudioTrack("Smooth Cafe Jazz", "Radio Swiss Jazz", "https://stream.srg-ssr.ch/m/rsj/mp3_128", true, -1, "Jazz", "https://somafm.com/img3/secretagent120.png"));
-        DEFAULT_HITS.add(new AudioTrack("Peaceful Classical Piano", "Radio Swiss Classic", "https://stream.srg-ssr.ch/m/rsc_de/mp3_128", true, -1, "Classical", "https://somafm.com/img3/thistle120.png"));
+        DEFAULT_HITS.add(new AudioTrack("Die With A Smile", "Lady Gaga & Bruno Mars", "https://www.youtube.com/watch?v=kPa7bsKwL-8", false, 251, "English Hits", "https://i.ytimg.com/vi/kPa7bsKwL-8/hqdefault.jpg"));
+        DEFAULT_HITS.add(new AudioTrack("Blinding Lights", "The Weeknd", "https://www.youtube.com/watch?v=4NRXx6U8ABQ", false, 200, "English Hits", "https://i.ytimg.com/vi/4NRXx6U8ABQ/hqdefault.jpg"));
+        DEFAULT_HITS.add(new AudioTrack("Kill Bill", "SZA", "https://www.youtube.com/watch?v=SQnc1Q361mg", false, 153, "English Hits", "https://i.ytimg.com/vi/SQnc1Q361mg/hqdefault.jpg"));
+        DEFAULT_HITS.add(new AudioTrack("Starboy", "The Weeknd ft. Daft Punk", "https://www.youtube.com/watch?v=34Na4j8AVgA", false, 230, "English Hits", "https://i.ytimg.com/vi/34Na4j8AVgA/hqdefault.jpg"));
+        DEFAULT_HITS.add(new AudioTrack("Locked Out of Heaven", "Bruno Mars", "https://www.youtube.com/watch?v=e-fA-gBCkj0", false, 233, "English Hits", "https://i.ytimg.com/vi/e-fA-gBCkj0/hqdefault.jpg"));
+        DEFAULT_HITS.add(new AudioTrack("Snooze", "SZA", "https://www.youtube.com/watch?v=mDOqU7a1eYk", false, 201, "English Hits", "https://i.ytimg.com/vi/mDOqU7a1eYk/hqdefault.jpg"));
     }
 
     public static void searchSongsAsync(String query, Consumer<List<AudioTrack>> callback) {
