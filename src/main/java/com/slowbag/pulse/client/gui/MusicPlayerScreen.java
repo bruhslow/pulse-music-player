@@ -41,6 +41,9 @@ public class MusicPlayerScreen extends Screen {
     private final float[] smoothBands = new float[16];
     private final float[] smoothWaveBars = new float[64];
 
+    public static final int HERO_ART_WIDTH = 80;
+    public static final int HERO_ART_HEIGHT = 52;
+
     // Notification toast on refresh / actions
     private String statusMessage = null;
     private long statusMessageTime = 0;
@@ -404,9 +407,9 @@ public class MusicPlayerScreen extends Screen {
         drawSoftBox(graphics, x + 3, y + 3, leftCardW, 83, 4, 0x30181A1D, 0x25FFFFFF);
         graphics.fill(x + 8, y + 4, x + leftCardW - 2, y + 5, 0x15FFFFFF);
 
-        // 1. Album Art Thumbnail (Left - 16:9 aspect frame: 64x42)
-        int artW = 64;
-        int artH = 42;
+        // 1. Album Art Thumbnail (Left - 16:9 aspect frame: 80x52)
+        int artW = HERO_ART_WIDTH;
+        int artH = HERO_ART_HEIGHT;
         int artX = x + 7;
         int artY = y + 7;
 
@@ -1546,7 +1549,7 @@ public class MusicPlayerScreen extends Screen {
             }
 
             // Timeline Progress Scrubber
-            int artW = 64;
+            int artW = HERO_ART_WIDTH;
             int infoX = heroX + 7 + artW + 8;
             int scrubX = infoX + 26;
             int scrubY = heroY + 42;
@@ -2332,7 +2335,7 @@ public class MusicPlayerScreen extends Screen {
                 int heroW = getHeroWidth();
                 int ctrlAreaW = 118;
                 int leftCardW = heroW - ctrlAreaW - 6;
-                int artW = 64;
+                int artW = HERO_ART_WIDTH;
                 int infoX = heroX + 7 + artW + 8;
                 int scrubX = infoX + 26;
                 int scrubW = (leftCardW - (scrubX - heroX)) - 32;
