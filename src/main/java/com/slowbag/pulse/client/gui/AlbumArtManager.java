@@ -90,16 +90,30 @@ public class AlbumArtManager {
             return;
         }
 
-        if (artworkUrl.equals(currentUrl) && isTextureReady) {
+        String cleanedUrl = artworkUrl.trim();
+        if (cleanedUrl.startsWith("//")) {
+            cleanedUrl = "https:" + cleanedUrl;
+        }
+
+        // If it's a YouTube WebP or variable thumbnail, map it to canonical reliable high-quality JPEG
+        if (cleanedUrl.contains("ytimg.com") || cleanedUrl.contains("youtube.com")) {
+            java.util.regex.Matcher m = java.util.regex.Pattern.compile("(?:vi(?:_webp)?|embed)\\/([a-zA-Z0-9_-]{11})").matcher(cleanedUrl);
+            if (m.find()) {
+                cleanedUrl = "https://i.ytimg.com/vi/" + m.group(1) + "/hqdefault.jpg";
+            }
+        }
+
+        if (cleanedUrl.equals(currentUrl) && isTextureReady) {
             return;
         }
 
-        this.currentUrl = artworkUrl;
+        this.currentUrl = cleanedUrl;
         this.isTextureReady = false;
 
+        final String finalUrl = cleanedUrl;
         executor.submit(() -> {
             try {
-                byte[] imageBytes = fetchImageBytes(artworkUrl);
+                byte[] imageBytes = fetchImageBytes(finalUrl);
                 if (imageBytes == null || imageBytes.length == 0) {
                     return;
                 }
@@ -193,6 +207,10 @@ public class AlbumArtManager {
     }
 
     private static byte[] fetchImageBytes(String urlStr) throws Exception {
+        if (urlStr == null || urlStr.isBlank()) return null;
+        if (urlStr.startsWith("//")) {
+            urlStr = "https:" + urlStr;
+        }
         if (urlStr.startsWith("file:/")) {
             try (InputStream in = new java.io.FileInputStream(new java.io.File(new URI(urlStr)))) {
                 return in.readAllBytes();
@@ -204,7 +222,7 @@ public class AlbumArtManager {
             URL url = new URI(urlStr).toURL();
             HttpURLConnection conn = (HttpURLConnection) url.openConnection();
             conn.setRequestProperty("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36");
-            conn.setRequestProperty("Accept", "image/webp,image/apng,image/png,image/jpeg,image/*,*/*;q=0.8");
+            conn.setRequestProperty("Accept", "image/jpeg,image/png,*/*;q=0.8");
             conn.setConnectTimeout(6000);
             conn.setReadTimeout(10000);
             conn.setInstanceFollowRedirects(false);

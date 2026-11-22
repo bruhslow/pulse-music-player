@@ -5,7 +5,6 @@ import com.slowbag.pulse.client.audio.AudioManager;
 import com.slowbag.pulse.client.audio.AudioTrack;
 import com.slowbag.pulse.client.audio.LocalMusicScanner;
 import com.slowbag.pulse.client.audio.MusicSearchService;
-import com.slowbag.pulse.client.audio.PartyManager;
 import com.slowbag.pulse.client.audio.RecentUrlManager;
 import com.slowbag.pulse.client.audio.YouTubeResolver;
 import net.minecraft.client.Minecraft;
@@ -28,13 +27,12 @@ import java.util.concurrent.CopyOnWriteArrayList;
 /**
  * Modern Pulse Glassmorphism Music Player GUI matching the reference UI layout.
  * Features a floating top pill, dual-column cards, interactive waveform equalizer,
- * queue card, volume slider card, and full group rooms operations.
+ * queue card, volume slider card, and high-fidelity audio engine.
  */
 public class MusicPlayerScreen extends Screen {
 
     private final Screen parentScreen;
     private final AudioManager audioManager;
-    private final PartyManager partyManager;
 
     private float openAnimationProgress = 0.0f;
     private float vinylAngle = 0.0f;
@@ -45,9 +43,9 @@ public class MusicPlayerScreen extends Screen {
     private String statusMessage = null;
     private long statusMessageTime = 0;
 
-    // Tabs: 0: Search, 1: Local, 2: Starred, 3: URL, 4: Rooms, 5: Settings
+    // Tabs: 0: Search, 1: Local, 2: Starred, 3: URL, 4: Settings
     private int selectedTab = 0;
-    private final String[] tabs = {"🔍 Search", "📍 Local", "★ Starred", "🔗 URL", "👥 Rooms", "⚙ Settings"};
+    private final String[] tabs = {"🔍 Search", "📍 Local", "★ Starred", "🔗 URL", "⚙ Settings"};
     private int settingsScrollOffset = 0;
 
     // Search bar & scrolling
@@ -70,22 +68,6 @@ public class MusicPlayerScreen extends Screen {
     private String customUrl = "";
     private boolean isUrlFocused = false;
 
-    // Rooms (Live Group Rooms | Operations) inputs & scrolling
-    private String joinRoomCodeInput = "";
-    private boolean isJoinRoomCodeFocused = false;
-    private String joinRoomPasswordInput = "";
-    private boolean isJoinRoomPasswordFocused = false;
-    private String newRoomName = "";
-    private boolean isRoomNameFocused = false;
-    private String newRoomPassword = "";
-    private boolean isRoomPasswordFocused = false;
-    private PartyManager.RoomEntry passwordPromptRoom = null;
-    private String promptPasswordText = "";
-    private String passwordErrorMsg = "";
-    private String invitePlayerName = "";
-    private boolean isInvitePlayerFocused = false;
-    private int roomScrollOffset = 0;
-
     // Interactive slider dragging
     private boolean isDraggingVolume = false;
     private boolean isDraggingScrubber = false;
@@ -96,7 +78,6 @@ public class MusicPlayerScreen extends Screen {
         super(Component.literal("Pulse Music Player"));
         this.parentScreen = parentScreen;
         this.audioManager = AudioManager.getInstance();
-        this.partyManager = PartyManager.getInstance();
     }
 
     public void setSelectedTab(int tab) {
@@ -107,8 +88,14 @@ public class MusicPlayerScreen extends Screen {
     protected void init() {
         super.init();
         this.openAnimationProgress = 0.0f;
-        if (audioManager.getCurrentTrack() != null && AlbumArtManager.getInstance().getCurrentUrl() == null) {
-            AlbumArtManager.getInstance().loadArtworkAsync(audioManager.getCurrentTrack().getArtworkUrl());
+        if (audioManager.getCurrentTrack() != null) {
+            AudioTrack cur = audioManager.getCurrentTrack();
+            String art = cur.getArtworkUrl();
+            if ((art == null || art.isBlank()) && YouTubeResolver.isYouTubeUrl(cur.getUrl())) {
+                String vid = YouTubeResolver.extractVideoId(cur.getUrl());
+                if (vid != null) art = "https://i.ytimg.com/vi/" + vid + "/hqdefault.jpg";
+            }
+            AlbumArtManager.getInstance().loadArtworkAsync(art);
         }
         this.cachedLocalTracks = LocalMusicScanner.scanLocalTracks();
         if (searchResults.isEmpty()) {
@@ -117,7 +104,6 @@ public class MusicPlayerScreen extends Screen {
             }
             performSearch(searchQuery.isEmpty() ? "lofi" : searchQuery);
         }
-        partyManager.refreshRooms();
     }
 
     private void performSearch(String query) {
@@ -135,17 +121,32 @@ public class MusicPlayerScreen extends Screen {
 
     private void triggerRefresh() {
         playClickSound();
-        statusMessage = "§a🔄 Refreshed with love! All tracks up to date ✨";
+        statusMessage = "§a🔄 Refreshed entire mod! All tracks & settings up to date ✨";
         statusMessageTime = System.currentTimeMillis();
+
+        try {
+            cachedLocalTracks = LocalMusicScanner.scanLocalTracks();
+            localScrollOffset = 0;
+            favoriteScrollOffset = 0;
+        } catch (Throwable ignored) {}
+
+        try {
+            AlbumArtManager.getInstance().clearTexture();
+            AudioTrack cur = audioManager.getCurrentTrack();
+            if (cur != null) {
+                String art = cur.getArtworkUrl();
+                if ((art == null || art.isBlank()) && YouTubeResolver.isYouTubeUrl(cur.getUrl())) {
+                    String vid = YouTubeResolver.extractVideoId(cur.getUrl());
+                    if (vid != null) art = "https://i.ytimg.com/vi/" + vid + "/hqdefault.jpg";
+                }
+                if (art != null) {
+                    AlbumArtManager.getInstance().loadArtworkAsync(art);
+                }
+            }
+        } catch (Throwable ignored) {}
 
         if (selectedTab == 0) {
             performSearch(searchQuery.isEmpty() ? "lofi" : searchQuery);
-        } else if (selectedTab == 1) {
-            cachedLocalTracks = LocalMusicScanner.scanLocalTracks();
-            localScrollOffset = 0;
-        } else if (selectedTab == 4) {
-            partyManager.refreshRooms();
-            roomScrollOffset = 0;
         }
     }
 
@@ -260,69 +261,10 @@ public class MusicPlayerScreen extends Screen {
                 graphics.centeredText(this.font, Component.literal(statusMessage), this.width / 2, ty + 5, 0xFFFFFFFF);
             }
 
-            // 5. Password Prompt Modal Dialog for encrypted rooms
-            if (passwordPromptRoom != null) {
-                renderPasswordModal(graphics, mouseX, mouseY);
-            }
-
             super.extractRenderState(graphics, mouseX, mouseY, delta);
         } catch (Throwable t) {
             MusicPlayerMod.LOGGER.error("[Music Player] Error in extractRenderState", t);
         }
-    }
-
-    private void renderPasswordModal(GuiGraphicsExtractor graphics, int mouseX, int mouseY) {
-        if (passwordPromptRoom == null) return;
-
-        // Semi-transparent blackout backdrop
-        graphics.fill(0, 0, this.width, this.height, 0xAA000000);
-
-        int mw = 210;
-        int mh = 94;
-        int mx = (this.width - mw) / 2;
-        int my = (this.height - mh) / 2;
-
-        // Modern obsidian glass card with amber border
-        drawGlassCard(graphics, mx, my, mw, mh, 0xF516181A, 0xFFD97746, 0x30FFFFFF);
-
-        // Header
-        graphics.centeredText(this.font, Component.literal("§e🔒 Enter Room Password"), mx + mw / 2, my + 8, 0xFFFFFFFF);
-        graphics.centeredText(this.font, Component.literal("§7Room: §f" + truncate(passwordPromptRoom.getName(), 16)), mx + mw / 2, my + 21, 0xFFA0988E);
-
-        // Password Input Box
-        int pBoxX = mx + 16;
-        int pBoxY = my + 34;
-        int pBoxW = mw - 32;
-        int pBoxH = 18;
-        drawSoftBox(graphics, pBoxX, pBoxY, pBoxW, pBoxH, 3, 0x80000000, 0xFFD97746);
-
-        if (promptPasswordText.isEmpty()) {
-            graphics.text(this.font, Component.literal("§8Enter password..."), pBoxX + 6, pBoxY + 5, 0xFF888888, false);
-        } else {
-            graphics.text(this.font, Component.literal("§f" + promptPasswordText + "§6_"), pBoxX + 6, pBoxY + 5, 0xFFFFFFFF, false);
-        }
-
-        // Error message if any
-        if (!passwordErrorMsg.isEmpty()) {
-            graphics.centeredText(this.font, Component.literal(passwordErrorMsg), mx + mw / 2, my + 54, 0xFFFF5555);
-        }
-
-        // Buttons Row
-        int btnY = my + 66;
-        int btnW = 80;
-        int btnH = 18;
-        int joinX = mx + 18;
-        int cancelX = mx + mw - btnW - 18;
-
-        // Join button
-        boolean joinHov = mouseX >= joinX && mouseX <= joinX + btnW && mouseY >= btnY && mouseY <= btnY + btnH;
-        drawSoftBox(graphics, joinX, btnY, btnW, btnH, 3, joinHov ? 0xFFE0783E : 0xFFD97746, joinHov ? 0xFFFFFFFF : 0x40FFFFFF);
-        graphics.centeredText(this.font, Component.literal("§f▶ Join"), joinX + btnW / 2, btnY + 5, 0xFFFFFFFF);
-
-        // Cancel button
-        boolean cancelHov = mouseX >= cancelX && mouseX <= cancelX + btnW && mouseY >= btnY && mouseY <= btnY + btnH;
-        drawSoftBox(graphics, cancelX, btnY, btnW, btnH, 3, cancelHov ? 0x40FFFFFF : 0x20FFFFFF, cancelHov ? 0xFFFFFFFF : 0x30FFFFFF);
-        graphics.centeredText(this.font, Component.literal("§7✕ Cancel"), cancelX + btnW / 2, btnY + 5, 0xFFFFFFFF);
     }
 
     // Top Floating Pill Bar
@@ -346,7 +288,7 @@ public class MusicPlayerScreen extends Screen {
 
         // Settings / Accessibility Toggle
         boolean setHover = mouseX >= settingBtnX && mouseX <= settingBtnX + 16 && mouseY >= iconY && mouseY <= iconY + 16;
-        boolean setOpen = (selectedTab == 5);
+        boolean setOpen = (selectedTab == 4);
         drawSoftBox(graphics, settingBtnX, iconY, 16, 16, 3, setOpen ? 0x80D97746 : (setHover ? 0x50D97746 : 0x20FFFFFF), setHover ? 0xFFD97746 : 0x25FFFFFF);
         graphics.text(this.font, Component.literal(setOpen || setHover ? "§6⚙" : "§7⚙"), settingBtnX + 4, iconY + 4, 0xFFFFFFFF, false);
 
@@ -396,10 +338,10 @@ public class MusicPlayerScreen extends Screen {
         int borderColor = isBuffering ? 0xFFFFCC00 : (isPlaying ? 0x80D97746 : 0x50FFFFFF);
         if (artId != null) {
             drawSoftBox(graphics, artX, artY, artSize, artSize, 4, 0xFF1C1A18, borderColor);
-            graphics.blit(artId, artX + 1, artY + 1, artSize - 2, artSize - 2, 0.0f, 0.0f, 1.0f, 1.0f);
+            graphics.blit(artId, artX + 1, artY + 1, artX + artSize - 1, artY + artSize - 1, 0.0f, 1.0f, 0.0f, 1.0f);
         } else {
             drawSoftBox(graphics, artX, artY, artSize, artSize, 4, 0xFF1C1A18, 0x40FFFFFF);
-            graphics.blit(AlbumArtManager.getInstance().getDefaultAlbumArtId(), artX + 1, artY + 1, artSize - 2, artSize - 2, 0.0f, 0.0f, 1.0f, 1.0f);
+            graphics.blit(AlbumArtManager.getInstance().getDefaultAlbumArtId(), artX + 1, artY + 1, artX + artSize - 1, artY + artSize - 1, 0.0f, 1.0f, 0.0f, 1.0f);
         }
 
         // 2. Track Info & Source
@@ -570,7 +512,7 @@ public class MusicPlayerScreen extends Screen {
         boolean bellHov = mouseX >= bellX && mouseX <= bellX + 14 && mouseY >= tabY && mouseY <= tabY + 18;
         boolean gearHov = mouseX >= gearX && mouseX <= gearX + 14 && mouseY >= tabY && mouseY <= tabY + 18;
         graphics.text(this.font, Component.literal(bellHov ? "§6🔔" : "§7🔔"), bellX, tabY + 4, 0xFFFFFFFF, false);
-        graphics.text(this.font, Component.literal(gearHov || selectedTab == 5 ? "§6⚙" : "§7⚙"), gearX, tabY + 4, 0xFFFFFFFF, false);
+        graphics.text(this.font, Component.literal(gearHov || selectedTab == 4 ? "§6⚙" : "§7⚙"), gearX, tabY + 4, 0xFFFFFFFF, false);
 
         // Tab Content
         renderTabContent(graphics, x, y + 26, w, h - 28, mouseX, mouseY);
@@ -748,128 +690,7 @@ public class MusicPlayerScreen extends Screen {
             }
 
         } else if (selectedTab == 4) {
-            // Tab 4: Private Group Rooms (Synchronized listening across servers)
-            if (!partyManager.isInRoom()) {
-                graphics.text(this.font, Component.literal("§f§l🔑 Private Sync Rooms"), x + 10, y + 2, 0xFFFFFFFF, true);
-                graphics.text(this.font, Component.literal("§7Listen together synchronously across all servers with a 5-digit code!"), x + 10, y + 14, 0xFFA0988E, false);
-
-                // Section 1: Join Room with Code & Password Card
-                int joinCardY = y + 26;
-                int joinCardH = 46;
-                drawSoftBox(graphics, x + 10, joinCardY, w - 20, joinCardH, 4, 0x18FFFFFF, 0x25FFFFFF);
-                graphics.text(this.font, Component.literal("§e✦ Join Room by Code & Password:"), x + 16, joinCardY + 4, 0xFFFFFFFF, true);
-
-                int codeBoxX = x + 16;
-                int codeBoxY = joinCardY + 18;
-                int codeBoxW = 64;
-                int joinBtnW = 50;
-                int passBoxX = codeBoxX + codeBoxW + 6;
-                int passBoxW = Math.max(60, (x + w - 16 - joinBtnW - 6) - passBoxX);
-                int joinBtnX = passBoxX + passBoxW + 6;
-
-                // Code Input Box (soft rounded corners)
-                drawSoftBox(graphics, codeBoxX, codeBoxY, codeBoxW, 20, 3, 0x60000000, isJoinRoomCodeFocused ? 0xFFD97746 : 0x35FFFFFF);
-                if (joinRoomCodeInput.isEmpty()) {
-                    graphics.text(this.font, Component.literal(isJoinRoomCodeFocused ? "§7_" : "§8Code..."), codeBoxX + 6, codeBoxY + 6, 0xFFFFFFFF, false);
-                } else {
-                    String cursor = isJoinRoomCodeFocused && (System.currentTimeMillis() / 500 % 2 == 0) ? "§6_" : "";
-                    graphics.text(this.font, Component.literal("§f§l" + joinRoomCodeInput + cursor), codeBoxX + 6, codeBoxY + 6, 0xFFFFFFFF, false);
-                }
-
-                // Password Input Box (for password-protected rooms)
-                drawSoftBox(graphics, passBoxX, codeBoxY, passBoxW, 20, 3, 0x60000000, isJoinRoomPasswordFocused ? 0xFFD97746 : 0x35FFFFFF);
-                if (joinRoomPasswordInput.isEmpty()) {
-                    graphics.text(this.font, Component.literal(isJoinRoomPasswordFocused ? "§7_" : "§8Pass (optional)..."), passBoxX + 6, codeBoxY + 6, 0xFF888888, false);
-                } else {
-                    String cursor = isJoinRoomPasswordFocused && (System.currentTimeMillis() / 500 % 2 == 0) ? "§6_" : "";
-                    graphics.text(this.font, Component.literal("§f" + joinRoomPasswordInput + cursor), passBoxX + 6, codeBoxY + 6, 0xFFFFFFFF, false);
-                }
-
-                // Join Pill Button
-                drawGlassButton(graphics, joinBtnX, codeBoxY, joinBtnW, 20, "§f▶ Join", 0xFFD97746, mouseX, mouseY);
-
-                // Section 2: Host Private Room Card
-                int hostCardY = joinCardY + joinCardH + 8;
-                int hostCardH = 46;
-                drawSoftBox(graphics, x + 10, hostCardY, w - 20, hostCardH, 4, 0x18FFFFFF, 0x25FFFFFF);
-                graphics.text(this.font, Component.literal("§6✧ Host Your Own Room:"), x + 16, hostCardY + 4, 0xFFFFFFFF, true);
-
-                int hostPassX = x + 16;
-                int hostPassY = hostCardY + 18;
-                int createBtnW = 92;
-                int hostPassW = Math.max(60, (x + w - 16 - createBtnW - 6) - hostPassX);
-                int createBtnX = hostPassX + hostPassW + 6;
-
-                // Host Password Input Box
-                drawSoftBox(graphics, hostPassX, hostPassY, hostPassW, 20, 3, 0x60000000, isRoomPasswordFocused ? 0xFFD97746 : 0x35FFFFFF);
-                if (newRoomPassword.isEmpty()) {
-                    graphics.text(this.font, Component.literal(isRoomPasswordFocused ? "§7_" : "§8Set pass (optional)..."), hostPassX + 6, hostPassY + 6, 0xFF888888, false);
-                } else {
-                    String cursor = isRoomPasswordFocused && (System.currentTimeMillis() / 500 % 2 == 0) ? "§6_" : "";
-                    graphics.text(this.font, Component.literal("§f" + newRoomPassword + cursor), hostPassX + 6, hostPassY + 6, 0xFFFFFFFF, false);
-                }
-
-                // Host Create Button
-                drawGlassButton(graphics, createBtnX, hostPassY, createBtnW, 20, "§f➕ Create Room", 0x30FFFFFF, mouseX, mouseY);
-
-            } else {
-                // IN A ROOM VIEW: Clean, modern, distraction-free
-                int infoY = y + 2;
-                graphics.text(this.font, Component.literal("§6● §fRoom: §6§l" + partyManager.getRoomName()), x + 12, infoY, 0xFFD97746, true);
-                String roleTag = partyManager.isHost() ? "§e★ You are Host §7(Music you play syncs automatically to everyone)" : "§a✔ Connected & Synced §7(Listening to Host in real-time)";
-                graphics.text(this.font, Component.literal(roleTag), x + 12, infoY + 12, 0xFFA0988E, false);
-
-                // Big Room Code Highlight Banner
-                int codeBannerY = infoY + 25;
-                int codeBannerH = 26;
-                drawSoftBox(graphics, x + 12, codeBannerY, w - 24, codeBannerH, 4, 0x25D97746, 0x80D97746);
-                String code = partyManager.getRoomCode();
-                graphics.text(this.font, Component.literal("§7Room Code: §6§l§n" + (code.isEmpty() ? "---" : code) + "§r §8(Share this code to let friends join)"), x + 18, codeBannerY + 9, 0xFFFFFFFF, false);
-
-                // Copy Code Pill Button
-                int copyBtnW = 76;
-                int copyBtnX = x + w - 12 - copyBtnW - 4;
-                int copyBtnY = codeBannerY + 4;
-                drawGlassButton(graphics, copyBtnX, copyBtnY, copyBtnW, 18, "§f📋 Copy", 0x30FFFFFF, mouseX, mouseY);
-
-                // Connected Listeners Box
-                int memY = codeBannerY + 32;
-                List<String> members = partyManager.getMembers();
-                graphics.text(this.font, Component.literal("§7Connected Listeners §f(" + members.size() + "):"), x + 12, memY, 0xFFFFFFFF, true);
-                memY += 12;
-
-                int dispMems = Math.min(members.size(), 4);
-                for (int i = 0; i < dispMems; i++) {
-                    String mem = members.get(i);
-                    boolean isHostMem = mem.contains("[Host]");
-                    boolean isMe = mem.contains("(You)");
-                    drawSoftBox(graphics, x + 12, memY, w - 24, 14, 3, 0x14FFFFFF, 0);
-                    String badge = isHostMem ? "§6👑 " : (isMe ? "§b👤 " : "§a🎧 ");
-                    graphics.text(this.font, Component.literal(badge + "§f" + mem), x + 16, memY + 3, 0xFFFFFFFF, false);
-                    memY += 16;
-                }
-
-                // Sleek Action Buttons Row at bottom of Room card
-                int actionY = y + h - 22;
-
-                // Button 1: If Member, Re-sync button (Amber Pill); If Host, Tip
-                if (!partyManager.isHost()) {
-                    int syncBtnW = 68;
-                    int syncBtnX = x + 12;
-                    drawGlassButton(graphics, syncBtnX, actionY, syncBtnW, 16, "§f🔄 Re-sync", 0xFFD97746, mouseX, mouseY);
-                } else {
-                    graphics.text(this.font, Component.literal("§8Invite: §7Give your 5-digit code to friends!"), x + 14, actionY + 4, 0xFFA0988E, false);
-                }
-
-                // Button 2: Leave / Disband Button (Red Glass Pill)
-                int leaveBtnW = partyManager.isHost() ? 78 : 68;
-                int leaveBtnX = x + w - leaveBtnW - 12;
-                boolean leaveHover = mouseX >= leaveBtnX && mouseX <= leaveBtnX + leaveBtnW && mouseY >= actionY && mouseY <= actionY + 16;
-                drawSoftBox(graphics, leaveBtnX, actionY, leaveBtnW, 16, 3, leaveHover ? 0x90FF3344 : 0x30FF3344, 0xFFFF4455);
-                graphics.centeredText(this.font, Component.literal(partyManager.isHost() ? "§c✕ Disband" : "§c✕ Leave"), leaveBtnX + leaveBtnW / 2, actionY + 4, 0xFFFFFFFF);
-            }
-        } else if (selectedTab == 5) {
-            // Tab 5: Settings & Accessibility
+            // Tab 4: Settings & Accessibility
             SettingsManager sm = SettingsManager.getInstance();
             int curY = y + 2;
 
@@ -1116,9 +937,9 @@ public class MusicPlayerScreen extends Screen {
         int thumbY = ry + 3;
         drawSoftBox(graphics, thumbX, thumbY, 16, 16, 3, isCurrent ? 0xFF181614 : 0xFF1C1A18, isCurrent ? 0xFFD97746 : 0x35FFFFFF);
         if (isCurrent && AlbumArtManager.getInstance().getAlbumArtId() != null) {
-            graphics.blit(AlbumArtManager.getInstance().getAlbumArtId(), thumbX + 1, thumbY + 1, 14, 14, 0.0f, 0.0f, 1.0f, 1.0f);
+            graphics.blit(AlbumArtManager.getInstance().getAlbumArtId(), thumbX + 1, thumbY + 1, thumbX + 15, thumbY + 15, 0.0f, 1.0f, 0.0f, 1.0f);
         } else if (isCurrent) {
-            graphics.blit(AlbumArtManager.getInstance().getDefaultAlbumArtId(), thumbX + 1, thumbY + 1, 14, 14, 0.0f, 0.0f, 1.0f, 1.0f);
+            graphics.blit(AlbumArtManager.getInstance().getDefaultAlbumArtId(), thumbX + 1, thumbY + 1, thumbX + 15, thumbY + 15, 0.0f, 1.0f, 0.0f, 1.0f);
         } else {
             graphics.text(this.font, Component.literal("§7♫"), thumbX + 4, thumbY + 4, 0xFFA0988E, false);
         }
@@ -1482,16 +1303,6 @@ public class MusicPlayerScreen extends Screen {
                     }
                     return true;
                 } else if (selectedTab == 4) {
-                    List<PartyManager.RoomEntry> rooms = partyManager.getDiscoveredRooms();
-                    int maxListItems = Math.max(2, (browserH - 28 - 42 - 24) / 26);
-                    if (verticalAmount > 0) {
-                        roomScrollOffset = Math.max(0, roomScrollOffset - 1);
-                    } else if (verticalAmount < 0) {
-                        int max = Math.max(0, rooms.size() - maxListItems);
-                        roomScrollOffset = Math.min(max, roomScrollOffset + 1);
-                    }
-                    return true;
-                } else if (selectedTab == 5) {
                     int totalSettings = 11;
                     int maxScroll = Math.max(0, totalSettings - Math.max(2, (browserH - 56) / 36));
                     if (verticalAmount > 0) {
@@ -1509,63 +1320,12 @@ public class MusicPlayerScreen extends Screen {
         }
     }
 
-    private boolean notifyIfGuestInRoom() {
-        if (partyManager.isInRoom() && !partyManager.isHost()) {
-            playClickSound();
-            statusMessage = "§eOnly host (" + partyManager.getCurrentHost() + ") controls playback! You can add songs to Queue ~ 🎵";
-            statusMessageTime = System.currentTimeMillis();
-            return true;
-        }
-        return false;
-    }
-
     @Override
     public boolean mouseClicked(MouseButtonEvent event, boolean isDoubleClick) {
         try {
             double mx = event.x();
             double my = event.y();
             int btn = event.button();
-
-        if (passwordPromptRoom != null) {
-            int mw = 210, mh = 94;
-            int mx0 = (this.width - mw) / 2;
-            int my0 = (this.height - mh) / 2;
-            int btnY = my0 + 66;
-            int btnW = 80, btnH = 18;
-            int joinX = mx0 + 18;
-            int cancelX = mx0 + mw - btnW - 18;
-
-            if (mx >= joinX && mx <= joinX + btnW && my >= btnY && my <= btnY + btnH) {
-                playClickSound();
-                boolean ok = partyManager.joinRoom(passwordPromptRoom.getName(), promptPasswordText);
-                if (ok) {
-                    statusMessage = "§a🎉 Joined room '" + passwordPromptRoom.getName() + "'! ~ 🎶";
-                    statusMessageTime = System.currentTimeMillis();
-                    passwordPromptRoom = null;
-                    promptPasswordText = "";
-                    passwordErrorMsg = "";
-                } else {
-                    passwordErrorMsg = "§cIncorrect password!";
-                }
-                return true;
-            }
-
-            if (mx >= cancelX && mx <= cancelX + btnW && my >= btnY && my <= btnY + btnH) {
-                playClickSound();
-                passwordPromptRoom = null;
-                promptPasswordText = "";
-                passwordErrorMsg = "";
-                return true;
-            }
-
-            // Click outside dialog to dismiss
-            if (mx < mx0 || mx > mx0 + mw || my < my0 || my > my0 + mh) {
-                passwordPromptRoom = null;
-                promptPasswordText = "";
-                passwordErrorMsg = "";
-            }
-            return true;
-        }
 
         if (btn == 0) { // Left click
             int startX = getStartX();
@@ -1612,11 +1372,9 @@ public class MusicPlayerScreen extends Screen {
             // Settings & Accessibility button
             if (mx >= settingBtnX && mx <= settingBtnX + 16 && my >= iconY && my <= iconY + 16) {
                 playClickSound();
-                selectedTab = (selectedTab == 5) ? 0 : 5;
+                selectedTab = (selectedTab == 4) ? 0 : 4;
                 isSearchFocused = false;
                 isUrlFocused = false;
-                isRoomNameFocused = false;
-                isRoomPasswordFocused = false;
                 return true;
             }
 
@@ -1648,7 +1406,6 @@ public class MusicPlayerScreen extends Screen {
             int scrubH = 4;
 
             if (mx >= scrubX - 4 && mx <= scrubX + scrubW + 4 && my >= scrubY - 4 && my <= scrubY + scrubH + 4) {
-                if (notifyIfGuestInRoom()) return true;
                 if (audioManager.getCurrentTrack() != null && !audioManager.getCurrentTrack().isLiveStream() && audioManager.getCurrentTrack().getDurationSeconds() > 0) {
                     playClickSound();
                     isDraggingScrubber = true;
@@ -1666,14 +1423,12 @@ public class MusicPlayerScreen extends Screen {
             int playBtnY = heroY + 14;
 
             if (mx >= prevX && mx <= prevX + 24 && my >= playBtnY + 5 && my <= playBtnY + 27) {
-                if (notifyIfGuestInRoom()) return true;
                 playClickSound();
                 audioManager.previous();
                 return true;
             }
 
             if (mx >= playX && mx <= playX + 32 && my >= playBtnY && my <= playBtnY + 32) {
-                if (notifyIfGuestInRoom()) return true;
                 playClickSound();
                 if (audioManager.isBuffering()) return true;
                 if (audioManager.getCurrentTrack() == null && !searchResults.isEmpty()) {
@@ -1685,7 +1440,6 @@ public class MusicPlayerScreen extends Screen {
             }
 
             if (mx >= nextX && mx <= nextX + 24 && my >= playBtnY + 5 && my <= playBtnY + 27) {
-                if (notifyIfGuestInRoom()) return true;
                 playClickSound();
                 audioManager.next();
                 return true;
@@ -1694,7 +1448,6 @@ public class MusicPlayerScreen extends Screen {
             int row2Y = heroY + 54;
             // 1. Loop Button
             if (mx >= ctrlX + 8 && mx <= ctrlX + 56 && my >= row2Y && my <= row2Y + 17) {
-                if (notifyIfGuestInRoom()) return true;
                 playClickSound();
                 audioManager.toggleLoop();
                 statusMessage = audioManager.isLoopCurrent() ? "§a🔁 Loop: On (Repeating track)" : "§7🔁 Loop: Off";
@@ -1753,9 +1506,6 @@ public class MusicPlayerScreen extends Screen {
                     selectedTab = i;
                     isSearchFocused = (i == 0);
                     isUrlFocused = (i == 3);
-                    isRoomNameFocused = false;
-                    isRoomPasswordFocused = false;
-                    isInvitePlayerFocused = false;
                     return true;
                 }
             }
@@ -1770,11 +1520,9 @@ public class MusicPlayerScreen extends Screen {
             }
             if (mx >= gearX && mx <= gearX + 14 && my >= tabY && my <= tabY + 18) {
                 playClickSound();
-                selectedTab = (selectedTab == 5) ? 0 : 5;
+                selectedTab = (selectedTab == 4) ? 0 : 4;
                 isSearchFocused = false;
                 isUrlFocused = false;
-                isRoomNameFocused = false;
-                isRoomPasswordFocused = false;
                 return true;
             }
 
@@ -1829,13 +1577,6 @@ public class MusicPlayerScreen extends Screen {
 
                     if ((mx >= playBtnX - 2 && mx <= playBtnX + 42 && my >= itemY && my <= itemY + 22) ||
                         (mx >= rx && mx <= heartBtnX - 4 && my >= itemY && my <= itemY + 22)) {
-                        if (partyManager.isInRoom() && !partyManager.isHost()) {
-                            playClickSound();
-                            audioManager.enqueueTrack(track);
-                            statusMessage = "§a➕ Added to Room Queue: " + truncate(track.getTitle(), 18) + " ~ 🎵";
-                            statusMessageTime = System.currentTimeMillis();
-                            return true;
-                        }
                         playClickSound();
                         audioManager.playTrack(track);
                         statusMessage = "§a▶ Playing: " + truncate(track.getTitle(), 22) + " 💖";
@@ -1894,13 +1635,6 @@ public class MusicPlayerScreen extends Screen {
 
                     if ((mx >= playBtnX - 2 && mx <= playBtnX + 42 && my >= itemY && my <= itemY + 22) ||
                         (mx >= rx && mx <= heartBtnX - 4 && my >= itemY && my <= itemY + 22)) {
-                        if (partyManager.isInRoom() && !partyManager.isHost()) {
-                            playClickSound();
-                            audioManager.enqueueTrack(track);
-                            statusMessage = "§a➕ Added to Room Queue: " + truncate(track.getTitle(), 18) + " ~ 🎵";
-                            statusMessageTime = System.currentTimeMillis();
-                            return true;
-                        }
                         playClickSound();
                         audioManager.playTrack(track);
                         statusMessage = "§a▶ Playing: " + truncate(track.getTitle(), 22) + " 💖";
@@ -1962,13 +1696,6 @@ public class MusicPlayerScreen extends Screen {
 
                     if ((mx >= playBtnX - 2 && mx <= playBtnX + 42 && my >= itemY && my <= itemY + 22) ||
                         (mx >= rx && mx <= heartBtnX - 4 && my >= itemY && my <= itemY + 22)) {
-                        if (partyManager.isInRoom() && !partyManager.isHost()) {
-                            playClickSound();
-                            audioManager.enqueueTrack(track);
-                            statusMessage = "§a➕ Added to Room Queue: " + truncate(track.getTitle(), 18) + " ~ 🎵";
-                            statusMessageTime = System.currentTimeMillis();
-                            return true;
-                        }
                         playClickSound();
                         audioManager.playTrack(track);
                         statusMessage = "§a▶ Playing: " + truncate(track.getTitle(), 22) + " 💖";
@@ -2022,24 +1749,6 @@ public class MusicPlayerScreen extends Screen {
                 if (mx >= playBtnX && mx <= playBtnX + playBtnW && my >= inputY && my <= inputY + inputH) {
                     playClickSound();
                     if (!customUrl.isBlank()) {
-                        if (partyManager.isInRoom() && !partyManager.isHost()) {
-                            statusMessage = "§e⚡ Resolving link to Room Queue... 💖";
-                            statusMessageTime = System.currentTimeMillis();
-                            String toQueue = customUrl.trim();
-                            RecentUrlManager.parseUrlOrPlaylistAsync(toQueue, tracks -> {
-                                if (!tracks.isEmpty()) {
-                                    for (AudioTrack t : tracks) {
-                                        audioManager.enqueueTrackLast(t);
-                                    }
-                                    statusMessage = "§a➕ Queued " + tracks.size() + " track(s) to Room Queue! 🎵";
-                                    statusMessageTime = System.currentTimeMillis();
-                                } else {
-                                    statusMessage = "§c✕ Could not resolve YouTube link or playlist.";
-                                    statusMessageTime = System.currentTimeMillis();
-                                }
-                            });
-                            return true;
-                        }
                         statusMessage = "§e⚡ Resolving YouTube link / playlist with love... 💖";
                         statusMessageTime = System.currentTimeMillis();
                         String toPlay = customUrl.trim();
@@ -2120,20 +1829,6 @@ public class MusicPlayerScreen extends Screen {
                     if (mx >= rowPlayX && mx <= rowPlayX + 38 && my >= recentY && my <= recentY + 18) {
                         playClickSound();
                         String rUrl = recents.get(i);
-                        if (partyManager.isInRoom() && !partyManager.isHost()) {
-                            statusMessage = "§e⚡ Resolving link to Room Queue... 💖";
-                            statusMessageTime = System.currentTimeMillis();
-                            RecentUrlManager.parseUrlOrPlaylistAsync(rUrl, tracks -> {
-                                if (!tracks.isEmpty()) {
-                                    for (AudioTrack t : tracks) {
-                                        audioManager.enqueueTrackLast(t);
-                                    }
-                                    statusMessage = "§a➕ Queued " + tracks.size() + " track(s) to Room Queue! 🎵";
-                                    statusMessageTime = System.currentTimeMillis();
-                                }
-                            });
-                            return true;
-                        }
                         statusMessage = "§e⚡ Loading: " + truncate(rUrl, 20) + "...";
                         statusMessageTime = System.currentTimeMillis();
                         RecentUrlManager.parseUrlOrPlaylistAsync(rUrl, tracks -> {
@@ -2153,132 +1848,8 @@ public class MusicPlayerScreen extends Screen {
                 }
             }
 
-            // Tab 4: Rooms (Operations)
+            // Tab 4: Settings & Accessibility
             if (selectedTab == 4) {
-                int tabContentY = browserY + 26;
-                int browserH = Math.max(145, Math.min(185, this.height - browserY - 8));
-
-                if (!partyManager.isInRoom()) {
-                    int joinCardY = tabContentY + 26;
-                    int joinCardH = 46;
-                    int codeBoxX = startX + 16;
-                    int codeBoxY = joinCardY + 18;
-                    int codeBoxW = 64;
-                    int joinBtnW = 50;
-                    int passBoxX = codeBoxX + codeBoxW + 6;
-                    int passBoxW = Math.max(60, (startX + leftW - 16 - joinBtnW - 6) - passBoxX);
-                    int joinBtnX = passBoxX + passBoxW + 6;
-
-                    // Click Code input box
-                    if (mx >= codeBoxX && mx <= codeBoxX + codeBoxW && my >= codeBoxY && my <= codeBoxY + 20) {
-                        playClickSound();
-                        isJoinRoomCodeFocused = true;
-                        isJoinRoomPasswordFocused = false;
-                        isRoomPasswordFocused = false;
-                        return true;
-                    }
-
-                    // Click Join Password input box
-                    if (mx >= passBoxX && mx <= passBoxX + passBoxW && my >= codeBoxY && my <= codeBoxY + 20) {
-                        playClickSound();
-                        isJoinRoomPasswordFocused = true;
-                        isJoinRoomCodeFocused = false;
-                        isRoomPasswordFocused = false;
-                        return true;
-                    }
-
-                    // Click Join button
-                    if (mx >= joinBtnX && mx <= joinBtnX + joinBtnW && my >= codeBoxY && my <= codeBoxY + 20) {
-                        playClickSound();
-                        triggerJoinRoom();
-                        return true;
-                    }
-
-                    // Host Card
-                    int hostCardY = joinCardY + joinCardH + 8;
-                    int hostPassX = startX + 16;
-                    int hostPassY = hostCardY + 18;
-                    int createBtnW = 92;
-                    int hostPassW = Math.max(60, (startX + leftW - 16 - createBtnW - 6) - hostPassX);
-                    int createBtnX = hostPassX + hostPassW + 6;
-
-                    // Click Host Password box
-                    if (mx >= hostPassX && mx <= hostPassX + hostPassW && my >= hostPassY && my <= hostPassY + 20) {
-                        playClickSound();
-                        isRoomPasswordFocused = true;
-                        isJoinRoomCodeFocused = false;
-                        isJoinRoomPasswordFocused = false;
-                        return true;
-                    }
-
-                    // Click Host Create Room button
-                    if (mx >= createBtnX && mx <= createBtnX + createBtnW && my >= hostPassY && my <= hostPassY + 20) {
-                        playClickSound();
-                        triggerCreateRoom();
-                        return true;
-                    }
-
-                    if (mx >= startX && mx <= startX + leftW && my >= tabContentY && my <= tabContentY + browserH) {
-                        isJoinRoomCodeFocused = false;
-                        isJoinRoomPasswordFocused = false;
-                        isRoomPasswordFocused = false;
-                    }
-
-                } else {
-                    int actionY = tabContentY + (browserH - 28) - 22;
-
-                    // Copy Code Button
-                    int codeBannerY = tabContentY + 2 + 25;
-                    int copyBtnW = 76;
-                    int copyBtnX = startX + leftW - 12 - copyBtnW - 4;
-                    int copyBtnY = codeBannerY + 4;
-                    int copyBtnH = 18;
-                    if (mx >= copyBtnX && mx <= copyBtnX + copyBtnW && my >= copyBtnY && my <= copyBtnY + copyBtnH) {
-                        playClickSound();
-                        String c = partyManager.getRoomCode();
-                        if (!c.isEmpty()) {
-                            setClipboardString(c);
-                            statusMessage = "§a📋 Copied room code: " + c + " to clipboard! Share with friends!";
-                        } else {
-                            statusMessage = "§eNo room code available.";
-                        }
-                        statusMessageTime = System.currentTimeMillis();
-                        return true;
-                    }
-
-                    // Button: If Member, Re-sync button (Amber Pill)
-                    if (!partyManager.isHost()) {
-                        int syncBtnW = 68;
-                        int syncBtnX = startX + 12;
-                        if (mx >= syncBtnX && mx <= syncBtnX + syncBtnW && my >= actionY && my <= actionY + 16) {
-                            playClickSound();
-                            partyManager.requestSync();
-                            statusMessage = "§a🔄 Sent sync request to host! 🎵";
-                            statusMessageTime = System.currentTimeMillis();
-                            return true;
-                        }
-                    }
-
-                    // Leave / Disband Button (Red Glass Pill)
-                    int leaveBtnW = partyManager.isHost() ? 78 : 68;
-                    int leaveBtnX = startX + leftW - leaveBtnW - 12;
-                    if (mx >= leaveBtnX && mx <= leaveBtnX + leaveBtnW && my >= actionY && my <= actionY + 16) {
-                        playClickSound();
-                        if (partyManager.isHost()) {
-                            partyManager.disbandRoom();
-                            statusMessage = "§7Disbanded room. See you again! 💕";
-                        } else {
-                            partyManager.leaveRoom();
-                            statusMessage = "§7Left the room. Hope to listen together again soon 💕";
-                        }
-                        statusMessageTime = System.currentTimeMillis();
-                        return true;
-                    }
-                }
-            }
-
-            // Tab 5: Settings & Accessibility
-            if (selectedTab == 5) {
                 int curY = browserY + 28;
                 int listStartY = curY + 28;
                 int rowH = 36;
@@ -2491,8 +2062,7 @@ public class MusicPlayerScreen extends Screen {
                 if (!upNext.isEmpty()) {
                     int clearX = rightX + rightW - 42;
                     if (mx >= clearX && mx <= clearX + 36 && my >= queueY + 5 && my <= queueY + 17) {
-                        if (notifyIfGuestInRoom()) return true;
-                        playClickSound();
+                                playClickSound();
                         int cleared = upNext.size();
                         audioManager.clearQueue();
                         statusMessage = "§a🗑 Cleared " + cleared + " queued track" + (cleared > 1 ? "s" : "") + "! Playing station ✨";
@@ -2512,8 +2082,7 @@ public class MusicPlayerScreen extends Screen {
 
                     // Remove from queue
                     if (mx >= removeX - 4 && mx <= removeX + 14 && my >= qItemY && my <= qItemY + 22) {
-                        if (notifyIfGuestInRoom()) return true;
-                        playClickSound();
+                                playClickSound();
                         audioManager.removeFromQueue(i);
                         statusMessage = "§7✕ Removed from queue: " + truncate(t.getTitle(), 18);
                         statusMessageTime = System.currentTimeMillis();
@@ -2522,8 +2091,7 @@ public class MusicPlayerScreen extends Screen {
 
                     // Play immediately
                     if (mx >= rightX + 6 && mx <= rightX + rightW - 20 && my >= qItemY && my <= qItemY + 22) {
-                        if (notifyIfGuestInRoom()) return true;
-                        playClickSound();
+                                playClickSound();
                         audioManager.removeFromQueue(i);
                         audioManager.playTrack(t);
                         statusMessage = "§a▶ Now playing: " + truncate(t.getTitle(), 18) + " ~ Enjoy! 🎶";
@@ -2612,36 +2180,6 @@ public class MusicPlayerScreen extends Screen {
     @Override
     public boolean keyPressed(KeyEvent event) {
         try {
-        if (passwordPromptRoom != null) {
-            if (event.key() == GLFW.GLFW_KEY_ESCAPE) {
-                playClickSound();
-                passwordPromptRoom = null;
-                promptPasswordText = "";
-                passwordErrorMsg = "";
-                return true;
-            }
-            if (event.key() == GLFW.GLFW_KEY_ENTER || event.key() == GLFW.GLFW_KEY_KP_ENTER) {
-                playClickSound();
-                boolean ok = partyManager.joinRoom(passwordPromptRoom.getName(), promptPasswordText);
-                if (ok) {
-                    statusMessage = "§a🎉 Joined room '" + passwordPromptRoom.getName() + "'! ~ 🎶";
-                    statusMessageTime = System.currentTimeMillis();
-                    passwordPromptRoom = null;
-                    promptPasswordText = "";
-                    passwordErrorMsg = "";
-                } else {
-                    passwordErrorMsg = "§cIncorrect password!";
-                }
-                return true;
-            }
-            if (event.key() == GLFW.GLFW_KEY_BACKSPACE && !promptPasswordText.isEmpty()) {
-                promptPasswordText = promptPasswordText.substring(0, promptPasswordText.length() - 1);
-                passwordErrorMsg = "";
-                return true;
-            }
-            return true;
-        }
-
         if (event.key() == GLFW.GLFW_KEY_ESCAPE) {
             playClickSound();
             this.minecraft.gui.setScreen(parentScreen);
@@ -2694,24 +2232,6 @@ public class MusicPlayerScreen extends Screen {
             } else if (event.key() == GLFW.GLFW_KEY_ENTER || event.key() == GLFW.GLFW_KEY_KP_ENTER) {
                 if (!customUrl.isBlank()) {
                     playClickSound();
-                    if (partyManager.isInRoom() && !partyManager.isHost()) {
-                        statusMessage = "§e⚡ Resolving link to Room Queue... 💖";
-                        statusMessageTime = System.currentTimeMillis();
-                        String toQueue = customUrl.trim();
-                        RecentUrlManager.parseUrlOrPlaylistAsync(toQueue, tracks -> {
-                            if (!tracks.isEmpty()) {
-                                for (AudioTrack t : tracks) {
-                                    audioManager.enqueueTrackLast(t);
-                                }
-                                statusMessage = "§a➕ Queued " + tracks.size() + " track(s) to Room Queue! 🎵";
-                                statusMessageTime = System.currentTimeMillis();
-                            } else {
-                                statusMessage = "§c✕ Could not resolve YouTube link or playlist.";
-                                statusMessageTime = System.currentTimeMillis();
-                            }
-                        });
-                        return true;
-                    }
                     statusMessage = "§e⚡ Resolving YouTube link / playlist with love... 💖";
                     statusMessageTime = System.currentTimeMillis();
                     String toPlay = customUrl.trim();
@@ -2734,135 +2254,10 @@ public class MusicPlayerScreen extends Screen {
             }
         }
 
-        if (isJoinRoomCodeFocused) {
-            if (isPasteKey) {
-                playClickSound();
-                String clip = getClipboardString();
-                if (clip != null && !clip.isBlank()) {
-                    String clean = clip.trim().replaceAll("[^a-zA-Z0-9]", "");
-                    if (clean.length() > 8) clean = clean.substring(0, 8);
-                    joinRoomCodeInput = clean.toUpperCase();
-                    statusMessage = "§a📋 Pasted room code: " + joinRoomCodeInput;
-                    statusMessageTime = System.currentTimeMillis();
-                }
-                return true;
-            }
-            if (event.key() == GLFW.GLFW_KEY_BACKSPACE) {
-                if (!joinRoomCodeInput.isEmpty()) {
-                    joinRoomCodeInput = joinRoomCodeInput.substring(0, joinRoomCodeInput.length() - 1);
-                }
-                return true;
-            } else if (event.key() == GLFW.GLFW_KEY_ENTER || event.key() == GLFW.GLFW_KEY_KP_ENTER) {
-                playClickSound();
-                triggerJoinRoom();
-                return true;
-            } else if (event.key() == GLFW.GLFW_KEY_TAB) {
-                isJoinRoomCodeFocused = false;
-                isJoinRoomPasswordFocused = true;
-                return true;
-            }
-        }
-
-        if (isJoinRoomPasswordFocused) {
-            if (event.key() == GLFW.GLFW_KEY_BACKSPACE) {
-                if (!joinRoomPasswordInput.isEmpty()) {
-                    joinRoomPasswordInput = joinRoomPasswordInput.substring(0, joinRoomPasswordInput.length() - 1);
-                }
-                return true;
-            } else if (event.key() == GLFW.GLFW_KEY_ENTER || event.key() == GLFW.GLFW_KEY_KP_ENTER) {
-                playClickSound();
-                triggerJoinRoom();
-                return true;
-            } else if (event.key() == GLFW.GLFW_KEY_TAB) {
-                isJoinRoomPasswordFocused = false;
-                isRoomPasswordFocused = true;
-                return true;
-            }
-        }
-
-        if (isRoomNameFocused) {
-            if (event.key() == GLFW.GLFW_KEY_BACKSPACE && !newRoomName.isEmpty()) {
-                newRoomName = newRoomName.substring(0, newRoomName.length() - 1);
-                return true;
-            }
-        }
-
-        if (isRoomPasswordFocused) {
-            if (event.key() == GLFW.GLFW_KEY_BACKSPACE && !newRoomPassword.isEmpty()) {
-                newRoomPassword = newRoomPassword.substring(0, newRoomPassword.length() - 1);
-                return true;
-            } else if (event.key() == GLFW.GLFW_KEY_ENTER || event.key() == GLFW.GLFW_KEY_KP_ENTER) {
-                playClickSound();
-                triggerCreateRoom();
-                return true;
-            }
-        }
-
-        if (isInvitePlayerFocused) {
-            if (event.key() == GLFW.GLFW_KEY_BACKSPACE && !invitePlayerName.isEmpty()) {
-                invitePlayerName = invitePlayerName.substring(0, invitePlayerName.length() - 1);
-                return true;
-            }
-        }
-
         return super.keyPressed(event);
         } catch (Throwable t) {
             MusicPlayerMod.LOGGER.error("[Pulse] Error in keyPressed", t);
             return false;
-        }
-    }
-
-    private void triggerJoinRoom() {
-        try {
-            if (!joinRoomCodeInput.isBlank()) {
-                final String codeToJoin = joinRoomCodeInput.trim().toUpperCase();
-                final String passToJoin = joinRoomPasswordInput != null ? joinRoomPasswordInput.trim() : "";
-                statusMessage = "§e⚡ Connecting to room code: " + codeToJoin + "...";
-                statusMessageTime = System.currentTimeMillis();
-                new Thread(() -> {
-                    try {
-                        boolean ok = partyManager.joinRoom(codeToJoin, passToJoin);
-                        if (ok) {
-                            statusMessage = "§a🎉 Connected to room! Listening to host ~ 🎵";
-                        } else {
-                            statusMessage = "§c✖ Room code '" + codeToJoin + "' not found or expired.";
-                        }
-                        statusMessageTime = System.currentTimeMillis();
-                    } catch (Throwable t) {
-                        MusicPlayerMod.LOGGER.error("[Pulse] Error joining room", t);
-                        statusMessage = "§c✖ Failed to join room: " + t.getMessage();
-                        statusMessageTime = System.currentTimeMillis();
-                    }
-                }, "JoinRoomThread").start();
-            } else {
-                statusMessage = "§ePlease enter a 5-digit room code first!";
-                statusMessageTime = System.currentTimeMillis();
-            }
-        } catch (Throwable t) {
-            MusicPlayerMod.LOGGER.error("[Pulse] Error in triggerJoinRoom", t);
-        }
-    }
-
-    private void triggerCreateRoom() {
-        try {
-            statusMessage = "§e⚡ Creating private room...";
-            statusMessageTime = System.currentTimeMillis();
-            final String pass = newRoomPassword != null ? newRoomPassword.trim() : "";
-            new Thread(() -> {
-                try {
-                    String pName = partyManager.getPlayerName();
-                    if (pName == null || pName.isBlank()) pName = "Player";
-                    partyManager.createRoom(pName + "'s Room", pass);
-                    statusMessage = "§a🎉 Room created! Code: " + partyManager.getRoomCode() + " ~ 🎵";
-                    statusMessageTime = System.currentTimeMillis();
-                } catch (Throwable t) {
-                    MusicPlayerMod.LOGGER.error("[Pulse] Error creating room", t);
-                    statusMessage = "§c✖ Failed to create room: " + t.getMessage();
-                    statusMessageTime = System.currentTimeMillis();
-                }
-            }, "CreateRoomThread").start();
-        } catch (Throwable t) {
-            MusicPlayerMod.LOGGER.error("[Pulse] Error in triggerCreateRoom", t);
         }
     }
 
@@ -2874,45 +2269,12 @@ public class MusicPlayerScreen extends Screen {
                 return false;
             }
 
-            if (passwordPromptRoom != null) {
-                if (promptPasswordText.length() < 24) {
-                    promptPasswordText += ch;
-                    passwordErrorMsg = "";
-                }
-                return true;
-            }
-
             if (isSearchFocused) {
                 searchQuery += ch;
                 return true;
             } else if (isUrlFocused || selectedTab == 3) {
                 customUrl += ch;
                 isUrlFocused = true;
-                return true;
-            } else if (isJoinRoomCodeFocused) {
-                if (Character.isLetterOrDigit(ch) && joinRoomCodeInput.length() < 8) {
-                    joinRoomCodeInput += Character.toUpperCase(ch);
-                }
-                return true;
-            } else if (isJoinRoomPasswordFocused) {
-                if (joinRoomPasswordInput.length() < 24) {
-                    joinRoomPasswordInput += ch;
-                }
-                return true;
-            } else if (isRoomNameFocused) {
-                if (newRoomName.length() < 24) {
-                    newRoomName += ch;
-                }
-                return true;
-            } else if (isRoomPasswordFocused) {
-                if (newRoomPassword.length() < 16) {
-                    newRoomPassword += ch;
-                }
-                return true;
-            } else if (isInvitePlayerFocused) {
-                if (invitePlayerName.length() < 24) {
-                    invitePlayerName += ch;
-                }
                 return true;
             }
 

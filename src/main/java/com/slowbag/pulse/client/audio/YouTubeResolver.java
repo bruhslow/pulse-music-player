@@ -326,15 +326,6 @@ public class YouTubeResolver {
             JsonObject ci = lvm.getAsJsonObject("contentImage");
             if (ci.has("thumbnailViewModel")) {
                 JsonObject tvm = ci.getAsJsonObject("thumbnailViewModel");
-                if (tvm.has("image")) {
-                    JsonObject img = tvm.getAsJsonObject("image");
-                    if (img.has("sources")) {
-                        JsonArray sources = img.getAsJsonArray("sources");
-                        if (sources.size() > 0) {
-                            thumb = sources.get(sources.size() - 1).getAsJsonObject().get("url").getAsString();
-                        }
-                    }
-                }
                 if (tvm.has("overlays")) {
                     JsonArray overlays = tvm.getAsJsonArray("overlays");
                     for (JsonElement ovEl : overlays) {

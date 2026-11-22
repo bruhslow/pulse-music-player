@@ -139,6 +139,7 @@ public class VisualizerAudioDevice extends AudioDeviceBase {
                 prebufferBytes = 0;
             } catch (Throwable ignored) {}
         }
+        resetLevels();
     }
 
     public synchronized void startDirectIfPrebuffering() {
@@ -237,9 +238,9 @@ public class VisualizerAudioDevice extends AudioDeviceBase {
                 modBuf[i * 2] = (byte) (val & 0xFF);
                 modBuf[i * 2 + 1] = (byte) ((val >> 8) & 0xFF);
             }
-            line.write(modBuf, 0, length);
+            safeLineWrite(modBuf, 0, length);
         } else {
-            line.write(pcmToWrite, pcmOffset, length);
+            safeLineWrite(pcmToWrite, pcmOffset, length);
         }
 
         if (prebuffering) {
@@ -479,10 +480,8 @@ public class VisualizerAudioDevice extends AudioDeviceBase {
             }
         }
 
-        // 3. Output to audio hardware safely with pre-buffer cushion
-        try {
-            line.write(byteBuf, 0, byteCount);
-        } catch (Throwable ignored) {}
+        // 3. Output to audio hardware safely with pre-buffer cushion and frame alignment
+        safeLineWrite(byteBuf, 0, byteCount);
 
         if (prebuffering) {
             prebufferBytes += byteCount;
@@ -495,6 +494,30 @@ public class VisualizerAudioDevice extends AudioDeviceBase {
         }
     }
 
+    private void safeLineWrite(byte[] data, int offset, int length) {
+        if (line == null || !line.isOpen() || length <= 0) return;
+        int frameSize = (currentDirectFormat != null) ? currentDirectFormat.getFrameSize() : 4;
+        if (frameSize <= 0) frameSize = 4;
+        int alignedLength = length - (length % frameSize);
+        if (alignedLength <= 0) return;
+
+        int writtenTotal = 0;
+        while (writtenTotal < alignedLength && line != null && line.isOpen()) {
+            int toWrite = alignedLength - writtenTotal;
+            int written = line.write(data, offset + writtenTotal, toWrite);
+            if (written <= 0) {
+                try {
+                    Thread.sleep(2);
+                } catch (InterruptedException ie) {
+                    Thread.currentThread().interrupt();
+                    break;
+                }
+            } else {
+                writtenTotal += written;
+            }
+        }
+    }
+
     @Override
     protected void flushImpl() {
         if (line != null && line.isOpen()) {
@@ -502,6 +525,7 @@ public class VisualizerAudioDevice extends AudioDeviceBase {
             prebuffering = true;
             prebufferBytes = 0;
         }
+        resetLevels();
     }
 
     @Override

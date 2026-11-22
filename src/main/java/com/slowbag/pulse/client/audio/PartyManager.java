@@ -168,43 +168,11 @@ public class PartyManager {
     private volatile long lastInviteEventTime = 0;
 
     private PartyManager() {
-        // Start background discovery, personal invite, and server party listeners
-        startDirectoryListener();
-        startPersonalInviteListener();
-        startServerDiscoveryListener();
-    }
-
-    public void sendPlayerMessage(Component comp) {
-        if (comp == null) return;
-        try {
-            Minecraft client = Minecraft.getInstance();
-            if (client == null) return;
-            client.execute(() -> {
-                try {
-                    if (client.player != null) {
-                        client.player.sendSystemMessage(comp);
-                    }
-                } catch (Throwable ignored) {}
-            });
-        } catch (Throwable ignored) {}
-    }
-
-    public void sendPlayerMessage(String text) {
-        if (text == null) return;
-        sendPlayerMessage(Component.literal(text));
+        // Rooms disabled
     }
 
     public void init() {
-        try {
-            ClientPlayNetworking.registerGlobalReceiver(PulseNetworkPayload.TYPE, (payload, context) -> {
-                String json = payload.json();
-                context.client().execute(() -> handleServerPacket(json));
-            });
-            MusicPlayerMod.LOGGER.info("[Music Player] Registered native client packet receiver.");
-        } catch (Throwable t) {
-            MusicPlayerMod.LOGGER.debug("[Music Player] Server networking not available or client-only: " + t.getMessage());
-        }
-        refreshRooms();
+        // Rooms disabled
     }
 
     public boolean isServerNetworkingActive() {
@@ -1655,15 +1623,15 @@ public class PartyManager {
     // ------------------------------------------------------------------------
 
     public boolean isInRoom() {
-        return roomName != null;
+        return false;
     }
 
     public String getRoomName() {
-        return roomName;
+        return null;
     }
 
     public boolean isHost() {
-        return isHost;
+        return true;
     }
 
     public String getCurrentHost() {
@@ -1703,5 +1671,18 @@ public class PartyManager {
 
     public List<RoomEntry> getDiscoveredRooms() {
         return Collections.unmodifiableList(discoveredRooms);
+    }
+
+    private void sendPlayerMessage(String text) {
+        try {
+            Minecraft client = Minecraft.getInstance();
+            if (client != null) {
+                client.execute(() -> {
+                    if (client.player != null) {
+                        client.player.sendSystemMessage(Component.literal(text));
+                    }
+                });
+            }
+        } catch (Throwable ignored) {}
     }
 }

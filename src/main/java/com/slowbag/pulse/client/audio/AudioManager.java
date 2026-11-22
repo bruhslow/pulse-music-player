@@ -106,18 +106,6 @@ public class AudioManager {
     }
 
     public boolean checkHostPermission(String action) {
-        PartyManager pm = PartyManager.getInstance();
-        if (pm.isInRoom() && !pm.isHost()) {
-            net.minecraft.client.Minecraft client = net.minecraft.client.Minecraft.getInstance();
-            if (client != null) {
-                client.execute(() -> {
-                    if (client.player != null) {
-                        client.player.sendSystemMessage(net.minecraft.network.chat.Component.literal("§e[Pulse] You are in " + pm.getCurrentHost() + "'s room! Only the host controls playback. You can add songs to Queue ~ 🎵"));
-                    }
-                });
-            }
-            return false;
-        }
         return true;
     }
 
@@ -161,7 +149,14 @@ public class AudioManager {
         }
 
         // Trigger dynamic album art loading
-        AlbumArtManager.getInstance().loadArtworkAsync(track.getArtworkUrl());
+        String artUrl = track.getArtworkUrl();
+        if ((artUrl == null || artUrl.isBlank()) && YouTubeResolver.isYouTubeUrl(track.getUrl())) {
+            String vid = YouTubeResolver.extractVideoId(track.getUrl());
+            if (vid != null) {
+                artUrl = "https://i.ytimg.com/vi/" + vid + "/hqdefault.jpg";
+            }
+        }
+        AlbumArtManager.getInstance().loadArtworkAsync(artUrl);
 
         // Notify Listen Together party host broadcast
         if (broadcastParty) {
@@ -386,8 +381,8 @@ public class AudioManager {
                         return;
                     }
 
-                    if (!upcomingQueue.isEmpty()) {
-                        System.out.println("[Music Player] Skipping unplayable queued track, advancing to next in queue...");
+                    if (!upcomingQueue.isEmpty() || !playlist.isEmpty()) {
+                        System.out.println("[Music Player] Skipping unplayable track, advancing to next song...");
                         executor.submit(this::next);
                     } else {
                         stop();
@@ -443,8 +438,8 @@ public class AudioManager {
                 if (loopCurrent && durationPlayed >= 1500) {
                     System.out.println("[Music Player] 🔁 Retrying loop on current track after exception: " + track.getTitle());
                     executor.submit(() -> playTrack(track));
-                } else if (!upcomingQueue.isEmpty()) {
-                    System.out.println("[Music Player] Error on track, advancing to next queued track...");
+                } else if (!upcomingQueue.isEmpty() || !playlist.isEmpty()) {
+                    System.out.println("[Music Player] Error on track, advancing to next song...");
                     executor.submit(this::next);
                 } else {
                     stop();
@@ -721,6 +716,7 @@ public class AudioManager {
         }
         if (activeDevice != null) {
             try {
+                activeDevice.flushDirect();
                 activeDevice.close();
             } catch (Exception ignored) {}
             activeDevice = null;
@@ -728,6 +724,7 @@ public class AudioManager {
         if (wavLine != null) {
             try {
                 wavLine.stop();
+                wavLine.flush();
                 wavLine.close();
             } catch (Exception ignored) {}
             wavLine = null;
@@ -979,10 +976,15 @@ public class AudioManager {
         if (!checkHostPermission("load playlists")) return;
         this.playlist.clear();
         this.playlist.addAll(newPlaylist);
+        this.upcomingQueue.clear();
         if (!this.playlist.isEmpty()) {
             int validIndex = Math.max(0, Math.min(this.playlist.size() - 1, startIndex));
             this.currentIndex = validIndex;
             playTrack(this.playlist.get(validIndex));
+            // Automatically queue all remaining tracks from the playlist into the queue on the right
+            for (int i = validIndex + 1; i < this.playlist.size(); i++) {
+                this.upcomingQueue.add(this.playlist.get(i));
+            }
         }
     }
 

@@ -99,16 +99,23 @@ jar {
             }
         }
 
-        // 1. Build for any version of 1.21 (1.21.0 through 1.21.4)
+        // 1. Build exclusively for Minecraft 1.21.1
         def jar121 = new File(libsDir, "pulse-music-player-${mod_version}-mc1.21.jar")
-        patchJar(jar121, ">=1.21 <=1.21.4")
+        patchJar(jar121, "1.21.1")
 
-        // 2. Build for any version of 26 (26.1 through 26.4)
+        // 2. Build for any version of 26.x (>=26)
         def jar26 = new File(libsDir, "pulse-music-player-${mod_version}-mc26.jar")
-        patchJar(jar26, ">=26.1 <=26.4")
+        patchJar(jar26, ">=26")
+
+        // Remove intermediate generic unversioned jar so only the two target jars remain
+        try {
+            if (builtJar.exists()) {
+                builtJar.delete()
+            }
+        } catch (Throwable ignored) {}
 
         println("[Pulse Build] Successfully generated dual releases:")
-        println("  -> " + jar121.name + " (Minecraft 1.21.x: >=1.21 <=1.21.4, Java 21+)")
-        println("  -> " + jar26.name + " (Minecraft 26.x: >=26.1 <=26.4, Java 21+)")
+        println("  -> " + jar121.name + " (Minecraft 1.21.1 exclusively, Java 21+)")
+        println("  -> " + jar26.name + " (Minecraft 26.x: >=26, Java 21+)")
     }
 }
