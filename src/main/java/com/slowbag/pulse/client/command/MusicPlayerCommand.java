@@ -18,8 +18,14 @@ import com.slowbag.pulse.client.gui.MusicPlayerScreen;
 import net.fabricmc.fabric.api.client.command.v2.ClientCommands;
 import net.fabricmc.fabric.api.client.command.v2.FabricClientCommandSource;
 import net.minecraft.client.Minecraft;
+import net.minecraft.client.multiplayer.ClientPacketListener;
+import net.minecraft.client.multiplayer.PlayerInfo;
 import net.minecraft.network.chat.Component;
+import com.slowbag.pulse.client.audio.MusicBadgeManager;
 
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.Collections;
 import java.util.List;
 
 /**
@@ -31,11 +37,15 @@ public class MusicPlayerCommand {
     public static void register(CommandDispatcher<FabricClientCommandSource> dispatcher) {
         registerAlias(dispatcher, "mp");
         registerAlias(dispatcher, "musicplayer");
+        dispatcher.register(ClientCommands.literal("mpfind").executes(MusicPlayerCommand::executeFindCommand));
     }
 
     private static void registerAlias(CommandDispatcher<FabricClientCommandSource> dispatcher, String alias) {
         LiteralArgumentBuilder<FabricClientCommandSource> root = ClientCommands.literal(alias)
                 .executes(context -> openGui(0));
+
+        // /mp find
+        root.then(ClientCommands.literal("find").executes(MusicPlayerCommand::executeFindCommand));
 
         // /mp play <song/url>
         root.then(ClientCommands.literal("play")
@@ -339,6 +349,74 @@ public class MusicPlayerCommand {
                 }
             });
         }
+    }
+
+    private static int executeFindCommand(CommandContext<FabricClientCommandSource> context) {
+        Minecraft client = Minecraft.getInstance();
+        if (client == null || client.player == null) return 0;
+
+        MusicBadgeManager.getInstance().broadcastPresenceNow();
+
+        client.execute(() -> {
+            ClientPacketListener conn = client.getConnection();
+            Collection<PlayerInfo> playerList = (conn != null) ? conn.getOnlinePlayers() : Collections.emptyList();
+
+            List<String> modUsersOnServer = new ArrayList<>();
+            String localName = client.player.getName().getString();
+
+            for (PlayerInfo p : playerList) {
+                if (p == null || p.getProfile() == null) continue;
+                String name = p.getProfile().name();
+                if (name == null || name.isBlank()) continue;
+
+                if (MusicBadgeManager.isModUser(name)) {
+                    if (!modUsersOnServer.contains(name)) {
+                        modUsersOnServer.add(name);
+                    }
+                }
+            }
+
+            // Always ensure local player is included
+            if (!modUsersOnServer.contains(localName)) {
+                modUsersOnServer.add(0, localName);
+            }
+
+            int totalOnline = Math.max(1, playerList.size());
+            int modCount = modUsersOnServer.size();
+
+            sendClientMessage(context, Component.literal("§6§m-----------------------------------------------------"));
+            sendClientMessage(context, Component.literal("§6♫ Pulse Music Player §8» §fServer Mod Users (§a" + modCount + "§f/§7" + totalOnline + " online§f):"));
+
+            for (String user : modUsersOnServer) {
+                boolean isMe = user.equalsIgnoreCase(localName);
+                boolean isListening = MusicBadgeManager.isPlayerListening(user);
+                String trackName = MusicBadgeManager.getPlayerTrack(user);
+
+                StringBuilder sb = new StringBuilder();
+                sb.append("  §8• §6[♫] §f").append(user);
+                if (isMe) {
+                    sb.append(" §7(You)");
+                }
+                sb.append(" §8- ");
+                if (isListening) {
+                    if (trackName != null && !trackName.isBlank()) {
+                        sb.append("§e♫ Listening: §f\"").append(truncate(trackName, 28)).append("\"");
+                    } else {
+                        sb.append("§e♫ Listening to music");
+                    }
+                } else {
+                    sb.append("§7Idle §8(Mod Installed)");
+                }
+                sendClientMessage(context, Component.literal(sb.toString()));
+            }
+
+            if (modCount <= 1) {
+                sendClientMessage(context, Component.literal("§7No other players on this server were detected with Pulse Music Player."));
+            }
+            sendClientMessage(context, Component.literal("§6§m-----------------------------------------------------"));
+        });
+
+        return 1;
     }
 
     private static String truncate(String text, int maxLen) {

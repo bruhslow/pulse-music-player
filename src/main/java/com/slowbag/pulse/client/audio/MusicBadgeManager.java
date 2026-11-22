@@ -39,6 +39,7 @@ public class MusicBadgeManager {
     private static volatile boolean badgeEnabled = true;
     private static final Map<String, Long> activeModUsers = new ConcurrentHashMap<>();
     private static final Map<String, Long> activeListeners = new ConcurrentHashMap<>();
+    private static final Map<String, String> activeTrackTitles = new ConcurrentHashMap<>();
 
     private final ExecutorService presenceExecutor = Executors.newCachedThreadPool(r -> {
         Thread t = new Thread(r, "Pulse-PresenceThread");
@@ -83,9 +84,9 @@ public class MusicBadgeManager {
             }
         }
 
-        // 2. Active presence within last 25 seconds
+        // 2. Active presence within last 180 seconds (3 minutes)
         Long lastSeen = activeModUsers.get(lower);
-        if (lastSeen != null && (System.currentTimeMillis() - lastSeen < 25000)) {
+        if (lastSeen != null && (System.currentTimeMillis() - lastSeen < 180000)) {
             return true;
         }
 
@@ -110,9 +111,9 @@ public class MusicBadgeManager {
             }
         }
 
-        // 2. Remote player active listening heartbeat within last 18 seconds
+        // 2. Remote player active listening heartbeat within last 90 seconds
         Long lastAudio = activeListeners.get(lower);
-        if (lastAudio != null && (System.currentTimeMillis() - lastAudio < 18000)) {
+        if (lastAudio != null && (System.currentTimeMillis() - lastAudio < 90000)) {
             return true;
         }
 
@@ -166,38 +167,67 @@ public class MusicBadgeManager {
         if (isPlayerListening(playerName)) {
             return Component.literal(getBeatingMusicPrefix()).append(original);
         } else if (isModUser(playerName)) {
-            return Component.literal("§8[§e⚡§8] ").append(original);
+            return Component.literal("§8[§6♫§8] ").append(original);
         }
 
         return original;
+    }
+
+    public static String getPlayerTrack(String playerName) {
+        if (playerName == null || playerName.isBlank()) return null;
+        Minecraft client = Minecraft.getInstance();
+        if (client != null && client.player != null && playerName.equalsIgnoreCase(client.player.getName().getString())) {
+            AudioTrack cur = AudioManager.getInstance().getCurrentTrack();
+            return cur != null ? cur.getTitle() : null;
+        }
+        return activeTrackTitles.get(playerName.toLowerCase());
+    }
+
+    public static Map<String, Long> getActiveModUsers() {
+        return activeModUsers;
     }
 
     // ------------------------------------------------------------------------
     // Global Presence Broadcasting & Listening
     // ------------------------------------------------------------------------
 
+    public void broadcastPresenceNow() {
+        presenceExecutor.submit(this::broadcastLocalPresence);
+    }
+
+    private void broadcastLocalPresence() {
+        try {
+            Minecraft client = Minecraft.getInstance();
+            if (client == null || client.player == null) return;
+
+            String myName = client.player.getName().getString();
+            if ("Player".equalsIgnoreCase(myName) || myName.isBlank()) return;
+
+            boolean isPlaying = AudioManager.getInstance().isPlaying() && !AudioManager.getInstance().isPaused();
+            AudioTrack curTrack = AudioManager.getInstance().getCurrentTrack();
+            long now = System.currentTimeMillis();
+
+            JsonObject payload = new JsonObject();
+            payload.addProperty("player", myName);
+            payload.addProperty("hasMod", true);
+            payload.addProperty("status", isPlaying ? "playing" : "idle");
+            if (isPlaying && curTrack != null) {
+                payload.addProperty("track", curTrack.getTitle());
+            }
+            payload.addProperty("time", now);
+            sendPresence(payload.toString());
+        } catch (Throwable ignored) {}
+    }
+
     private void startPresenceBroadcaster() {
         presenceExecutor.submit(() -> {
             while (true) {
                 try {
-                    Thread.sleep(5000);
-                    Minecraft client = Minecraft.getInstance();
-                    if (client == null || client.player == null) continue;
-
-                    String myName = client.player.getName().getString();
-                    if ("Player".equalsIgnoreCase(myName) || myName.isBlank()) continue;
-
-                    boolean isPlaying = AudioManager.getInstance().isPlaying() && !AudioManager.getInstance().isPaused();
+                    Thread.sleep(4000);
                     long now = System.currentTimeMillis();
-
-                    if (now - lastHeartbeatSent > 5000) {
+                    if (now - lastHeartbeatSent > 4000) {
                         lastHeartbeatSent = now;
-                        JsonObject payload = new JsonObject();
-                        payload.addProperty("player", myName);
-                        payload.addProperty("hasMod", true);
-                        payload.addProperty("status", isPlaying ? "playing" : "idle");
-                        payload.addProperty("time", now);
-                        sendPresence(payload.toString());
+                        broadcastLocalPresence();
                     }
                 } catch (InterruptedException e) {
                     break;
@@ -212,7 +242,7 @@ public class MusicBadgeManager {
                 URL url = new URI("https://ntfy.sh/pulse_presence_global").toURL();
                 HttpURLConnection conn = (HttpURLConnection) url.openConnection();
                 conn.setRequestMethod("POST");
-                conn.setRequestProperty("User-Agent", "PulseMusicPlayer/2.5");
+                conn.setRequestProperty("User-Agent", "PulseMusicPlayer/2.6");
                 conn.setRequestProperty("Content-Type", "application/json");
                 conn.setDoOutput(true);
                 conn.setConnectTimeout(3000);
@@ -228,7 +258,7 @@ public class MusicBadgeManager {
     private void startPresenceListener() {
         if (presenceListening) return;
         this.presenceListening = true;
-        this.lastPresenceEventTime = System.currentTimeMillis() / 1000 - 10;
+        this.lastPresenceEventTime = System.currentTimeMillis() / 1000 - 180;
 
         presenceExecutor.submit(() -> {
             while (presenceListening) {
@@ -281,8 +311,12 @@ public class MusicBadgeManager {
                 String status = obj.has("status") ? obj.get("status").getAsString() : "idle";
                 if ("playing".equalsIgnoreCase(status)) {
                     activeListeners.put(player, now);
+                    if (obj.has("track")) {
+                        activeTrackTitles.put(player, obj.get("track").getAsString());
+                    }
                 } else {
                     activeListeners.remove(player);
+                    activeTrackTitles.remove(player);
                 }
             }
         } catch (Throwable ignored) {}
