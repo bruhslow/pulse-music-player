@@ -494,6 +494,11 @@ public class PartyManager {
             tObj.addProperty("elapsed", am.getElapsedSeconds());
             tObj.addProperty("isPaused", am.isPaused() || !am.isPlaying());
             if (t.getArtworkUrl() != null) tObj.addProperty("artwork", t.getArtworkUrl());
+            if (t.getUrl() != null && t.getUrl().startsWith("file:/")) {
+                tObj.addProperty("isLocal", true);
+                String lStream = PulseLocalAudioServer.getInstance().getLocalStreamUrl();
+                if (lStream != null) tObj.addProperty("localStreamUrl", lStream);
+            }
             hb.add("track", tObj);
         }
 
@@ -620,13 +625,24 @@ public class PartyManager {
 
         leaveRoomInternal(false);
         String myName = getPlayerName();
-        String topicSuffix = sanitizeTopic(trimmed);
 
-        this.roomCode = trimmed;
-        this.roomName = "Room " + trimmed;
+        RoomEntry match = null;
+        for (RoomEntry re : discoveredRooms) {
+            if (re.getCode().equalsIgnoreCase(trimmed) || re.getName().equalsIgnoreCase(trimmed)) {
+                match = re;
+                break;
+            }
+        }
+
+        String targetCode = (match != null && !match.getCode().isEmpty()) ? match.getCode() : trimmed;
+        String targetName = (match != null) ? match.getName() : "Room #" + trimmed;
+        String topicSuffix = sanitizeTopic(targetCode);
+
+        this.roomCode = targetCode;
+        this.roomName = targetName;
         this.roomPassword = pass;
         this.isHost = false;
-        this.currentHost = "Host";
+        this.currentHost = (match != null) ? match.getHost() : "Host";
         this.members.clear();
         this.members.add(myName);
         this.roomListening = true;
@@ -705,7 +721,24 @@ public class PartyManager {
             sendPlayerMessage("§c[Pulse] Only the room host can disband this room.");
             return;
         }
-        sendPlayerMessage("§c[Pulse] Room '" + roomName + "' has been disbanded.");
+        String curName = this.roomName;
+        String curCode = this.roomCode;
+        sendPlayerMessage("§c[Pulse] Room '" + curName + "' has been disbanded.");
+
+        // 1. Immediately prune from local presence manager and local discovered list
+        if (curName != null) {
+            LocalPresenceManager.removeRoom(curName);
+            discoveredRooms.removeIf(r -> (curName != null && r.getName().equalsIgnoreCase(curName)) ||
+                    (curCode != null && !curCode.isEmpty() && r.getCode().equalsIgnoreCase(curCode)));
+        }
+
+        // 2. Broadcast room_close to global directory so ALL online clients instantly remove it
+        JsonObject closeMsg = new JsonObject();
+        closeMsg.addProperty("type", "room_close");
+        closeMsg.addProperty("name", curName != null ? curName : "");
+        closeMsg.addProperty("code", curCode != null ? curCode : "");
+        sendNtfyMessage("pulse_rooms_global", closeMsg);
+
         leaveRoomInternal(false);
     }
 
@@ -819,6 +852,11 @@ public class PartyManager {
         msg.addProperty("isPaused", AudioManager.getInstance().isPaused());
         if (track.getArtworkUrl() != null) {
             msg.addProperty("artwork", track.getArtworkUrl());
+        }
+        if (track.getUrl() != null && track.getUrl().startsWith("file:/")) {
+            msg.addProperty("isLocal", true);
+            String lStream = PulseLocalAudioServer.getInstance().getLocalStreamUrl();
+            if (lStream != null) msg.addProperty("localStreamUrl", lStream);
         }
 
         if (isServerNetworkingActive()) {
@@ -1028,7 +1066,24 @@ public class PartyManager {
         }
     }
 
+    private boolean isUrlReachable(String urlStr, int timeoutMs) {
+        if (urlStr == null || !urlStr.startsWith("http")) return false;
+        try {
+            java.net.HttpURLConnection c = (java.net.HttpURLConnection) new java.net.URI(urlStr).toURL().openConnection();
+            c.setRequestMethod("HEAD");
+            c.setConnectTimeout(timeoutMs);
+            c.setReadTimeout(timeoutMs);
+            int code = c.getResponseCode();
+            return code >= 200 && code < 400;
+        } catch (Throwable t) {
+            return false;
+        }
+    }
+
     private void handleRoomPayload(String rawJson) {
+        if (!isInRoom()) {
+            return;
+        }
         try {
             JsonObject obj = JsonParser.parseString(rawJson).getAsJsonObject();
             String type = obj.has("type") ? obj.get("type").getAsString() : "";
@@ -1048,6 +1103,22 @@ public class PartyManager {
                     leaveRoomInternal(false);
                     return;
                 }
+            }
+
+            if ("queue_add".equals(type) && isHost) {
+                String title = obj.has("title") ? obj.get("title").getAsString() : "Track";
+                String artist = obj.has("artist") ? obj.get("artist").getAsString() : "Unknown";
+                String url = obj.has("url") ? obj.get("url").getAsString() : "";
+                long dur = obj.has("duration") ? obj.get("duration").getAsLong() : -1;
+                String art = obj.has("artworkUrl") ? obj.get("artworkUrl").getAsString() : (obj.has("artwork") ? obj.get("artwork").getAsString() : null);
+                String senderName = obj.has("sender") ? obj.get("sender").getAsString() : "Guest";
+                if (!url.isEmpty()) {
+                    AudioTrack qt = new AudioTrack(title, artist, url, false, dur, "Room", art);
+                    AudioManager.getInstance().enqueueTrackDirect(qt);
+                    sendPlayerMessage("§d[Pulse] ➕ §f" + senderName + " §aadded '§f" + title + "§a' to the Room Queue! 🎶");
+                    publishHostRoomState();
+                }
+                return;
             }
 
             if ("member_ping".equals(type) || "join".equals(type)) {
@@ -1105,16 +1176,23 @@ public class PartyManager {
             }
 
             if ("host_heartbeat".equals(type) && !isHost) {
+                if (!isInRoom()) return;
+                if (obj.has("code")) {
+                    String incCode = obj.get("code").getAsString();
+                    if (this.roomCode != null && !this.roomCode.equalsIgnoreCase(incCode)) {
+                        return; // Heartbeat from another room, ignore
+                    }
+                }
                 if (obj.has("host")) {
                     String h = obj.get("host").getAsString();
                     if (h != null && !h.isBlank() && !h.equalsIgnoreCase("Host")) {
                         currentHost = h;
                     }
                 }
-                if (obj.has("room")) {
+                if (obj.has("room") && this.roomName != null) {
                     this.roomName = obj.get("room").getAsString();
                 }
-                if (obj.has("code")) {
+                if (obj.has("code") && this.roomCode != null) {
                     this.roomCode = obj.get("code").getAsString();
                 }
                 if (obj.has("members")) {
@@ -1128,6 +1206,22 @@ public class PartyManager {
                         if (currentHost != null) members.add(currentHost);
                     }
                 }
+                if (obj.has("queue")) {
+                    JsonArray qArr = obj.getAsJsonArray("queue");
+                    List<AudioTrack> syncedQueue = new ArrayList<>();
+                    for (JsonElement e : qArr) {
+                        if (e.isJsonObject()) {
+                            JsonObject qo = e.getAsJsonObject();
+                            String qTitle = qo.has("title") ? qo.get("title").getAsString() : "Track";
+                            String qArtist = qo.has("artist") ? qo.get("artist").getAsString() : "";
+                            String qUrl = qo.has("url") ? qo.get("url").getAsString() : "";
+                            long qDur = qo.has("duration") ? qo.get("duration").getAsLong() : -1;
+                            String qArt = qo.has("artworkUrl") ? qo.get("artworkUrl").getAsString() : null;
+                            syncedQueue.add(new AudioTrack(qTitle, qArtist, qUrl, false, qDur, "Room", qArt));
+                        }
+                    }
+                    AudioManager.getInstance().syncGuestQueue(syncedQueue);
+                }
                 if (obj.has("track")) {
                     JsonObject tObj = obj.getAsJsonObject("track");
                     String title = tObj.has("title") ? tObj.get("title").getAsString() : "Party Track";
@@ -1139,21 +1233,28 @@ public class PartyManager {
                     long hostElapsed = tObj.has("elapsed") ? tObj.get("elapsed").getAsLong() : 0;
                     boolean hostPaused = tObj.has("isPaused") && tObj.get("isPaused").getAsBoolean();
 
+                    if (tObj.has("localStreamUrl")) {
+                        String localStream = tObj.get("localStreamUrl").getAsString();
+                        if (isUrlReachable(localStream, 600)) {
+                            url = localStream;
+                        }
+                    }
+
                     if (url != null && !url.isBlank()) {
                         AudioTrack current = AudioManager.getInstance().getCurrentTrack();
                         boolean isPlaying = AudioManager.getInstance().isPlaying();
                         boolean isPaused = AudioManager.getInstance().isPaused();
 
                         if (current == null || !url.equals(current.getUrl())) {
-                            AudioTrack syncTrack = new AudioTrack(title, artist, url, false, duration, category, artwork);
-                            Minecraft.getInstance().execute(() -> {
+                            final AudioTrack syncTrack = new AudioTrack(title, artist, url, false, duration, category, artwork);
+                            partyExecutor.submit(() -> {
                                 AudioManager.getInstance().playTrackInternal(syncTrack, false, Math.max(0, hostElapsed));
                             });
                         } else {
                             long myElapsed = AudioManager.getInstance().getElapsedSeconds();
                             if (Math.abs(myElapsed - hostElapsed) > 4) {
-                                AudioTrack syncTrack = new AudioTrack(title, artist, url, false, duration, category, artwork);
-                                Minecraft.getInstance().execute(() -> {
+                                final AudioTrack syncTrack = new AudioTrack(title, artist, url, false, duration, category, artwork);
+                                partyExecutor.submit(() -> {
                                     AudioManager.getInstance().playTrackInternal(syncTrack, false, Math.max(0, hostElapsed));
                                 });
                             }
@@ -1222,6 +1323,13 @@ public class PartyManager {
                 long duration = obj.has("duration") ? obj.get("duration").getAsLong() : -1;
                 long hostElapsed = obj.has("elapsed") ? obj.get("elapsed").getAsLong() : 0;
 
+                if (obj.has("localStreamUrl")) {
+                    String localStream = obj.get("localStreamUrl").getAsString();
+                    if (isUrlReachable(localStream, 600)) {
+                        url = localStream;
+                    }
+                }
+
                 if (url != null && !url.isBlank()) {
                     AudioTrack current = AudioManager.getInstance().getCurrentTrack();
                     boolean isPlaying = AudioManager.getInstance().isPlaying();
@@ -1233,8 +1341,8 @@ public class PartyManager {
                         }
                     }
 
-                    AudioTrack syncTrack = new AudioTrack(title, artist, url, false, duration, category, artwork);
-                    Minecraft.getInstance().execute(() -> {
+                    final AudioTrack syncTrack = new AudioTrack(title, artist, url, false, duration, category, artwork);
+                    partyExecutor.submit(() -> {
                         AudioManager.getInstance().playTrackInternal(syncTrack, false, Math.max(0, hostElapsed));
                     });
                 }
@@ -1358,9 +1466,11 @@ public class PartyManager {
                 } else {
                     discoveredRooms.add(new RoomEntry(name, code, host, hasPass, pass, count));
                 }
-            } else if ("room_close".equals(type)) {
+            } else if ("room_close".equals(type) || "room_disbanded".equals(type) || "room_removed".equals(type) || "disband".equals(type)) {
                 String name = obj.has("name") ? obj.get("name").getAsString() : "";
-                discoveredRooms.removeIf(r -> r.getName().equalsIgnoreCase(name));
+                String code = obj.has("code") ? obj.get("code").getAsString() : "";
+                discoveredRooms.removeIf(r -> (!name.isEmpty() && r.getName().equalsIgnoreCase(name))
+                        || (!code.isEmpty() && r.getCode().equalsIgnoreCase(code)));
             } else if ("room_query".equals(type)) {
                 // Another player is looking for active rooms! If we are a host, announce ourselves right now
                 if (isInRoom() && isHost) {

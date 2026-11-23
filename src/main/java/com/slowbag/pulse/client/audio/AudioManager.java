@@ -337,11 +337,43 @@ public class AudioManager {
                 // 1. Obtain raw buffered stream
                 InputStream rawStream;
                 if (urlStr.startsWith("file:/")) {
-                    File file = new File(new URI(urlStr));
-                    if (!file.exists()) {
-                        throw new IOException("Local file does not exist: " + file.getAbsolutePath());
+                    File file = null;
+                    try {
+                        file = new File(new URI(urlStr));
+                    } catch (Throwable ignored) {}
+
+                    if (file != null && file.exists()) {
+                        PulseLocalAudioServer.getInstance().setCurrentFile(file);
+                        rawStream = new BufferedInputStream(new FileInputStream(file), 128 * 1024);
+                    } else {
+                        // Local file does not exist on this machine (Guest listening to host's local track)
+                        File match = LocalMusicScanner.findMatchingLocalFile(track.getTitle());
+                        if (match != null && match.exists()) {
+                            System.out.println("[Music Player] Found matching local file on guest PC: " + match.getName());
+                            rawStream = new BufferedInputStream(new FileInputStream(match), 128 * 1024);
+                        } else {
+                            // Online handshake: resolve track online so guest hears identical audio in sync
+                            System.out.println("[Music Player] Resolving host's local track online for guest: " + track.getTitle());
+                            String query = track.getTitle() + " " + (track.getArtist() != null ? track.getArtist() : "");
+                            List<AudioTrack> online = YouTubeResolver.search(query, 1);
+                            if (!online.isEmpty()) {
+                                AudioTrack matchedTrack = online.get(0);
+                                String directUrl = YouTubeResolver.resolveAudioStreamUrl(matchedTrack.getUrl());
+                                if (directUrl != null) {
+                                    InputStream rawHttp = openDirectAudioStream(directUrl, 0);
+                                    InputStream bufferedHttp = new AsyncAudioBufferStream(rawHttp, offset -> openDirectAudioStream(directUrl, offset));
+                                    activeStream = bufferedHttp;
+                                    if (sessionId != sessionCounter.get()) {
+                                        bufferedHttp.close();
+                                        return;
+                                    }
+                                    playAacDash(bufferedHttp, sessionId, track, seekSeconds, null);
+                                    return;
+                                }
+                            }
+                            throw new IOException("Local file not found on disk or online: " + track.getTitle());
+                        }
                     }
-                    rawStream = new BufferedInputStream(new FileInputStream(file), 128 * 1024);
                 } else {
                     InputStream asyncBuffer = new AsyncAudioBufferStream(openHttpStreamWithRedirects(urlStr, 0), offset -> openHttpStreamWithRedirects(urlStr, offset));
                     rawStream = new BufferedInputStream(asyncBuffer, 8192);

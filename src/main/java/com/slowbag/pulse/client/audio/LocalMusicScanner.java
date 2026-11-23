@@ -124,6 +124,29 @@ public class LocalMusicScanner {
         return tracks;
     }
 
+    public static File findMatchingLocalFile(String title) {
+        if (title == null || title.isBlank()) return null;
+        String cleanTarget = title.toLowerCase().replaceAll("[^a-z0-9]", "");
+        if (cleanTarget.isEmpty()) return null;
+
+        for (File musicFolder : getMusicDirectories()) {
+            if (!musicFolder.exists() || !musicFolder.isDirectory()) continue;
+            File[] files = musicFolder.listFiles((dir, name) -> {
+                String lower = name.toLowerCase();
+                return lower.endsWith(".mp3") || lower.endsWith(".wav") || lower.endsWith(".ogg") || lower.endsWith(".m4a");
+            });
+            if (files != null) {
+                for (File file : files) {
+                    String cleanName = file.getName().replaceFirst("[.][^.]+$", "").toLowerCase().replaceAll("[^a-z0-9]", "");
+                    if (cleanName.equals(cleanTarget) || cleanName.contains(cleanTarget) || cleanTarget.contains(cleanName)) {
+                        return file;
+                    }
+                }
+            }
+        }
+        return null;
+    }
+
     public static void openMusicFolder() {
         List<File> dirs = getMusicDirectories();
         File folder = dirs.isEmpty() ? new File(System.getProperty("user.home"), ".lunarclient/profiles/main/music") : dirs.get(0);

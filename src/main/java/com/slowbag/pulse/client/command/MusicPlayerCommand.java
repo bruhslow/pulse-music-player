@@ -39,6 +39,15 @@ public class MusicPlayerCommand {
         registerAlias(dispatcher, "musicplayer");
     }
 
+    private static boolean checkGuestPermission(FabricClientCommandSource source) {
+        PartyManager pm = PartyManager.getInstance();
+        if (pm.isInRoom() && !pm.isHost()) {
+            source.sendFeedback(Component.literal("§c[Pulse] You are in §d" + pm.getRoomName() + "§c! Only the room host (" + pm.getCurrentHost() + ") can control playback. Use §f/mp queue <song> §cto add it to the queue."));
+            return false;
+        }
+        return true;
+    }
+
     private static void registerAlias(CommandDispatcher<FabricClientCommandSource> dispatcher, String alias) {
         LiteralArgumentBuilder<FabricClientCommandSource> root = ClientCommands.literal(alias)
                 .executes(context -> openGui(0));
@@ -50,6 +59,7 @@ public class MusicPlayerCommand {
         root.then(ClientCommands.literal("play")
                 .then(ClientCommands.argument("query", StringArgumentType.greedyString())
                         .executes(context -> {
+                            if (!checkGuestPermission(context.getSource())) return 1;
                             String query = StringArgumentType.getString(context, "query");
                             if (query.startsWith("http://") || query.startsWith("https://") || query.startsWith("www.") || YouTubeResolver.isYouTubeUrl(query)) {
                                 return executeUrlCommand(context, query, false);
@@ -78,6 +88,7 @@ public class MusicPlayerCommand {
 
         // /mp pause
         root.then(ClientCommands.literal("pause").executes(context -> {
+            if (!checkGuestPermission(context.getSource())) return 1;
             AudioManager.getInstance().togglePause();
             boolean paused = AudioManager.getInstance().isPaused();
             context.getSource().sendFeedback(Component.literal(paused ? "§e[Pulse] ❚❚ Playback paused." : "§a[Pulse] ▶ Playback resumed."));
@@ -86,6 +97,7 @@ public class MusicPlayerCommand {
 
         // /mp stop
         root.then(ClientCommands.literal("stop").executes(context -> {
+            if (!checkGuestPermission(context.getSource())) return 1;
             AudioManager.getInstance().stop();
             context.getSource().sendFeedback(Component.literal("§c[Pulse] Music stopped."));
             return 1;
@@ -93,6 +105,7 @@ public class MusicPlayerCommand {
 
         // /mp next
         root.then(ClientCommands.literal("next").executes(context -> {
+            if (!checkGuestPermission(context.getSource())) return 1;
             AudioManager.getInstance().next();
             context.getSource().sendFeedback(Component.literal("§a[Pulse] ⏭ Skipped to next track."));
             return 1;
@@ -100,6 +113,7 @@ public class MusicPlayerCommand {
 
         // /mp prev
         root.then(ClientCommands.literal("prev").executes(context -> {
+            if (!checkGuestPermission(context.getSource())) return 1;
             AudioManager.getInstance().previous();
             context.getSource().sendFeedback(Component.literal("§a[Pulse] ⏮ Playing previous track."));
             return 1;
@@ -107,6 +121,7 @@ public class MusicPlayerCommand {
 
         // /mp loop
         root.then(ClientCommands.literal("loop").executes(context -> {
+            if (!checkGuestPermission(context.getSource())) return 1;
             AudioManager.getInstance().toggleLoop();
             boolean loop = AudioManager.getInstance().isLoopCurrent();
             context.getSource().sendFeedback(Component.literal(loop ? "§a[Pulse] 🔁 Loop: On (Repeating track)" : "§7[Pulse] 🔁 Loop: Off"));
@@ -115,6 +130,7 @@ public class MusicPlayerCommand {
 
         // /mp shuffle
         root.then(ClientCommands.literal("shuffle").executes(context -> {
+            if (!checkGuestPermission(context.getSource())) return 1;
             AudioManager.getInstance().toggleShuffle();
             boolean shuf = AudioManager.getInstance().isShuffle();
             context.getSource().sendFeedback(Component.literal(shuf ? "§a[Pulse] 🔀 Shuffle: On" : "§7[Pulse] 🔀 Shuffle: Off"));
@@ -193,6 +209,102 @@ public class MusicPlayerCommand {
                             return 1;
                         })));
 
+        // /mp join <code> [password]
+        LiteralArgumentBuilder<FabricClientCommandSource> joinDirect = ClientCommands.literal("join")
+                .then(ClientCommands.argument("code", StringArgumentType.word())
+                        .executes(context -> executeJoinRoom(context, StringArgumentType.getString(context, "code"), ""))
+                        .then(ClientCommands.argument("password", StringArgumentType.greedyString())
+                                .executes(context -> executeJoinRoom(context, StringArgumentType.getString(context, "code"), StringArgumentType.getString(context, "password")))));
+        root.then(joinDirect);
+
+        // /mp room [join|leave|disband|code|info|create|list]
+        LiteralArgumentBuilder<FabricClientCommandSource> roomCmd = ClientCommands.literal("room")
+                .executes(context -> openGui(4)); // open Rooms tab
+
+        // /mp room join <code> [password]
+        roomCmd.then(ClientCommands.literal("join")
+                .then(ClientCommands.argument("code", StringArgumentType.word())
+                        .executes(context -> executeJoinRoom(context, StringArgumentType.getString(context, "code"), ""))
+                        .then(ClientCommands.argument("password", StringArgumentType.greedyString())
+                                .executes(context -> executeJoinRoom(context, StringArgumentType.getString(context, "code"), StringArgumentType.getString(context, "password"))))));
+
+        // /mp room <code> [password]
+        roomCmd.then(ClientCommands.argument("code", StringArgumentType.word())
+                .executes(context -> executeJoinRoom(context, StringArgumentType.getString(context, "code"), ""))
+                .then(ClientCommands.argument("password", StringArgumentType.greedyString())
+                        .executes(context -> executeJoinRoom(context, StringArgumentType.getString(context, "code"), StringArgumentType.getString(context, "password")))));
+
+        // /mp room leave
+        roomCmd.then(ClientCommands.literal("leave").executes(context -> {
+            PartyManager pm = PartyManager.getInstance();
+            if (!pm.isInRoom()) {
+                context.getSource().sendFeedback(Component.literal("§7[Pulse] You are not currently in any room."));
+                return 1;
+            }
+            pm.leaveRoom();
+            return 1;
+        }));
+
+        // /mp room disband
+        roomCmd.then(ClientCommands.literal("disband").executes(context -> {
+            PartyManager pm = PartyManager.getInstance();
+            if (!pm.isInRoom()) {
+                context.getSource().sendFeedback(Component.literal("§7[Pulse] You are not currently in any room."));
+                return 1;
+            }
+            if (!pm.isHost()) {
+                context.getSource().sendFeedback(Component.literal("§c[Pulse] Only the room host (" + pm.getCurrentHost() + ") can disband this room."));
+                return 1;
+            }
+            pm.disbandRoom();
+            return 1;
+        }));
+
+        // /mp room code
+        roomCmd.then(ClientCommands.literal("code").executes(context -> {
+            PartyManager pm = PartyManager.getInstance();
+            if (!pm.isInRoom()) {
+                context.getSource().sendFeedback(Component.literal("§7[Pulse] You are not currently in any room."));
+                return 1;
+            }
+            context.getSource().sendFeedback(Component.literal("§d[Pulse] 👥 Room: §f" + pm.getRoomName() + " §8| §eCode: §f§l" + pm.getRoomCode() + " §7(Share: §f/mp room join " + pm.getRoomCode() + "§7)"));
+            return 1;
+        }));
+
+        // /mp room info
+        roomCmd.then(ClientCommands.literal("info").executes(context -> {
+            PartyManager pm = PartyManager.getInstance();
+            if (!pm.isInRoom()) {
+                context.getSource().sendFeedback(Component.literal("§7[Pulse] You are not currently in any room."));
+                return 1;
+            }
+            context.getSource().sendFeedback(Component.literal("§5§m-----------------------------------------------------"));
+            context.getSource().sendFeedback(Component.literal("§d♫ Room Info §8» §f" + pm.getRoomName()));
+            context.getSource().sendFeedback(Component.literal("  §8• §eCode: §f§l" + pm.getRoomCode()));
+            context.getSource().sendFeedback(Component.literal("  §8• §bHost: §f" + pm.getCurrentHost() + (pm.isHost() ? " §e(You)" : "")));
+            context.getSource().sendFeedback(Component.literal("  §8• §dMembers (" + pm.getMembers().size() + "): §f" + String.join(", ", pm.getMembers())));
+            context.getSource().sendFeedback(Component.literal("§5§m-----------------------------------------------------"));
+            return 1;
+        }));
+
+        // /mp room create <name> [password]
+        roomCmd.then(ClientCommands.literal("create")
+                .then(ClientCommands.argument("name", StringArgumentType.word())
+                        .executes(context -> {
+                            String name = StringArgumentType.getString(context, "name");
+                            PartyManager.getInstance().createRoom(name, "");
+                            return 1;
+                        })
+                        .then(ClientCommands.argument("pass", StringArgumentType.greedyString())
+                                .executes(context -> {
+                            String name = StringArgumentType.getString(context, "name");
+                            String pass = StringArgumentType.getString(context, "pass");
+                            PartyManager.getInstance().createRoom(name, pass);
+                            return 1;
+                        }))));
+
+        root.then(roomCmd);
+
         dispatcher.register(root);
     }
 
@@ -229,25 +341,30 @@ public class MusicPlayerCommand {
 
     private static int executeQueueAdd(CommandContext<FabricClientCommandSource> context) {
         PartyManager pm = PartyManager.getInstance();
-        if (pm.isInRoom() && !pm.isHost()) {
-            context.getSource().sendFeedback(Component.literal("§c[Pulse] You are in " + pm.getCurrentHost() + "'s room! Only the host has control."));
-            return 1;
-        }
+        boolean isGuest = (pm.isInRoom() && !pm.isHost());
         String query = StringArgumentType.getString(context, "query");
+
         if (query.startsWith("http://") || query.startsWith("https://") || query.startsWith("www.") || YouTubeResolver.isYouTubeUrl(query)) {
-            context.getSource().sendFeedback(Component.literal("§e[Pulse] Resolving link / playlist to queue..."));
+            context.getSource().sendFeedback(Component.literal("§e[Pulse] Resolving link to queue..."));
             RecentUrlManager.parseUrlOrPlaylistAsync(query, tracks -> {
                 if (!tracks.isEmpty()) {
-                    AudioManager am = AudioManager.getInstance();
-                    for (AudioTrack t : tracks) {
-                        am.enqueueTrackLast(t);
-                    }
-                    if (tracks.size() > 1) {
-                        context.getSource().sendFeedback(Component.literal("§a[Pulse] ➕ Queued §f" + tracks.size() + " §atracks from playlist! 💖"));
+                    if (isGuest) {
+                        for (AudioTrack t : tracks) {
+                            pm.addTrackToRoomQueue(t);
+                        }
+                        context.getSource().sendFeedback(Component.literal("§a[Pulse] ➕ Added §f" + tracks.size() + " §asongs to the room queue! 🎶"));
                     } else {
-                        int qPos = am.getQueueSize();
-                        String ord = (qPos == 1) ? "Plays next!" : ((qPos == 2) ? "Plays next next!" : "(#" + qPos + " in queue)");
-                        context.getSource().sendFeedback(Component.literal("§a[Pulse] ➕ Queued: §f" + tracks.get(0).getTitle() + " §7(" + tracks.get(0).getArtist() + ") §a~ " + ord + " 🎶"));
+                        AudioManager am = AudioManager.getInstance();
+                        for (AudioTrack t : tracks) {
+                            am.enqueueTrackLast(t);
+                        }
+                        if (tracks.size() > 1) {
+                            context.getSource().sendFeedback(Component.literal("§a[Pulse] ➕ Queued §f" + tracks.size() + " §atracks from playlist! 💖"));
+                        } else {
+                            int qPos = am.getQueueSize();
+                            String ord = (qPos == 1) ? "Plays next!" : ((qPos == 2) ? "Plays next next!" : "(#" + qPos + " in queue)");
+                            context.getSource().sendFeedback(Component.literal("§a[Pulse] ➕ Queued: §f" + tracks.get(0).getTitle() + " §7(" + tracks.get(0).getArtist() + ") §a~ " + ord + " 🎶"));
+                        }
                     }
                 } else {
                     context.getSource().sendFeedback(Component.literal("§c[Pulse] Could not resolve stream URL to queue: " + query));
@@ -258,14 +375,23 @@ public class MusicPlayerCommand {
             MusicSearchService.searchSongsAsync(query, results -> {
                 if (!results.isEmpty()) {
                     AudioTrack top = results.get(0);
-                    AudioManager.getInstance().enqueueTrack(top);
-                    int qPos = AudioManager.getInstance().getQueueSize();
-                    String ord = (qPos == 1) ? "Plays next!" : ((qPos == 2) ? "Plays next next!" : "(#" + qPos + " in queue)");
-                    Minecraft.getInstance().execute(() -> {
-                        if (Minecraft.getInstance().player != null) {
-                            Minecraft.getInstance().player.sendSystemMessage(Component.literal("§a[Pulse] ➕ Queued: §f" + top.getTitle() + " §7(" + top.getArtist() + ") §a~ " + ord + " 🎶"));
-                        }
-                    });
+                    if (isGuest) {
+                        pm.addTrackToRoomQueue(top);
+                        Minecraft.getInstance().execute(() -> {
+                            if (Minecraft.getInstance().player != null) {
+                                Minecraft.getInstance().player.sendSystemMessage(Component.literal("§a[Pulse] ➕ Added to room queue: §f" + top.getTitle() + " §7(" + top.getArtist() + ") 🎶"));
+                            }
+                        });
+                    } else {
+                        AudioManager.getInstance().enqueueTrack(top);
+                        int qPos = AudioManager.getInstance().getQueueSize();
+                        String ord = (qPos == 1) ? "Plays next!" : ((qPos == 2) ? "Plays next next!" : "(#" + qPos + " in queue)");
+                        Minecraft.getInstance().execute(() -> {
+                            if (Minecraft.getInstance().player != null) {
+                                Minecraft.getInstance().player.sendSystemMessage(Component.literal("§a[Pulse] ➕ Queued: §f" + top.getTitle() + " §7(" + top.getArtist() + ") §a~ " + ord + " 🎶"));
+                            }
+                        });
+                    }
                 } else {
                     Minecraft.getInstance().execute(() -> {
                         if (Minecraft.getInstance().player != null) {
@@ -274,6 +400,31 @@ public class MusicPlayerCommand {
                     });
                 }
             });
+        }
+        return 1;
+    }
+
+    private static int executeJoinRoom(CommandContext<FabricClientCommandSource> context, String codeOrName, String password) {
+        if (codeOrName == null || codeOrName.trim().isEmpty()) {
+            context.getSource().sendFeedback(Component.literal("§c[Pulse] Usage: §f/mp room join <code> [password]"));
+            return 0;
+        }
+        String target = codeOrName.trim();
+        String pass = (password != null) ? password.trim() : "";
+        PartyManager pm = PartyManager.getInstance();
+
+        // Check if room requires password but none was provided
+        for (PartyManager.RoomEntry r : pm.getDiscoveredRooms()) {
+            if ((r.getCode().equalsIgnoreCase(target) || r.getName().equalsIgnoreCase(target)) && r.hasPassword() && pass.isEmpty()) {
+                context.getSource().sendFeedback(Component.literal("§c[Pulse] Room #" + target + " is password-protected! Usage: §f/mp room join " + target + " <password>"));
+                return 1;
+            }
+        }
+
+        context.getSource().sendFeedback(Component.literal("§a[Pulse] 🔑 Joining room #" + target + "... 🎶"));
+        boolean joined = pm.joinRoom(target, pass);
+        if (!joined) {
+            context.getSource().sendFeedback(Component.literal("§c[Pulse] Failed to join room #" + target + "."));
         }
         return 1;
     }
