@@ -43,23 +43,14 @@ public class HudMoveScreen extends Screen {
         // Darkened glass backdrop to see HUD clearly
         graphics.fill(0, 0, this.width, this.height, 0x90000000);
 
-        // Grid guidelines
-        int gridColor = 0x15FFFFFF;
+        // Grid guidelines (subtle)
+        int gridColor = 0x10FFFFFF;
         for (int x = 40; x < this.width; x += 40) {
             graphics.fill(x, 0, x + 1, this.height, gridColor);
         }
         for (int y = 40; y < this.height; y += 40) {
             graphics.fill(0, y, this.width, y + 1, gridColor);
         }
-
-        // Top Header Banner
-        int headerW = Math.min(380, this.width - 24);
-        int headerH = 32;
-        int headerX = (this.width - headerW) / 2;
-        int headerY = 10;
-        MusicPlayerScreen.drawSoftBox(graphics, headerX, headerY, headerW, headerH, 5, 0xF0181A1B, 0xFFA855F7);
-        graphics.centeredText(this.font, Component.literal("§d§l✦ DRAG HUD ANYWHERE ON SCREEN ✦"), this.width / 2, headerY + 5, 0xFFFFFFFF);
-        graphics.centeredText(this.font, Component.literal("§7Click & drag the HUD pill • Snap buttons below • Release to save"), this.width / 2, headerY + 18, 0xFFA0988E);
 
         // Get track details or demo track
         AudioManager audio = AudioManager.getInstance();
@@ -142,13 +133,13 @@ public class HudMoveScreen extends Screen {
             prevWY = wy;
         }
 
-        // Coordinates & Drag Hint Below Pill
-        graphics.centeredText(this.font, Component.literal("§7Position: §dX=" + previewX + ", Y=" + previewY), previewX + hudW / 2, previewY + hudH + 4, 0xFFFFFFFF);
-
         // Bottom Controls: Snap Presets & Save Done
         int bottomY = this.height - 30;
         int btnH = 20;
         int btnW = 74;
+
+        // Position coordinates & drag hint above bottom buttons
+        graphics.centeredText(this.font, Component.literal("§7Position: §dX=" + previewX + ", Y=" + previewY + " §8• §7Click & drag HUD anywhere on screen"), this.width / 2, bottomY - 14, 0xFFA0988E);
 
         // 1. Top-Center Snap (Default)
         drawSnapButton(graphics, 12, bottomY, btnW, btnH, "Top-Center", mouseX, mouseY, true);
