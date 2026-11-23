@@ -195,7 +195,7 @@ public class HudOverlayRenderer {
         }
     }
 
-    private static void drawPillBackground(GuiGraphicsExtractor graphics, int x, int y, int w, int h, int bg, int outline) {
+    public static void drawPillBackground(GuiGraphicsExtractor graphics, int x, int y, int w, int h, int bg, int outline) {
         // Soft rounded capsule fill
         graphics.fill(x + 5, y, x + w - 5, y + 1, bg);
         graphics.fill(x + 3, y + 1, x + w - 3, y + 2, bg);

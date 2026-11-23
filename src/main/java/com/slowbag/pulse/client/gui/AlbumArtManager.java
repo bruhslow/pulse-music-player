@@ -303,33 +303,41 @@ public class AlbumArtManager {
             g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
             g.setRenderingHint(RenderingHints.KEY_RENDERING, RenderingHints.VALUE_RENDER_QUALITY);
 
-            // Sleek dark obsidian vinyl background
-            g.setColor(new Color(0x18, 0x16, 0x14, 0xFF));
+            // Sleek deep obsidian violet background
+            g.setColor(new Color(0x14, 0x12, 0x1C, 0xFF));
             g.fillRoundRect(0, 0, sz, sz, 32, 32);
 
             // Vinyl outer rim
-            g.setColor(new Color(0x28, 0x24, 0x20, 0xFF));
+            g.setColor(new Color(0x22, 0x1A, 0x2C, 0xFF));
             g.fillOval(12, 12, sz - 24, sz - 24);
 
             // Concentric vinyl grooves
             for (int r = 24; r < sz / 2 - 20; r += 12) {
-                g.setColor(new Color(0x3E, 0x36, 0x30, 0x60));
+                g.setColor(new Color(0x3A, 0x2A, 0x48, 0x60));
                 g.drawOval(sz / 2 - r, sz / 2 - r, r * 2, r * 2);
             }
 
-            // Warm amber orange center label
+            // Royal electric purple center label
             int labelR = 48;
-            g.setColor(new Color(0xD9, 0x77, 0x46, 0xFF));
+            g.setColor(new Color(0xA8, 0x55, 0xF7, 0xFF));
             g.fillOval(sz / 2 - labelR, sz / 2 - labelR, labelR * 2, labelR * 2);
 
             // Outer ring on label
-            g.setColor(new Color(0xFF, 0xA0, 0x70, 0xAA));
+            g.setColor(new Color(0xC0, 0x84, 0xFC, 0xAA));
             g.drawOval(sz / 2 - labelR, sz / 2 - labelR, labelR * 2, labelR * 2);
 
             // Center spindle hole
             int holeR = 12;
-            g.setColor(new Color(0x14, 0x12, 0x10, 0xFF));
+            g.setColor(new Color(0x12, 0x10, 0x18, 0xFF));
             g.fillOval(sz / 2 - holeR, sz / 2 - holeR, holeR * 2, holeR * 2);
+
+            // Subtle glowing purple musical note
+            g.setColor(new Color(0xFF, 0xFF, 0xFF, 0xEE));
+            g.setFont(new Font("SansSerif", Font.BOLD, 22));
+            java.awt.FontMetrics fm = g.getFontMetrics();
+            String note = "♪";
+            int nw = fm.stringWidth(note);
+            g.drawString(note, (sz - nw) / 2, sz / 2 - labelR / 2 + 4);
 
             g.dispose();
 

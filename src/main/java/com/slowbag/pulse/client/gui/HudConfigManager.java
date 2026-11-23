@@ -56,7 +56,7 @@ public class HudConfigManager {
 
     public synchronized String getPosition() {
         if (!loaded) load();
-        return position != null ? position : "RIGHT";
+        return position != null ? position : "TOP";
     }
 
     public synchronized void setPosition(String position) {
@@ -81,11 +81,15 @@ public class HudConfigManager {
         save();
     }
 
-    public synchronized void resetToDefault(boolean right) {
-        this.position = right ? "RIGHT" : "LEFT";
+    public synchronized void resetToDefault() {
+        this.position = "TOP";
         this.customX = -1;
         this.customY = -1;
         save();
+    }
+
+    public synchronized void resetToDefault(boolean right) {
+        resetToDefault();
     }
 
     public synchronized boolean isAutoCompact() {
@@ -175,7 +179,10 @@ public class HudConfigManager {
             HudConfigData data = GSON.fromJson(reader, HudConfigData.class);
             if (data != null) {
                 this.hudEnabled = data.hudEnabled;
-                this.position = (data.position != null) ? data.position : "RIGHT";
+                this.position = (data.position != null) ? data.position : "TOP";
+                if ("RIGHT".equalsIgnoreCase(this.position) && data.customX < 0 && data.customY < 0) {
+                    this.position = "TOP";
+                }
                 this.customX = data.customX;
                 this.customY = data.customY;
                 this.autoCompact = data.autoCompact;
@@ -202,7 +209,7 @@ public class HudConfigManager {
 
     private static class HudConfigData {
         boolean hudEnabled = true;
-        String position = "RIGHT";
+        String position = "TOP";
         int customX = -1;
         int customY = -1;
         boolean autoCompact = true;

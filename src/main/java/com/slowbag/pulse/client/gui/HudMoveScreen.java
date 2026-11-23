@@ -16,9 +16,9 @@ public class HudMoveScreen extends Screen {
     private int dragOffsetY = 0;
 
     private int previewX = 100;
-    private int previewY = 100;
-    private final int hudW = 220;
-    private final int hudH = 32;
+    private int previewY = 16;
+    private final int hudW = 210;
+    private final int hudH = 14;
 
     public HudMoveScreen(Screen parentScreen) {
         super(Component.literal("Move HUD Overlay"));
@@ -29,8 +29,13 @@ public class HudMoveScreen extends Screen {
     protected void init() {
         super.init();
         HudConfigManager cfg = HudConfigManager.getInstance();
-        previewX = cfg.getHudX(this.width, hudW);
-        previewY = cfg.getHudY(this.height, hudH);
+        if (cfg.getCustomX() >= 0 && cfg.getCustomY() >= 0) {
+            previewX = cfg.getHudX(this.width, hudW);
+            previewY = cfg.getHudY(this.height, hudH);
+        } else {
+            previewX = (this.width - hudW) / 2;
+            previewY = 16;
+        }
     }
 
     @Override
@@ -49,198 +54,191 @@ public class HudMoveScreen extends Screen {
 
         // Top Header Banner
         int headerW = Math.min(380, this.width - 24);
-        int headerH = 34;
+        int headerH = 32;
         int headerX = (this.width - headerW) / 2;
         int headerY = 10;
         MusicPlayerScreen.drawSoftBox(graphics, headerX, headerY, headerW, headerH, 5, 0xF0181A1B, 0xFFA855F7);
-        graphics.centeredText(this.font, Component.literal("§d§l✦ DRAG HUD ANYWHERE ON SCREEN ✦"), this.width / 2, headerY + 6, 0xFFFFFFFF);
-        graphics.centeredText(this.font, Component.literal("§7Click and hold the music card to drag • Release to save position"), this.width / 2, headerY + 19, 0xFFA0988E);
+        graphics.centeredText(this.font, Component.literal("§d§l✦ DRAG HUD ANYWHERE ON SCREEN ✦"), this.width / 2, headerY + 5, 0xFFFFFFFF);
+        graphics.centeredText(this.font, Component.literal("§7Click & drag the HUD pill • Snap buttons below • Release to save"), this.width / 2, headerY + 18, 0xFFA0988E);
 
-        // Render HUD Card Preview
-        HudConfigManager cfg = HudConfigManager.getInstance();
+        // Get track details or demo track
         AudioManager audio = AudioManager.getInstance();
         AudioTrack track = audio.getCurrentTrack();
-        String title = track != null ? track.getTitle() : "Pulse Lo-Fi Beats & Chill";
-        String artist = track != null ? track.getArtist() : "Lofi Girl Records";
+        String title = track != null ? track.getTitle() : "Locked Out of Heaven";
+        String artist = track != null ? track.getArtist() : "Bruno Mars";
 
-        // HUD Capsule Body (Rounded pill with soft 5px curved corners)
-        int cardBg = isDragging ? 0xF0221A2B : 0xEE14121E;
+        long elapsedSecs = audio.isPlaying() ? audio.getElapsedSeconds() : 34;
+        long durationSecs = (track != null && track.getDurationSeconds() > 0) ? track.getDurationSeconds() : 233;
+        String timeStr = (elapsedSecs / 60) + ":" + String.format("%02d", elapsedSecs % 60);
+        String totalStr = (durationSecs / 60) + ":" + String.format("%02d", durationSecs % 60);
+
+        // 1. Line 1: Centered Song Title, Artist & Time Above Pill
+        String formattedHeader = "§d♪ §f" + truncate(title, 20) + " §7• " + truncate(artist, 18) + "  §d" + timeStr + " §8/ §7" + totalStr;
+        graphics.centeredText(this.font, Component.literal(formattedHeader), previewX + hudW / 2, previewY - 10, 0xFFFFFFFF);
+
+        // 2. Line 2: Slim Floating Capsule Pill
+        int cardBg = isDragging ? 0xF0221A2B : 0xF012101A;
         int borderCol = isDragging ? 0xFFC084FC : 0xFFA855F7;
+        HudOverlayRenderer.drawPillBackground(graphics, previewX, previewY, hudW, hudH, cardBg, borderCol);
 
-        graphics.fill(previewX + 5, previewY, previewX + hudW - 5, previewY + 1, cardBg);
-        graphics.fill(previewX + 3, previewY + 1, previewX + hudW - 3, previewY + 2, cardBg);
-        graphics.fill(previewX + 2, previewY + 2, previewX + hudW - 2, previewY + 3, cardBg);
-        graphics.fill(previewX + 1, previewY + 3, previewX + hudW - 1, previewY + 5, cardBg);
-        graphics.fill(previewX, previewY + 5, previewX + hudW, previewY + hudH - 5, cardBg);
-        graphics.fill(previewX + 1, previewY + hudH - 5, previewX + hudW - 1, previewY + hudH - 3, cardBg);
-        graphics.fill(previewX + 2, previewY + hudH - 3, previewX + hudW - 2, previewY + hudH - 2, cardBg);
-        graphics.fill(previewX + 3, previewY + hudH - 2, previewX + hudW - 3, previewY + hudH - 1, cardBg);
-        graphics.fill(previewX + 5, previewY + hudH - 1, previewX + hudW - 5, previewY + hudH, cardBg);
+        // Specular top highlight
+        graphics.fill(previewX + 4, previewY + 1, previewX + hudW - 4, previewY + 2, 0x40FFFFFF);
 
-        graphics.fill(previewX + 5, previewY, previewX + hudW - 5, previewY + 1, borderCol);
-        graphics.fill(previewX + 5, previewY + hudH - 1, previewX + hudW - 5, previewY + hudH, borderCol);
-        graphics.fill(previewX, previewY + 5, previewX + 1, previewY + hudH - 5, borderCol);
-        graphics.fill(previewX + hudW - 1, previewY + 5, previewX + hudW, previewY + hudH - 5, borderCol);
+        // 3. Left: Glowing Cyan Dot
+        int dotX = previewX + 8;
+        int dotY = previewY + hudH / 2;
+        HudOverlayRenderer.drawCircle(graphics, dotX, dotY, 3, 0x6038BDF8);
+        HudOverlayRenderer.drawCircle(graphics, dotX, dotY, 2, 0xFF38BDF8);
 
-        graphics.fill(previewX + 3, previewY + 1, previewX + 5, previewY + 2, borderCol);
-        graphics.fill(previewX + 2, previewY + 2, previewX + 3, previewY + 3, borderCol);
-        graphics.fill(previewX + 1, previewY + 3, previewX + 2, previewY + 5, borderCol);
+        // 4. Middle: Song Progress Stance Bar
+        int waveAreaW = 30;
+        int trackX = previewX + 17;
+        int trackW = hudW - 17 - waveAreaW - 6;
+        int trackY = previewY + (hudH - 3) / 2;
+        int trackH = 3;
 
-        graphics.fill(previewX + hudW - 5, previewY + 1, previewX + hudW - 3, previewY + 2, borderCol);
-        graphics.fill(previewX + hudW - 3, previewY + 2, previewX + hudW - 2, previewY + 3, borderCol);
-        graphics.fill(previewX + hudW - 2, previewY + 3, previewX + hudW - 1, previewY + 5, borderCol);
+        // Groove Background
+        graphics.fill(trackX, trackY, trackX + trackW, trackY + trackH, 0x30FFFFFF);
 
-        graphics.fill(previewX + 1, previewY + hudH - 5, previewX + 2, previewY + hudH - 3, borderCol);
-        graphics.fill(previewX + 2, previewY + hudH - 3, previewX + 3, previewY + hudH - 2, borderCol);
-        graphics.fill(previewX + 3, previewY + hudH - 2, previewX + 5, previewY + hudH - 1, borderCol);
-
-        graphics.fill(previewX + hudW - 2, previewY + hudH - 5, previewX + hudW - 1, previewY + hudH - 3, borderCol);
-        graphics.fill(previewX + hudW - 3, previewY + hudH - 3, previewX + hudW - 2, previewY + hudH - 2, borderCol);
-        graphics.fill(previewX + hudW - 5, previewY + hudH - 2, previewX + hudW - 3, previewY + hudH - 1, borderCol);
-
-        graphics.fill(previewX + 5, previewY + 1, previewX + hudW - 5, previewY + 2, 0x40FFFFFF);
-
-        // Left enlarged circle with moving animated wave line inside
-        int cx = previewX + 18;
-        int cy = previewY + 16;
-        int circleRadius = 13;
-
-        // Dark circle interior & border ring
-        HudOverlayRenderer.drawCircle(graphics, cx, cy, circleRadius, 0xFF141518);
-        HudOverlayRenderer.drawCircleRing(graphics, cx, cy, circleRadius - 3, 0x30FFFFFF);
-        HudOverlayRenderer.drawCircleRing(graphics, cx, cy, circleRadius, borderCol);
-
-        // Wave line preview
-        double moveTime = System.currentTimeMillis() * 0.007;
-        for (int px = -10; px <= 10; px++) {
-            int curX = cx + px;
-            double normX = px / 10.0;
-            double wave = Math.sin(normX * 4.2 + moveTime) * 0.7;
-            int curY = cy + (int) Math.round(wave * 4.0);
-            graphics.fill(curX, curY - 1, curX + 1, curY, 0x60A855F7);
-            graphics.fill(curX, curY, curX + 1, curY + 1, 0xFFFFF0D0);
-            graphics.fill(curX, curY + 1, curX + 1, curY + 2, 0x60A855F7);
+        // Progress Fill (~35% or live)
+        float progress = 0.35f;
+        if (durationSecs > 0 && elapsedSecs > 0) {
+            progress = Math.min(1.0f, (float) elapsedSecs / (float) durationSecs);
         }
-        graphics.fill(cx - 1, cy - 1, cx + 2, cy + 2, 0xFFFFFFFF);
+        int fillW = (int) (trackW * progress);
+        if (fillW > 0) {
+            graphics.fill(trackX, trackY, trackX + fillW, trackY + trackH, 0xFFA855F7);
+        }
 
-        // Info Text (Full width across the pill without bars)
-        graphics.text(this.font, Component.literal("§f§l" + truncate(title, 26)), previewX + 38, previewY + 5, 0xFFFFFFFF, false);
-        graphics.text(this.font, Component.literal("§7" + truncate(artist + " • 2:45", 28)), previewX + 38, previewY + 17, 0xFFA0988E, false);
+        // Stance Thumb Knob
+        int knobX = Math.min(trackX + trackW - 2, trackX + fillW);
+        graphics.fill(knobX - 1, trackY - 1, knobX + 2, trackY + trackH + 1, 0xFFFFFFFF);
+        graphics.fill(knobX, trackY, knobX + 1, trackY + trackH, 0xFFC084FC);
+
+        // 5. Right: Reactive Curly Audio Wave
+        int waveStartX = previewX + hudW - waveAreaW;
+        int waveEndX = previewX + hudW - 8;
+        int waveCenterY = previewY + hudH / 2;
+
+        double timeMs = System.currentTimeMillis();
+        double wavePhase = timeMs * 0.009;
+        float amp = 2.8f;
+
+        int prevWX = waveStartX;
+        int prevWY = waveCenterY;
+        for (int wx = waveStartX; wx <= waveEndX; wx++) {
+            float normX = (float) (wx - waveStartX) / (float) (waveEndX - waveStartX);
+            double wave = Math.sin(normX * Math.PI * 3.5 + wavePhase) * 0.7 + Math.sin(normX * Math.PI * 7.0 - wavePhase * 1.5) * 0.3;
+            int offset = (int) Math.round(wave * amp);
+            offset = Math.max(-4, Math.min(4, offset));
+            int wy = waveCenterY + offset;
+
+            int minY = Math.min(prevWY, wy);
+            int maxY = Math.max(prevWY, wy);
+            for (int sy = minY; sy <= maxY; sy++) {
+                graphics.fill(wx, sy, wx + 1, sy + 1, 0xFFC084FC);
+            }
+            prevWX = wx;
+            prevWY = wy;
+        }
+
+        // Coordinates & Drag Hint Below Pill
+        graphics.centeredText(this.font, Component.literal("§7Position: §dX=" + previewX + ", Y=" + previewY), previewX + hudW / 2, previewY + hudH + 4, 0xFFFFFFFF);
 
         // Bottom Controls: Snap Presets & Save Done
-        int bottomY = this.height - 32;
+        int bottomY = this.height - 30;
         int btnH = 20;
         int btnW = 74;
 
-        // Top-Left Snap
-        drawSnapButton(graphics, 12, bottomY, btnW, btnH, "Top-Left", mouseX, mouseY, () -> {
-            previewX = 12;
-            previewY = 12;
-            cfg.setCustomPosition(previewX, previewY);
-        });
+        // 1. Top-Center Snap (Default)
+        drawSnapButton(graphics, 12, bottomY, btnW, btnH, "Top-Center", mouseX, mouseY, true);
 
-        // Top-Right Snap
-        drawSnapButton(graphics, 12 + btnW + 6, bottomY, btnW, btnH, "Top-Right", mouseX, mouseY, () -> {
-            previewX = this.width - hudW - 12;
-            previewY = 12;
-            cfg.setCustomPosition(previewX, previewY);
-        });
+        // 2. Top-Left Snap
+        drawSnapButton(graphics, 12 + btnW + 6, bottomY, btnW, btnH, "Top-Left", mouseX, mouseY, false);
 
-        // Bottom-Left Snap
-        drawSnapButton(graphics, 12 + (btnW + 6) * 2, bottomY, btnW, btnH, "Btm-Left", mouseX, mouseY, () -> {
-            previewX = 12;
-            previewY = this.height - hudH - 12;
-            cfg.setCustomPosition(previewX, previewY);
-        });
+        // 3. Top-Right Snap
+        drawSnapButton(graphics, 12 + (btnW + 6) * 2, bottomY, btnW, btnH, "Top-Right", mouseX, mouseY, false);
 
-        // Bottom-Right Snap
-        drawSnapButton(graphics, 12 + (btnW + 6) * 3, bottomY, btnW, btnH, "Btm-Right", mouseX, mouseY, () -> {
-            previewX = this.width - hudW - 12;
-            previewY = this.height - hudH - 12;
-            cfg.setCustomPosition(previewX, previewY);
-        });
+        // 4. Bottom-Center Snap
+        drawSnapButton(graphics, 12 + (btnW + 6) * 3, bottomY, btnW, btnH, "Btm-Center", mouseX, mouseY, false);
 
-        // Auto-Compact Toggle Button
-        boolean compactOn = cfg.isAutoCompact();
-        int compBtnW = 110;
-        int compBtnX = 12 + (btnW + 6) * 4;
-        boolean compHov = mouseX >= compBtnX && mouseX <= compBtnX + compBtnW && mouseY >= bottomY && mouseY <= bottomY + btnH;
-        MusicPlayerScreen.drawSoftBox(graphics, compBtnX, bottomY, compBtnW, btnH, 3, compactOn ? (compHov ? 0xFFC084FC : 0xFFA855F7) : (compHov ? 0x60FFFFFF : 0x25FFFFFF), compHov ? 0xFFFFFFFF : 0x35FFFFFF);
-        graphics.centeredText(this.font, Component.literal(compactOn ? "§fAuto-Compact: §aON" : "§7Auto-Compact: §cOFF"), compBtnX + compBtnW / 2, bottomY + 6, 0xFFFFFFFF);
+        // 5. Reset Default
+        int resetW = 60;
+        int resetX = 12 + (btnW + 6) * 4;
+        boolean resetHov = mouseX >= resetX && mouseX <= resetX + resetW && mouseY >= bottomY && mouseY <= bottomY + btnH;
+        MusicPlayerScreen.drawSoftBox(graphics, resetX, bottomY, resetW, btnH, 3, resetHov ? 0x80FF3344 : 0x25FFFFFF, resetHov ? 0xFFFF4455 : 0x30FFFFFF);
+        graphics.centeredText(this.font, Component.literal("§cReset"), resetX + resetW / 2, bottomY + 6, 0xFFFFFFFF);
 
-        // Save & Done Button (Green pill on far right)
+        // Save & Done Button (Green/Purple pill on far right)
         int doneW = 86;
         int doneX = this.width - doneW - 12;
         boolean doneHov = mouseX >= doneX && mouseX <= doneX + doneW && mouseY >= bottomY && mouseY <= bottomY + btnH;
-        MusicPlayerScreen.drawSoftBox(graphics, doneX, bottomY, doneW, btnH, 3, doneHov ? 0xFF22C55E : 0xFF16A34A, doneHov ? 0xFFFFFFFF : 0x50FFFFFF);
+        MusicPlayerScreen.drawSoftBox(graphics, doneX, bottomY, doneW, btnH, 3, doneHov ? 0xFFC084FC : 0xFFA855F7, doneHov ? 0xFFFFFFFF : 0x50FFFFFF);
         graphics.centeredText(this.font, Component.literal("§f✔ Save & Done"), doneX + doneW / 2, bottomY + 6, 0xFFFFFFFF);
-
-        // Coordinates display
-        graphics.text(this.font, Component.literal("§7Position: §dX=" + previewX + ", Y=" + previewY), previewX, previewY - 10, 0xFFFFFFFF, false);
     }
 
-    private void drawSnapButton(GuiGraphicsExtractor graphics, int bx, int by, int bw, int bh, String label, int mx, int my, Runnable action) {
+    private void drawSnapButton(GuiGraphicsExtractor graphics, int bx, int by, int bw, int bh, String label, int mx, int my, boolean highlight) {
         boolean hov = mx >= bx && mx <= bx + bw && my >= by && my <= by + bh;
-        MusicPlayerScreen.drawSoftBox(graphics, bx, by, bw, bh, 3, hov ? 0x80A855F7 : 0x25FFFFFF, hov ? 0xFFA855F7 : 0x30FFFFFF);
+        int bg = highlight ? (hov ? 0xFFC084FC : 0xFFA855F7) : (hov ? 0x80A855F7 : 0x25FFFFFF);
+        int border = highlight ? 0xFFE9D5FF : (hov ? 0xFFA855F7 : 0x30FFFFFF);
+        MusicPlayerScreen.drawSoftBox(graphics, bx, by, bw, bh, 3, bg, border);
         graphics.centeredText(this.font, Component.literal("§f" + label), bx + bw / 2, by + 6, 0xFFFFFFFF);
     }
 
-    @Override
-    public boolean mouseClicked(MouseButtonEvent event, boolean isDoubleClick) {
-        double mx = event.x();
-        double my = event.y();
-
-        if (event.button() == 0) { // Left click
-            // Check HUD card click for dragging
-            if (mx >= previewX && mx <= previewX + hudW && my >= previewY && my <= previewY + hudH) {
+    private boolean handleMouseClicked(double mx, double my, int button) {
+        if (button == 0) { // Left click
+            // Check HUD card click for dragging (includes text above pill and pill)
+            if (mx >= previewX - 4 && mx <= previewX + hudW + 4 && my >= previewY - 14 && my <= previewY + hudH + 12) {
                 isDragging = true;
                 dragOffsetX = (int) mx - previewX;
                 dragOffsetY = (int) my - previewY;
                 return true;
             }
 
-            int bottomY = this.height - 32;
+            int bottomY = this.height - 30;
             int btnH = 20;
             int btnW = 74;
             HudConfigManager cfg = HudConfigManager.getInstance();
 
-            // Top-Left Snap
+            // 1. Top-Center Snap (Default)
             if (mx >= 12 && mx <= 12 + btnW && my >= bottomY && my <= bottomY + btnH) {
-                previewX = 12;
-                previewY = 12;
-                cfg.setCustomPosition(previewX, previewY);
+                previewX = (this.width - hudW) / 2;
+                previewY = 16;
+                cfg.resetToDefault();
                 return true;
             }
 
-            // Top-Right Snap
+            // 2. Top-Left Snap
             if (mx >= 12 + btnW + 6 && mx <= 12 + (btnW + 6) + btnW && my >= bottomY && my <= bottomY + btnH) {
-                previewX = this.width - hudW - 12;
-                previewY = 12;
-                cfg.setCustomPosition(previewX, previewY);
-                return true;
-            }
-
-            // Bottom-Left Snap
-            if (mx >= 12 + (btnW + 6) * 2 && mx <= 12 + (btnW + 6) * 2 + btnW && my >= bottomY && my <= bottomY + btnH) {
                 previewX = 12;
-                previewY = this.height - hudH - 12;
+                previewY = 16;
                 cfg.setCustomPosition(previewX, previewY);
                 return true;
             }
 
-            // Bottom-Right Snap
-            if (mx >= 12 + (btnW + 6) * 3 && mx <= 12 + (btnW + 6) * 3 + btnW && my >= bottomY && my <= bottomY + btnH) {
+            // 3. Top-Right Snap
+            if (mx >= 12 + (btnW + 6) * 2 && mx <= 12 + (btnW + 6) * 2 + btnW && my >= bottomY && my <= bottomY + btnH) {
                 previewX = this.width - hudW - 12;
+                previewY = 16;
+                cfg.setCustomPosition(previewX, previewY);
+                return true;
+            }
+
+            // 4. Bottom-Center Snap
+            if (mx >= 12 + (btnW + 6) * 3 && mx <= 12 + (btnW + 6) * 3 + btnW && my >= bottomY && my <= bottomY + btnH) {
+                previewX = (this.width - hudW) / 2;
                 previewY = this.height - hudH - 12;
                 cfg.setCustomPosition(previewX, previewY);
                 return true;
             }
 
-            // Auto-compact toggle
-            int compBtnW = 110;
-            int compBtnX = 12 + (btnW + 6) * 4;
-            if (mx >= compBtnX && mx <= compBtnX + compBtnW && my >= bottomY && my <= bottomY + btnH) {
-                cfg.toggleAutoCompact();
+            // 5. Reset Default
+            int resetW = 60;
+            int resetX = 12 + (btnW + 6) * 4;
+            if (mx >= resetX && mx <= resetX + resetW && my >= bottomY && my <= bottomY + btnH) {
+                cfg.resetToDefault();
+                previewX = (this.width - hudW) / 2;
+                previewY = 16;
                 return true;
             }
 
@@ -252,8 +250,22 @@ public class HudMoveScreen extends Screen {
                 return true;
             }
         }
+        return false;
+    }
 
+    @Override
+    public boolean mouseClicked(MouseButtonEvent event, boolean isDoubleClick) {
+        if (handleMouseClicked(event.x(), event.y(), event.button())) {
+            return true;
+        }
         return super.mouseClicked(event, isDoubleClick);
+    }
+
+    public boolean mouseClicked(double mouseX, double mouseY, int button) {
+        if (handleMouseClicked(mouseX, mouseY, button)) {
+            return true;
+        }
+        return false;
     }
 
     @Override
@@ -261,10 +273,19 @@ public class HudMoveScreen extends Screen {
         if (event.button() == 0) {
             if (isDragging) {
                 isDragging = false;
-                HudConfigManager.getInstance().setCustomPosition(previewX, previewY);
+                applySavedPosition();
             }
         }
         return super.mouseReleased(event);
+    }
+
+    public boolean mouseReleased(double mouseX, double mouseY, int button) {
+        if (button == 0 && isDragging) {
+            isDragging = false;
+            applySavedPosition();
+            return true;
+        }
+        return false;
     }
 
     @Override
@@ -273,11 +294,34 @@ public class HudMoveScreen extends Screen {
             previewX = (int) event.x() - dragOffsetX;
             previewY = (int) event.y() - dragOffsetY;
             previewX = Math.max(4, Math.min(this.width - hudW - 4, previewX));
-            previewY = Math.max(4, Math.min(this.height - hudH - 4, previewY));
-            HudConfigManager.getInstance().setCustomPosition(previewX, previewY);
+            previewY = Math.max(14, Math.min(this.height - hudH - 14, previewY));
             return true;
         }
         return super.mouseDragged(event, deltaX, deltaY);
+    }
+
+    public boolean mouseDragged(double mouseX, double mouseY, int button, double dragX, double dragY) {
+        if (isDragging) {
+            previewX = (int) mouseX - dragOffsetX;
+            previewY = (int) mouseY - dragOffsetY;
+            previewX = Math.max(4, Math.min(this.width - hudW - 4, previewX));
+            previewY = Math.max(14, Math.min(this.height - hudH - 14, previewY));
+            return true;
+        }
+        return false;
+    }
+
+    private void applySavedPosition() {
+        // If dropped very close to top-center default, snap directly to default TOP
+        int defaultX = (this.width - hudW) / 2;
+        int defaultY = 16;
+        if (Math.abs(previewX - defaultX) < 16 && Math.abs(previewY - defaultY) < 8) {
+            previewX = defaultX;
+            previewY = defaultY;
+            HudConfigManager.getInstance().resetToDefault();
+        } else {
+            HudConfigManager.getInstance().setCustomPosition(previewX, previewY);
+        }
     }
 
     @Override
@@ -286,7 +330,7 @@ public class HudMoveScreen extends Screen {
     }
 
     private void close() {
-        HudConfigManager.getInstance().setCustomPosition(previewX, previewY);
+        applySavedPosition();
         if (this.minecraft != null) {
             this.minecraft.gui.setScreen(parentScreen);
         }
