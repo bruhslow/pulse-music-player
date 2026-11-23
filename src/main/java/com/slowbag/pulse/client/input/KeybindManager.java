@@ -27,16 +27,20 @@ public class KeybindManager {
     private boolean isListening = false;
 
     private static File getConfigFile() {
-        File gameDir = null;
+        File configDir = null;
         try {
-            if (Minecraft.getInstance() != null) {
-                gameDir = Minecraft.getInstance().gameDirectory;
-            }
+            configDir = net.fabricmc.loader.api.FabricLoader.getInstance().getConfigDir().toFile();
         } catch (Throwable ignored) {}
-        if (gameDir == null) {
-            gameDir = new File(".");
+        if (configDir == null) {
+            try {
+                if (Minecraft.getInstance() != null && Minecraft.getInstance().gameDirectory != null) {
+                    configDir = new File(Minecraft.getInstance().gameDirectory, "config");
+                }
+            } catch (Throwable ignored) {}
         }
-        File configDir = new File(gameDir, "config");
+        if (configDir == null) {
+            configDir = new File("config");
+        }
         if (!configDir.exists()) {
             configDir.mkdirs();
         }

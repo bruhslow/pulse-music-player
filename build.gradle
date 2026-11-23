@@ -12,7 +12,7 @@ def minecraft_version = "26.2"
 def loader_version = "0.15.0"
 def fabric_api_version = "0.161.0+26.2"
 
-def mod_version = "1.7.2"
+def mod_version = "2.0.0"
 def mod_id = "musicplayer"
 
 group = "com.slowbag"

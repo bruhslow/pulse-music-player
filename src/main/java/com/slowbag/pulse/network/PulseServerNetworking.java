@@ -81,6 +81,7 @@ public class PulseServerNetworking {
                 case "track_sync" -> handleTrackSync(server, player, obj);
                 case "pause_sync" -> handlePauseSync(server, player, obj);
                 case "seek_sync" -> handleSeekSync(server, player, obj);
+                case "sync_request", "request_sync" -> handleSyncRequest(server, player);
                 case "queue_add" -> handleQueueAdd(server, player, obj);
                 case "server_party" -> handleServerParty(server, player);
             }
@@ -214,8 +215,17 @@ public class PulseServerNetworking {
     }
 
     private static void handleTrackSync(MinecraftServer server, ServerPlayer player, JsonObject obj) {
-        String roomName = obj.has("room") ? obj.get("room").getAsString() : "";
-        ServerRoom room = ROOMS.get(roomName.toLowerCase());
+        String roomName = obj.has("room") ? obj.get("room").getAsString() : (obj.has("code") ? obj.get("code").getAsString() : "");
+        ServerRoom room = null;
+        if (!roomName.isEmpty()) room = ROOMS.get(roomName.toLowerCase());
+        if (room == null) {
+            for (ServerRoom r : ROOMS.values()) {
+                if (r.hostUuid.equals(player.getUUID())) {
+                    room = r;
+                    break;
+                }
+            }
+        }
 
         if (room == null || !room.hostUuid.equals(player.getUUID())) {
             return; // Only host can broadcast audio
@@ -227,7 +237,16 @@ public class PulseServerNetworking {
 
     private static void handlePauseSync(MinecraftServer server, ServerPlayer player, JsonObject obj) {
         String query = obj.has("code") ? obj.get("code").getAsString().trim() : (obj.has("room") ? obj.get("room").getAsString().trim() : "");
-        ServerRoom room = ROOMS.get(query.toLowerCase());
+        ServerRoom room = null;
+        if (!query.isEmpty()) room = ROOMS.get(query.toLowerCase());
+        if (room == null) {
+            for (ServerRoom r : ROOMS.values()) {
+                if (r.hostUuid.equals(player.getUUID())) {
+                    room = r;
+                    break;
+                }
+            }
+        }
         if (room == null || !room.hostUuid.equals(player.getUUID())) return;
         if (room.lastTrackSync != null && obj.has("paused")) {
             room.lastTrackSync.addProperty("isPaused", obj.get("paused").getAsBoolean());
@@ -237,9 +256,36 @@ public class PulseServerNetworking {
 
     private static void handleSeekSync(MinecraftServer server, ServerPlayer player, JsonObject obj) {
         String query = obj.has("code") ? obj.get("code").getAsString().trim() : (obj.has("room") ? obj.get("room").getAsString().trim() : "");
-        ServerRoom room = ROOMS.get(query.toLowerCase());
+        ServerRoom room = null;
+        if (!query.isEmpty()) room = ROOMS.get(query.toLowerCase());
+        if (room == null) {
+            for (ServerRoom r : ROOMS.values()) {
+                if (r.hostUuid.equals(player.getUUID())) {
+                    room = r;
+                    break;
+                }
+            }
+        }
         if (room == null || !room.hostUuid.equals(player.getUUID())) return;
         broadcastToRoom(server, room, obj, player.getUUID());
+    }
+
+    private static void handleSyncRequest(MinecraftServer server, ServerPlayer player) {
+        for (ServerRoom room : ROOMS.values()) {
+            if (room.members.contains(player.getUUID())) {
+                if (room.lastTrackSync != null) {
+                    sendPacket(player, room.lastTrackSync);
+                } else {
+                    ServerPlayer host = server.getPlayerList().getPlayer(room.hostUuid);
+                    if (host != null) {
+                        JsonObject req = new JsonObject();
+                        req.addProperty("action", "sync_request");
+                        sendPacket(host, req);
+                    }
+                }
+                break;
+            }
+        }
     }
 
     private static void handleQueueAdd(MinecraftServer server, ServerPlayer player, JsonObject obj) {
@@ -335,7 +381,8 @@ public class PulseServerNetworking {
         listPkt.addProperty("action", "room_list");
 
         JsonArray arr = new JsonArray();
-        for (ServerRoom r : ROOMS.values()) {
+        Set<ServerRoom> uniqueRooms = new LinkedHashSet<>(ROOMS.values());
+        for (ServerRoom r : uniqueRooms) {
             JsonObject rObj = new JsonObject();
             rObj.addProperty("name", r.name);
             rObj.addProperty("host", r.hostName);

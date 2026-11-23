@@ -168,11 +168,22 @@ public class PartyManager {
     private volatile long lastInviteEventTime = 0;
 
     private PartyManager() {
-        // Rooms disabled
+        startDirectoryListener();
+        startPersonalInviteListener();
+        startServerDiscoveryListener();
     }
 
     public void init() {
-        // Rooms disabled
+        try {
+            ClientPlayNetworking.registerGlobalReceiver(PulseNetworkPayload.TYPE, (payload, context) -> {
+                String json = payload.json();
+                context.client().execute(() -> handleServerPacket(json));
+            });
+            MusicPlayerMod.LOGGER.info("[Music Player] Registered native client packet receiver for rooms & sync.");
+        } catch (Throwable t) {
+            MusicPlayerMod.LOGGER.debug("[Music Player] Server networking not available or client-only: " + t.getMessage());
+        }
+        refreshRooms();
     }
 
     public boolean isServerNetworkingActive() {
@@ -803,6 +814,11 @@ public class PartyManager {
 
     public void requestSync() {
         if (!isInRoom()) return;
+        if (isServerNetworkingActive()) {
+            JsonObject obj = new JsonObject();
+            obj.addProperty("action", "sync_request");
+            ClientPlayNetworking.send(new PulseNetworkPayload(obj.toString()));
+        }
         JsonObject req = new JsonObject();
         req.addProperty("type", "request_sync");
         req.addProperty("sender", getPlayerName());
@@ -812,6 +828,10 @@ public class PartyManager {
         if (roomName != null && !roomName.isEmpty()) {
             sendNtfyMessage("pulse_room_" + sanitizeTopic(roomName), req);
         }
+    }
+
+    public void reSync() {
+        requestSync();
     }
 
     private void broadcastRoomPresence() {
@@ -1623,15 +1643,15 @@ public class PartyManager {
     // ------------------------------------------------------------------------
 
     public boolean isInRoom() {
-        return false;
+        return roomName != null && !roomName.trim().isEmpty();
     }
 
     public String getRoomName() {
-        return null;
+        return roomName;
     }
 
     public boolean isHost() {
-        return true;
+        return isHost;
     }
 
     public String getCurrentHost() {

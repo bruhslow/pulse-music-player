@@ -52,8 +52,13 @@ public class MusicPlayerClientMod implements ClientModInitializer {
             MusicPlayerMod.LOGGER.warn("[Music Player] Failed to init badge manager", t);
         }
 
-        // 5. Clean up rooms on server disconnect or client stopping
+        // 5. Clean up rooms on server disconnect or client stopping, and query rooms on join
         try {
+            ClientPlayConnectionEvents.JOIN.register((handler, sender, client) -> {
+                try {
+                    PartyManager.getInstance().refreshRooms();
+                } catch (Throwable ignored) {}
+            });
             ClientPlayConnectionEvents.DISCONNECT.register((handler, client) -> {
                 PartyManager.getInstance().leaveRoom();
             });

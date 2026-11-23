@@ -106,6 +106,10 @@ public class AudioManager {
     }
 
     public boolean checkHostPermission(String action) {
+        PartyManager pm = PartyManager.getInstance();
+        if (pm.isInRoom() && !pm.isHost()) {
+            return false;
+        }
         return true;
     }
 

@@ -6,6 +6,7 @@ import com.slowbag.pulse.client.audio.AudioTrack;
 import com.slowbag.pulse.client.audio.LocalMusicScanner;
 import com.slowbag.pulse.client.audio.MusicSearchService;
 import com.slowbag.pulse.client.audio.RecentUrlManager;
+import com.slowbag.pulse.client.audio.PartyManager;
 import com.slowbag.pulse.client.audio.YouTubeResolver;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
@@ -48,10 +49,23 @@ public class MusicPlayerScreen extends Screen {
     private String statusMessage = null;
     private long statusMessageTime = 0;
 
-    // Tabs: 0: For You / Search, 1: Local, 2: Starred, 3: URL, 4: Settings
+    private final PartyManager partyManager = PartyManager.getInstance();
+
+    // Tabs: 0: For You / Search, 1: Local, 2: Starred, 3: URL, 4: Rooms, 5: Settings
     private int selectedTab = 0;
-    private final String[] tabs = {"🔥 For You", "📍 Local", "★ Starred", "🔗 URL", "⚙ Settings"};
+    private final String[] tabs = {"🔥 For You", "📍 Local", "★ Starred", "🔗 URL", "👥 Rooms", "⚙ Settings"};
     private int settingsScrollOffset = 0;
+
+    // Rooms (Party Rooms) state
+    private boolean isCreatingRoom = false;
+    private String newRoomName = "";
+    private boolean isRoomNameFocused = false;
+    private String newRoomPassword = "";
+    private boolean isRoomPasswordFocused = false;
+    private PartyManager.RoomEntry passwordPromptRoom = null;
+    private String promptPasswordText = "";
+    private String passwordErrorMsg = "";
+    private int roomScrollOffset = 0;
 
     // Search bar & scrolling
     private String searchQuery = "";
@@ -87,6 +101,16 @@ public class MusicPlayerScreen extends Screen {
 
     public void setSelectedTab(int tab) {
         this.selectedTab = Math.max(0, Math.min(tabs.length - 1, tab));
+    }
+
+    private boolean notifyIfGuestInRoom() {
+        if (partyManager.isInRoom() && !partyManager.isHost()) {
+            playClickSound();
+            statusMessage = "§eHost (" + partyManager.getCurrentHost() + ") controls playback! Songs you queue will be sent to the room 🎵";
+            statusMessageTime = System.currentTimeMillis();
+            return true;
+        }
+        return false;
     }
 
     @Override
@@ -353,6 +377,11 @@ public class MusicPlayerScreen extends Screen {
                 graphics.centeredText(this.font, Component.literal(statusMessage), this.width / 2, ty + 5, 0xFFFFFFFF);
             }
 
+            // Password Prompt Modal Dialog for locked rooms
+            if (passwordPromptRoom != null) {
+                renderPasswordModal(graphics, mouseX, mouseY);
+            }
+
             super.extractRenderState(graphics, mouseX, mouseY, delta);
         } catch (Throwable t) {
             MusicPlayerMod.LOGGER.error("[Music Player] Error in extractRenderState", t);
@@ -380,7 +409,7 @@ public class MusicPlayerScreen extends Screen {
 
         // Settings / Accessibility Toggle
         boolean setHover = mouseX >= settingBtnX && mouseX <= settingBtnX + 16 && mouseY >= iconY && mouseY <= iconY + 16;
-        boolean setOpen = (selectedTab == 4);
+        boolean setOpen = (selectedTab == 5);
         drawSoftBox(graphics, settingBtnX, iconY, 16, 16, 3, setOpen ? 0x80A855F7 : (setHover ? 0x50A855F7 : 0x20FFFFFF), setHover ? 0xFFA855F7 : 0x25FFFFFF);
         graphics.text(this.font, Component.literal(setOpen || setHover ? "§d⚙" : "§7⚙"), settingBtnX + 4, iconY + 4, 0xFFFFFFFF, false);
 
@@ -820,7 +849,503 @@ public class MusicPlayerScreen extends Screen {
             }
 
         } else if (selectedTab == 4) {
-            // Tab 4: Settings & Accessibility
+            renderRoomsTab(graphics, x, y, w, h, mouseX, mouseY);
+        } else if (selectedTab == 5) {
+            renderSettingsTab(graphics, x, y, w, h, mouseX, mouseY);
+        }
+    }
+
+    // Tab 4: Synchronized Party Rooms (Simple Voice Chat Style)
+    private void renderRoomsTab(GuiGraphicsExtractor graphics, int x, int y, int w, int h, int mouseX, int mouseY) {
+        if (!partyManager.isInRoom()) {
+            // LOBBY / BROWSER VIEW
+            int topY = y + 2;
+
+            // Header toolbar
+            graphics.text(this.font, Component.literal("§d👥 Music Rooms"), x + 8, topY, 0xFFFFFFFF, true);
+            graphics.text(this.font, Component.literal("§8Browse active parties or host your own synchronized room"), x + 8, topY + 11, 0xFFA0988E, false);
+
+            int btnH = 16;
+            int rightEdge = x + w - 8;
+            int modeBtnW = isCreatingRoom ? 84 : 80;
+            int modeBtnX = rightEdge - modeBtnW;
+            int refreshBtnW = 56;
+            int refreshBtnX = modeBtnX - refreshBtnW - 4;
+
+            // Refresh Button [ ⟳ Refresh ]
+            boolean refHov = mouseX >= refreshBtnX && mouseX <= refreshBtnX + refreshBtnW && mouseY >= topY && mouseY <= topY + btnH;
+            drawSoftBox(graphics, refreshBtnX, topY, refreshBtnW, btnH, 3, refHov ? 0x60A855F7 : 0x20FFFFFF, refHov ? 0xFFA855F7 : 0x30FFFFFF);
+            drawCleanCenteredText(graphics, "§f⟳ Refresh", refreshBtnX + refreshBtnW / 2, topY + 4, 0xFFFFFFFF);
+
+            // Mode Toggle Button: [ ＋ Create Room ] or [ ✕ Browse ]
+            boolean modeHov = mouseX >= modeBtnX && mouseX <= modeBtnX + modeBtnW && mouseY >= topY && mouseY <= topY + btnH;
+            drawSoftBox(graphics, modeBtnX, topY, modeBtnW, btnH, 3, isCreatingRoom ? (modeHov ? 0x80FF4455 : 0x30FF4455) : (modeHov ? 0x80A855F7 : 0x40A855F7), isCreatingRoom ? 0xFFFF4455 : 0xFFA855F7);
+            drawCleanCenteredText(graphics, isCreatingRoom ? "§f✕ Browse" : "§f＋ Create Room", modeBtnX + modeBtnW / 2, topY + 4, 0xFFFFFFFF);
+
+            int contentY = topY + 24;
+            int contentH = h - 28;
+
+            if (isCreatingRoom) {
+                // CREATE ROOM FORM
+                drawSoftBox(graphics, x + 8, contentY, w - 16, contentH, 4, 0x18FFFFFF, 0x35A855F7);
+
+                int formY = contentY + 8;
+                graphics.text(this.font, Component.literal("§d✦ Host a New Music Room"), x + 16, formY, 0xFFFFFFFF, true);
+                graphics.text(this.font, Component.literal("§8Members who join will automatically listen in sync with your playback"), x + 16, formY + 12, 0xFF888888, false);
+
+                // Row 1: Room Name Input
+                int field1Y = formY + 26;
+                graphics.text(this.font, Component.literal("§fRoom Name:"), x + 16, field1Y, 0xFFFFFFFF, false);
+                int inputW = Math.max(120, w - 48);
+                int inputH = 18;
+                int nameBoxY = field1Y + 11;
+                boolean nameHov = mouseX >= x + 16 && mouseX <= x + 16 + inputW && mouseY >= nameBoxY && mouseY <= nameBoxY + inputH;
+                drawSoftBox(graphics, x + 16, nameBoxY, inputW, inputH, 3, 0x60000000, isRoomNameFocused ? 0xFFA855F7 : (nameHov ? 0x50FFFFFF : 0x25FFFFFF));
+
+                String nameDisp = newRoomName;
+                if (nameDisp.isEmpty()) {
+                    String defaultPlaceholder = "My Music Room";
+                    try {
+                        if (Minecraft.getInstance().getUser() != null) {
+                            defaultPlaceholder = Minecraft.getInstance().getUser().getName() + "'s Room";
+                        }
+                    } catch (Throwable ignored) {}
+                    graphics.text(this.font, Component.literal(isRoomNameFocused ? "§d_" : "§8" + defaultPlaceholder), x + 20, nameBoxY + 5, 0xFFFFFFFF, false);
+                } else {
+                    String cursor = isRoomNameFocused && (System.currentTimeMillis() / 500 % 2 == 0) ? "§d_" : "";
+                    graphics.text(this.font, Component.literal("§f" + truncateToWidth(nameDisp, inputW - 16) + cursor), x + 20, nameBoxY + 5, 0xFFFFFFFF, false);
+                }
+
+                // Row 2: Room Password Input (Optional)
+                int field2Y = nameBoxY + 22;
+                graphics.text(this.font, Component.literal("§fPassword (Optional - leave empty for Open room):"), x + 16, field2Y, 0xFFFFFFFF, false);
+                int passBoxY = field2Y + 11;
+                boolean passHov = mouseX >= x + 16 && mouseX <= x + 16 + inputW && mouseY >= passBoxY && mouseY <= passBoxY + inputH;
+                drawSoftBox(graphics, x + 16, passBoxY, inputW, inputH, 3, 0x60000000, isRoomPasswordFocused ? 0xFFA855F7 : (passHov ? 0x50FFFFFF : 0x25FFFFFF));
+
+                if (newRoomPassword.isEmpty()) {
+                    graphics.text(this.font, Component.literal(isRoomPasswordFocused ? "§d_" : "§8No password (Open room - anyone can join)"), x + 20, passBoxY + 5, 0xFF888888, false);
+                } else {
+                    String cursor = isRoomPasswordFocused && (System.currentTimeMillis() / 500 % 2 == 0) ? "§d_" : "";
+                    graphics.text(this.font, Component.literal("§f" + truncateToWidth(newRoomPassword, inputW - 16) + cursor), x + 20, passBoxY + 5, 0xFFFFFFFF, false);
+                }
+
+                // Status Badge: Open vs Closed
+                int badgeY = passBoxY + 22;
+                boolean isOpen = newRoomPassword.trim().isEmpty();
+                String badgeText = isOpen ? "§a🔓 Room Mode: Open (Anyone can join with one click)" : "§e🔒 Room Mode: Closed (Password required to enter)";
+                graphics.text(this.font, Component.literal(badgeText), x + 16, badgeY, 0xFFFFFFFF, false);
+
+                // Action Buttons: [ ✕ Cancel ] and [ ＋ Create Room ]
+                int actY = badgeY + 16;
+                int actBtnH = 20;
+                int createBtnW = 100;
+                int cancelBtnW = 60;
+                int cancelBtnX = x + 16;
+                int createBtnX = cancelBtnX + cancelBtnW + 8;
+
+                boolean cnHov = mouseX >= cancelBtnX && mouseX <= cancelBtnX + cancelBtnW && mouseY >= actY && mouseY <= actY + actBtnH;
+                drawSoftBox(graphics, cancelBtnX, actY, cancelBtnW, actBtnH, 3, cnHov ? 0x40FFFFFF : 0x20FFFFFF, cnHov ? 0xFFFFFFFF : 0x30FFFFFF);
+                drawCleanCenteredText(graphics, "§7✕ Cancel", cancelBtnX + cancelBtnW / 2, actY + 6, 0xFFFFFFFF);
+
+                boolean crHov = mouseX >= createBtnX && mouseX <= createBtnX + createBtnW && mouseY >= actY && mouseY <= actY + actBtnH;
+                drawSoftBox(graphics, createBtnX, actY, createBtnW, actBtnH, 3, crHov ? 0x90A855F7 : 0x50A855F7, crHov ? 0xFFFFFFFF : 0xFFA855F7);
+                drawCleanCenteredText(graphics, "§f＋ Create & Host", createBtnX + createBtnW / 2, actY + 6, 0xFFFFFFFF);
+
+            } else {
+                // BROWSE ROOM LIST
+                List<PartyManager.RoomEntry> rooms = partyManager.getDiscoveredRooms();
+                if (rooms.isEmpty()) {
+                    drawSoftBox(graphics, x + 8, contentY, w - 16, contentH, 4, 0x12FFFFFF, 0x20FFFFFF);
+                    int midY = contentY + Math.max(10, (contentH - 40) / 2);
+                    drawCleanCenteredText(graphics, "§8👥 No active music rooms found on server.", x + w / 2, midY, 0xFFA0988E);
+                    drawCleanCenteredText(graphics, "§7Click §d'＋ Create Room' §7above to host your own room!", x + w / 2, midY + 14, 0xFFFFFFFF);
+                } else {
+                    int itemH = 30;
+                    int visibleCount = Math.max(1, contentH / itemH);
+                    int startIdx = Math.min(roomScrollOffset, Math.max(0, rooms.size() - visibleCount));
+                    int endIdx = Math.min(rooms.size(), startIdx + visibleCount);
+
+                    int itemY = contentY;
+                    for (int i = startIdx; i < endIdx; i++) {
+                        PartyManager.RoomEntry r = rooms.get(i);
+                        boolean rHov = mouseX >= x + 8 && mouseX <= x + w - 8 && mouseY >= itemY && mouseY <= itemY + itemH - 3;
+                        drawSoftBox(graphics, x + 8, itemY, w - 16, itemH - 3, 3, rHov ? 0x30A855F7 : 0x18FFFFFF, rHov ? 0xFFA855F7 : 0x25FFFFFF);
+
+                        // Lock / Open icon
+                        String lockIcon = r.hasPassword() ? "§e🔒" : "§a🔓";
+                        graphics.text(this.font, Component.literal(lockIcon), x + 14, itemY + 5, 0xFFFFFFFF, false);
+
+                        // Room Name & Host/Members subtitle
+                        int textX = x + 28;
+                        int joinBtnW = 48;
+                        int joinBtnX = x + w - joinBtnW - 14;
+                        int maxNameW = joinBtnX - textX - 6;
+
+                        String rName = truncateToWidth("§f§l" + r.getName(), maxNameW);
+                        graphics.text(this.font, Component.literal(rName), textX, itemY + 3, 0xFFFFFFFF, false);
+
+                        String sub = "§8Host: §7" + truncate(r.getHost(), 14) + " §8• §d👥 " + r.getMemberCount() + (r.getMemberCount() == 1 ? " player" : " players");
+                        graphics.text(this.font, Component.literal(truncateToWidth(sub, maxNameW)), textX, itemY + 15, 0xFFA0988E, false);
+
+                        // Join Button [ ▶ Join ]
+                        int joinBtnY = itemY + 5;
+                        int joinBtnH = 18;
+                        boolean jHov = mouseX >= joinBtnX && mouseX <= joinBtnX + joinBtnW && mouseY >= joinBtnY && mouseY <= joinBtnY + joinBtnH;
+                        drawSoftBox(graphics, joinBtnX, joinBtnY, joinBtnW, joinBtnH, 3, jHov ? 0x90A855F7 : 0x40A855F7, jHov ? 0xFFFFFFFF : 0xFFA855F7);
+                        drawCleanCenteredText(graphics, "§f▶ Join", joinBtnX + joinBtnW / 2, joinBtnY + 5, 0xFFFFFFFF);
+
+                        itemY += itemH;
+                    }
+
+                    // Scrollbar if needed
+                    if (rooms.size() > visibleCount) {
+                        int trackX = x + w - 6;
+                        int trackY = contentY;
+                        int trackH = contentH;
+                        graphics.fill(trackX, trackY, trackX + 3, trackY + trackH, 0x25FFFFFF);
+                        float ratio = (float) startIdx / (float) (rooms.size() - visibleCount);
+                        int thumbH = Math.max(16, (int) ((float) visibleCount / (float) rooms.size() * trackH));
+                        int thumbY = trackY + (int) (ratio * (trackH - thumbH));
+                        graphics.fill(trackX, thumbY, trackX + 3, thumbY + thumbH, 0xFFA855F7);
+                    }
+                }
+            }
+
+        } else {
+            // IN A ROOM VIEW: Active room status, synchronized track, and members
+            int topY = y + 2;
+
+            // Header Banner
+            drawSoftBox(graphics, x + 8, topY, w - 16, 36, 4, 0x25A855F7, 0x60A855F7);
+            graphics.text(this.font, Component.literal("§d👥 Room: §f§l" + truncateToWidth(partyManager.getRoomName(), w - 120)), x + 14, topY + 4, 0xFFFFFFFF, true);
+
+            String roleInfo = partyManager.isHost()
+                    ? "§e👑 Host §8• You broadcast music to all members"
+                    : "§a🎧 Synced with Host §f(" + partyManager.getCurrentHost() + ")";
+            graphics.text(this.font, Component.literal(roleInfo), x + 14, topY + 18, 0xFFA0988E, false);
+
+            // Right Action Button: [ ✕ Disband ] (if Host) or [ ✕ Leave ] (if Member)
+            int exitBtnW = partyManager.isHost() ? 76 : 64;
+            int exitBtnX = x + w - exitBtnW - 14;
+            int exitBtnY = topY + 8;
+            int exitBtnH = 20;
+            boolean exitHov = mouseX >= exitBtnX && mouseX <= exitBtnX + exitBtnW && mouseY >= exitBtnY && mouseY <= exitBtnY + exitBtnH;
+            drawSoftBox(graphics, exitBtnX, exitBtnY, exitBtnW, exitBtnH, 3, exitHov ? 0x90FF3344 : 0x35FF3344, exitHov ? 0xFFFF4455 : 0x80FF3344);
+            drawCleanCenteredText(graphics, partyManager.isHost() ? "§c✕ Disband" : "§c✕ Leave", exitBtnX + exitBtnW / 2, exitBtnY + 6, 0xFFFFFFFF);
+
+            // Sync Status Card
+            int syncCardY = topY + 42;
+            int syncCardH = 40;
+            drawSoftBox(graphics, x + 8, syncCardY, w - 16, syncCardH, 4, 0x18FFFFFF, 0x25FFFFFF);
+
+            AudioTrack cur = audioManager.getCurrentTrack();
+            if (cur != null) {
+                graphics.text(this.font, Component.literal("§d♫ " + truncateToWidth(cur.getTitle(), w - 110)), x + 14, syncCardY + 4, 0xFFFFFFFF, true);
+                String artistAndSync = "§7" + truncate(cur.getArtist(), 20) + " §8• §a∿ Synchronized";
+                graphics.text(this.font, Component.literal(artistAndSync), x + 14, syncCardY + 16, 0xFFA0988E, false);
+
+                if (!partyManager.isHost()) {
+                    // Re-sync button for members
+                    int resyncBtnW = 62;
+                    int resyncBtnX = x + w - resyncBtnW - 14;
+                    int resyncBtnY = syncCardY + 10;
+                    int resyncBtnH = 18;
+                    boolean resHov = mouseX >= resyncBtnX && mouseX <= resyncBtnX + resyncBtnW && mouseY >= resyncBtnY && mouseY <= resyncBtnY + resyncBtnH;
+                    drawSoftBox(graphics, resyncBtnX, resyncBtnY, resyncBtnW, resyncBtnH, 3, resHov ? 0x80A855F7 : 0x35A855F7, resHov ? 0xFFFFFFFF : 0xFFA855F7);
+                    drawCleanCenteredText(graphics, "§f⟳ Re-sync", resyncBtnX + resyncBtnW / 2, resyncBtnY + 5, 0xFFFFFFFF);
+                }
+            } else {
+                graphics.text(this.font, Component.literal("§8♫ No music playing right now"), x + 14, syncCardY + 6, 0xFF888888, false);
+                String guide = partyManager.isHost()
+                        ? "§7Choose any song from For You, Local or URL to broadcast!"
+                        : "§7Waiting for room host to start playing music...";
+                graphics.text(this.font, Component.literal(guide), x + 14, syncCardY + 20, 0xFFA0988E, false);
+            }
+
+            // Members List Card
+            int memCardY = syncCardY + syncCardH + 6;
+            int memCardH = h - (memCardY - y) - 4;
+            drawSoftBox(graphics, x + 8, memCardY, w - 16, memCardH, 4, 0x12FFFFFF, 0x20FFFFFF);
+
+            List<String> members = partyManager.getMembers();
+            graphics.text(this.font, Component.literal("§fConnected Listeners §8(" + members.size() + "):"), x + 14, memCardY + 4, 0xFFFFFFFF, true);
+
+            int memItemY = memCardY + 18;
+            int maxMemDisp = Math.max(1, (memCardH - 22) / 16);
+            int dispCount = Math.min(members.size(), maxMemDisp);
+            for (int i = 0; i < dispCount; i++) {
+                String mem = members.get(i);
+                boolean isHostMem = mem.contains("[Host]");
+                boolean isMe = mem.contains("(You)");
+
+                drawSoftBox(graphics, x + 12, memItemY, w - 24, 14, 3, 0x15FFFFFF, 0);
+                String badge = isHostMem ? "§6👑 " : (isMe ? "§b👤 " : "§a🎧 ");
+                graphics.text(this.font, Component.literal(badge + "§f" + mem), x + 16, memItemY + 3, 0xFFFFFFFF, false);
+                memItemY += 16;
+            }
+        }
+    }
+
+    private void renderPasswordModal(GuiGraphicsExtractor graphics, int mouseX, int mouseY) {
+        if (passwordPromptRoom == null) return;
+
+        // Darkened backdrop
+        graphics.fill(0, 0, this.width, this.height, 0xB0000000);
+
+        int mw = 220;
+        int mh = 104;
+        int mx = (this.width - mw) / 2;
+        int my = (this.height - mh) / 2;
+
+        // Royal purple bordered glass card
+        drawSoftBox(graphics, mx, my, mw, mh, 5, 0xF0181A1B, 0xFFA855F7);
+        graphics.fill(mx + 6, my + 1, mx + mw - 6, my + 2, 0x30FFFFFF);
+
+        // Header
+        graphics.centeredText(this.font, Component.literal("§e🔒 Enter Room Password"), mx + mw / 2, my + 8, 0xFFFFFFFF);
+        graphics.centeredText(this.font, Component.literal("§7Room: §f" + truncate(passwordPromptRoom.getName(), 18)), mx + mw / 2, my + 22, 0xFFA0988E);
+
+        // Password Input Box
+        int pBoxX = mx + 16;
+        int pBoxY = my + 38;
+        int pBoxW = mw - 32;
+        int pBoxH = 20;
+        drawSoftBox(graphics, pBoxX, pBoxY, pBoxW, pBoxH, 3, 0x80000000, 0xFFA855F7);
+
+        if (promptPasswordText.isEmpty()) {
+            graphics.text(this.font, Component.literal("§8Enter password..."), pBoxX + 6, pBoxY + 6, 0xFF888888, false);
+        } else {
+            String cursor = (System.currentTimeMillis() / 500 % 2 == 0) ? "§d_" : "";
+            graphics.text(this.font, Component.literal("§f" + promptPasswordText + cursor), pBoxX + 6, pBoxY + 6, 0xFFFFFFFF, false);
+        }
+
+        // Error message if any
+        if (!passwordErrorMsg.isEmpty()) {
+            graphics.centeredText(this.font, Component.literal(passwordErrorMsg), mx + mw / 2, my + 60, 0xFFFF5555);
+        }
+
+        // Action Buttons Row
+        int btnY = my + 74;
+        int btnW = 84;
+        int btnH = 20;
+        int cancelX = mx + 16;
+        int joinX = mx + mw - btnW - 16;
+
+        // Cancel button
+        boolean cancelHov = mouseX >= cancelX && mouseX <= cancelX + btnW && mouseY >= btnY && mouseY <= btnY + btnH;
+        drawSoftBox(graphics, cancelX, btnY, btnW, btnH, 3, cancelHov ? 0x40FFFFFF : 0x20FFFFFF, cancelHov ? 0xFFFFFFFF : 0x30FFFFFF);
+        graphics.centeredText(this.font, Component.literal("§7✕ Cancel"), cancelX + btnW / 2, btnY + 6, 0xFFFFFFFF);
+
+        // Join button
+        boolean joinHov = mouseX >= joinX && mouseX <= joinX + btnW && mouseY >= btnY && mouseY <= btnY + btnH;
+        drawSoftBox(graphics, joinX, btnY, btnW, btnH, 3, joinHov ? 0x90A855F7 : 0x50A855F7, joinHov ? 0xFFFFFFFF : 0xFFA855F7);
+        graphics.centeredText(this.font, Component.literal("§f▶ Join"), joinX + btnW / 2, btnY + 6, 0xFFFFFFFF);
+    }
+
+    private void submitPasswordPrompt() {
+        if (passwordPromptRoom == null) return;
+        boolean ok = partyManager.joinRoom(passwordPromptRoom.getName(), promptPasswordText);
+        if (ok) {
+            statusMessage = "§a🎉 Joining room '" + passwordPromptRoom.getName() + "'... ✨";
+            statusMessageTime = System.currentTimeMillis();
+            passwordPromptRoom = null;
+            promptPasswordText = "";
+            passwordErrorMsg = "";
+        } else {
+            passwordErrorMsg = "§cIncorrect password!";
+        }
+    }
+
+    private boolean handleRoomsClick(int startX, int browserY, int leftW, int browserH, int mx, int my) {
+        int x = startX;
+        int y = browserY;
+        int w = leftW;
+        int h = browserH;
+
+        if (!partyManager.isInRoom()) {
+            int topY = y + 2;
+            int btnH = 16;
+            int rightEdge = x + w - 8;
+            int modeBtnW = isCreatingRoom ? 84 : 80;
+            int modeBtnX = rightEdge - modeBtnW;
+            int refreshBtnW = 56;
+            int refreshBtnX = modeBtnX - refreshBtnW - 4;
+
+            // Refresh Button
+            if (mx >= refreshBtnX && mx <= refreshBtnX + refreshBtnW && my >= topY && my <= topY + btnH) {
+                playClickSound();
+                partyManager.refreshRooms();
+                statusMessage = "§a⟳ Refreshing music rooms list... ✨";
+                statusMessageTime = System.currentTimeMillis();
+                return true;
+            }
+
+            // Mode Toggle: [ ＋ Create Room ] or [ ✕ Browse ]
+            if (mx >= modeBtnX && mx <= modeBtnX + modeBtnW && my >= topY && my <= topY + btnH) {
+                playClickSound();
+                isCreatingRoom = !isCreatingRoom;
+                if (isCreatingRoom && newRoomName.isEmpty()) {
+                    try {
+                        if (Minecraft.getInstance().getUser() != null) {
+                            newRoomName = Minecraft.getInstance().getUser().getName() + "'s Room";
+                        }
+                    } catch (Throwable ignored) {
+                        newRoomName = "My Music Room";
+                    }
+                }
+                isRoomNameFocused = false;
+                isRoomPasswordFocused = false;
+                return true;
+            }
+
+            int contentY = topY + 24;
+            int contentH = h - 28;
+
+            if (isCreatingRoom) {
+                int formY = contentY + 8;
+                int field1Y = formY + 26;
+                int inputW = Math.max(120, w - 48);
+                int inputH = 18;
+                int nameBoxY = field1Y + 11;
+
+                // Click Room Name input box
+                if (mx >= x + 16 && mx <= x + 16 + inputW && my >= nameBoxY && my <= nameBoxY + inputH) {
+                    playClickSound();
+                    isRoomNameFocused = true;
+                    isRoomPasswordFocused = false;
+                    return true;
+                }
+
+                int field2Y = nameBoxY + 22;
+                int passBoxY = field2Y + 11;
+
+                // Click Password input box
+                if (mx >= x + 16 && mx <= x + 16 + inputW && my >= passBoxY && my <= passBoxY + inputH) {
+                    playClickSound();
+                    isRoomPasswordFocused = true;
+                    isRoomNameFocused = false;
+                    return true;
+                }
+
+                int badgeY = passBoxY + 22;
+                int actY = badgeY + 16;
+                int actBtnH = 20;
+                int cancelBtnW = 60;
+                int cancelBtnX = x + 16;
+                int createBtnW = 100;
+                int createBtnX = cancelBtnX + cancelBtnW + 8;
+
+                // Cancel button
+                if (mx >= cancelBtnX && mx <= cancelBtnX + cancelBtnW && my >= actY && my <= actY + actBtnH) {
+                    playClickSound();
+                    isCreatingRoom = false;
+                    isRoomNameFocused = false;
+                    isRoomPasswordFocused = false;
+                    return true;
+                }
+
+                // Create & Host button
+                if (mx >= createBtnX && mx <= createBtnX + createBtnW && my >= actY && my <= actY + actBtnH) {
+                    playClickSound();
+                    String finalName = newRoomName.trim();
+                    if (finalName.isEmpty()) {
+                        try {
+                            if (Minecraft.getInstance().getUser() != null) {
+                                finalName = Minecraft.getInstance().getUser().getName() + "'s Room";
+                            }
+                        } catch (Throwable ignored) {
+                            finalName = "Music Room";
+                        }
+                    }
+                    partyManager.createRoom(finalName, newRoomPassword.trim());
+                    isCreatingRoom = false;
+                    isRoomNameFocused = false;
+                    isRoomPasswordFocused = false;
+                    statusMessage = "§a🎉 Created room '" + finalName + "'! Broadcasting music... ✨";
+                    statusMessageTime = System.currentTimeMillis();
+                    return true;
+                }
+
+            } else {
+                // Browse Rooms List Click Handling
+                List<PartyManager.RoomEntry> rooms = partyManager.getDiscoveredRooms();
+                if (!rooms.isEmpty()) {
+                    int itemH = 30;
+                    int visibleCount = Math.max(1, contentH / itemH);
+                    int startIdx = Math.min(roomScrollOffset, Math.max(0, rooms.size() - visibleCount));
+                    int endIdx = Math.min(rooms.size(), startIdx + visibleCount);
+
+                    int itemY = contentY;
+                    for (int i = startIdx; i < endIdx; i++) {
+                        PartyManager.RoomEntry r = rooms.get(i);
+                        int joinBtnW = 48;
+                        int joinBtnX = x + w - joinBtnW - 14;
+                        int joinBtnY = itemY + 5;
+                        int joinBtnH = 18;
+
+                        if (mx >= joinBtnX && mx <= joinBtnX + joinBtnW && my >= joinBtnY && my <= joinBtnY + joinBtnH) {
+                            playClickSound();
+                            if (r.hasPassword()) {
+                                passwordPromptRoom = r;
+                                promptPasswordText = "";
+                                passwordErrorMsg = "";
+                            } else {
+                                partyManager.joinRoom(r.getName(), "");
+                                statusMessage = "§a🎉 Joined '" + r.getName() + "'! Synchronizing audio... ✨";
+                                statusMessageTime = System.currentTimeMillis();
+                            }
+                            return true;
+                        }
+
+                        itemY += itemH;
+                    }
+                }
+            }
+
+        } else {
+            // In-Room Click Handling
+            int topY = y + 2;
+            int exitBtnW = partyManager.isHost() ? 76 : 64;
+            int exitBtnX = x + w - exitBtnW - 14;
+            int exitBtnY = topY + 8;
+            int exitBtnH = 20;
+
+            // Leave or Disband
+            if (mx >= exitBtnX && mx <= exitBtnX + exitBtnW && my >= exitBtnY && my <= exitBtnY + exitBtnH) {
+                playClickSound();
+                if (partyManager.isHost()) {
+                    partyManager.disbandRoom();
+                    statusMessage = "§cRoom disbanded.";
+                } else {
+                    partyManager.leaveRoom();
+                    statusMessage = "§eLeft room.";
+                }
+                statusMessageTime = System.currentTimeMillis();
+                return true;
+            }
+
+            // Re-sync button (for members)
+            if (!partyManager.isHost()) {
+                int syncCardY = topY + 42;
+                int resyncBtnW = 62;
+                int resyncBtnX = x + w - resyncBtnW - 14;
+                int resyncBtnY = syncCardY + 10;
+                int resyncBtnH = 18;
+                if (mx >= resyncBtnX && mx <= resyncBtnX + resyncBtnW && my >= resyncBtnY && my <= resyncBtnY + resyncBtnH) {
+                    playClickSound();
+                    partyManager.reSync();
+                    statusMessage = "§a⟳ Re-syncing audio with host... ✨";
+                    statusMessageTime = System.currentTimeMillis();
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    // Tab 5: Settings & Accessibility
+    private void renderSettingsTab(GuiGraphicsExtractor graphics, int x, int y, int w, int h, int mouseX, int mouseY) {
             SettingsManager sm = SettingsManager.getInstance();
             int curY = y + 2;
 
@@ -1061,7 +1586,6 @@ public class MusicPlayerScreen extends Screen {
                 graphics.fill(scrollTrackX, thumbY, scrollTrackX + 3, thumbY + thumbH, 0xFFA855F7);
                 graphics.fill(scrollTrackX + 1, thumbY + 1, scrollTrackX + 2, thumbY + thumbH - 1, 0xFFE9D5FF);
             }
-        }
     }
 
     // Single Song Row Component matching reference layout
@@ -1507,6 +2031,16 @@ public class MusicPlayerScreen extends Screen {
                         }
                         return true;
                     } else if (selectedTab == 4) {
+                        List<PartyManager.RoomEntry> rooms = partyManager.getDiscoveredRooms();
+                        int maxListItems = Math.max(1, (drawerH - 52) / 30);
+                        if (verticalAmount > 0) {
+                            roomScrollOffset = Math.max(0, roomScrollOffset - 1);
+                        } else if (verticalAmount < 0) {
+                            int max = Math.max(0, rooms.size() - maxListItems);
+                            roomScrollOffset = Math.min(max, roomScrollOffset + 1);
+                        }
+                        return true;
+                    } else if (selectedTab == 5) {
                         int totalSettings = 12;
                         int visible = getVisibleSettingsCount();
                         int maxScroll = Math.max(0, totalSettings - visible);
@@ -1549,6 +2083,38 @@ public class MusicPlayerScreen extends Screen {
 
     private boolean handleMouseClicked(double mx, double my, int btn, boolean isDoubleClick) {
         try {
+        if (passwordPromptRoom != null) {
+            int mw = 220, mh = 104;
+            int mx0 = (this.width - mw) / 2;
+            int my0 = (this.height - mh) / 2;
+            int btnY = my0 + 74;
+            int btnW = 84, btnH = 20;
+            int cancelX = mx0 + 16;
+            int joinX = mx0 + mw - btnW - 16;
+
+            if (mx >= joinX && mx <= joinX + btnW && my >= btnY && my <= btnY + btnH) {
+                playClickSound();
+                submitPasswordPrompt();
+                return true;
+            }
+
+            if (mx >= cancelX && mx <= cancelX + btnW && my >= btnY && my <= btnY + btnH) {
+                playClickSound();
+                passwordPromptRoom = null;
+                promptPasswordText = "";
+                passwordErrorMsg = "";
+                return true;
+            }
+
+            // Click outside dialog to dismiss
+            if (mx < mx0 || mx > mx0 + mw || my < my0 || my > my0 + mh) {
+                passwordPromptRoom = null;
+                promptPasswordText = "";
+                passwordErrorMsg = "";
+            }
+            return true;
+        }
+
         if (btn == 0) { // Left click
             int startX = getStartX();
             int startY = getStartY();
@@ -1595,9 +2161,11 @@ public class MusicPlayerScreen extends Screen {
             if (mx >= settingBtnX && mx <= settingBtnX + 16 && my >= iconY && my <= iconY + 16) {
                 playClickSound();
                 if (!isExpanded) isExpanded = true;
-                selectedTab = (selectedTab == 4) ? 0 : 4;
+                selectedTab = (selectedTab == 5) ? 0 : 5;
                 isSearchFocused = false;
                 isUrlFocused = false;
+                isRoomNameFocused = false;
+                isRoomPasswordFocused = false;
                 return true;
             }
 
@@ -1642,6 +2210,7 @@ public class MusicPlayerScreen extends Screen {
             int scrubH = 4;
 
             if (mx >= scrubX - 6 && mx <= scrubX + scrubW + 6 && my >= scrubY - 8 && my <= scrubY + scrubH + 8) {
+                if (notifyIfGuestInRoom()) return true;
                 if (audioManager.getCurrentTrack() != null && !audioManager.getCurrentTrack().isLiveStream() && audioManager.getCurrentTrack().getDurationSeconds() > 0) {
                     playClickSound();
                     isDraggingScrubber = true;
@@ -1659,12 +2228,14 @@ public class MusicPlayerScreen extends Screen {
             int playBtnY = heroY + 10;
 
             if (mx >= prevX && mx <= prevX + 24 && my >= playBtnY + 5 && my <= playBtnY + 27) {
+                if (notifyIfGuestInRoom()) return true;
                 playClickSound();
                 audioManager.previous();
                 return true;
             }
 
             if (mx >= playX && mx <= playX + 32 && my >= playBtnY && my <= playBtnY + 32) {
+                if (notifyIfGuestInRoom()) return true;
                 playClickSound();
                 if (audioManager.isBuffering()) return true;
                 if (audioManager.getCurrentTrack() == null && !searchResults.isEmpty()) {
@@ -1676,6 +2247,7 @@ public class MusicPlayerScreen extends Screen {
             }
 
             if (mx >= nextX && mx <= nextX + 24 && my >= playBtnY + 5 && my <= playBtnY + 27) {
+                if (notifyIfGuestInRoom()) return true;
                 playClickSound();
                 audioManager.next();
                 return true;
@@ -1743,6 +2315,12 @@ public class MusicPlayerScreen extends Screen {
                         selectedTab = i;
                         isSearchFocused = (i == 0);
                         isUrlFocused = (i == 3);
+                        isRoomNameFocused = false;
+                        isRoomPasswordFocused = false;
+                        if (i == 4) {
+                            partyManager.refreshRooms();
+                            roomScrollOffset = 0;
+                        }
                         return true;
                     }
                 }
@@ -2087,8 +2665,15 @@ public class MusicPlayerScreen extends Screen {
                 }
             }
 
-            // Tab 4: Settings & Accessibility
+            // Tab 4: Rooms (Simple Voice Chat Style)
             if (selectedTab == 4) {
+                if (handleRoomsClick(startX, browserY + 28, leftW, browserH - 28, (int) mx, (int) my)) {
+                    return true;
+                }
+            }
+
+            // Tab 5: Settings & Accessibility
+            if (selectedTab == 5) {
                 int curY = browserY + 28;
                 int listStartY = curY + 26;
                 int rowH = 32;
@@ -2524,10 +3109,86 @@ public class MusicPlayerScreen extends Screen {
     }
 
     private boolean handleKeyPressed(int key, int scancode, int modifiers) {
-        if (key == GLFW.GLFW_KEY_ESCAPE) {
-            playClickSound();
-            this.minecraft.gui.setScreen(parentScreen);
+        boolean isPasteKey = (key == GLFW.GLFW_KEY_V && isControlOrSuperDown(modifiers));
+
+        if (passwordPromptRoom != null) {
+            if (key == GLFW.GLFW_KEY_ESCAPE) {
+                playClickSound();
+                passwordPromptRoom = null;
+                promptPasswordText = "";
+                passwordErrorMsg = "";
+                return true;
+            }
+            if (isPasteKey) {
+                String clip = getClipboardString();
+                if (!clip.isBlank()) {
+                    promptPasswordText += clip.trim();
+                }
+                return true;
+            }
+            if (key == GLFW.GLFW_KEY_BACKSPACE) {
+                if (!promptPasswordText.isEmpty()) {
+                    promptPasswordText = promptPasswordText.substring(0, promptPasswordText.length() - 1);
+                }
+                return true;
+            } else if (key == GLFW.GLFW_KEY_ENTER || key == GLFW.GLFW_KEY_KP_ENTER) {
+                playClickSound();
+                submitPasswordPrompt();
+                return true;
+            } else if (key == GLFW.GLFW_KEY_ESCAPE) {
+                playClickSound();
+                passwordPromptRoom = null;
+                promptPasswordText = "";
+                passwordErrorMsg = "";
+                return true;
+            }
             return true;
+        }
+
+        if (selectedTab == 4 && isCreatingRoom) {
+            if (isRoomNameFocused) {
+                if (isPasteKey) {
+                    String clip = getClipboardString();
+                    if (!clip.isBlank()) newRoomName += clip.trim();
+                    return true;
+                }
+                if (key == GLFW.GLFW_KEY_BACKSPACE) {
+                    if (!newRoomName.isEmpty()) newRoomName = newRoomName.substring(0, newRoomName.length() - 1);
+                    return true;
+                } else if (key == GLFW.GLFW_KEY_ENTER || key == GLFW.GLFW_KEY_TAB) {
+                    isRoomNameFocused = false;
+                    isRoomPasswordFocused = true;
+                    return true;
+                }
+            } else if (isRoomPasswordFocused) {
+                if (isPasteKey) {
+                    String clip = getClipboardString();
+                    if (!clip.isBlank()) newRoomPassword += clip.trim();
+                    return true;
+                }
+                if (key == GLFW.GLFW_KEY_BACKSPACE) {
+                    if (!newRoomPassword.isEmpty()) newRoomPassword = newRoomPassword.substring(0, newRoomPassword.length() - 1);
+                    return true;
+                } else if (key == GLFW.GLFW_KEY_ENTER || key == GLFW.GLFW_KEY_KP_ENTER) {
+                    String finalName = newRoomName.trim();
+                    if (finalName.isEmpty()) {
+                        try {
+                            if (Minecraft.getInstance().getUser() != null) {
+                                finalName = Minecraft.getInstance().getUser().getName() + "'s Room";
+                            }
+                        } catch (Throwable ignored) {
+                            finalName = "Music Room";
+                        }
+                    }
+                    partyManager.createRoom(finalName, newRoomPassword.trim());
+                    isCreatingRoom = false;
+                    isRoomNameFocused = false;
+                    isRoomPasswordFocused = false;
+                    statusMessage = "§a🎉 Created room '" + finalName + "'! Broadcasting music... ✨";
+                    statusMessageTime = System.currentTimeMillis();
+                    return true;
+                }
+            }
         }
 
         // Hotkey recording listener
@@ -2556,8 +3217,6 @@ public class MusicPlayerScreen extends Screen {
             }
             return true;
         }
-
-        boolean isPasteKey = (key == GLFW.GLFW_KEY_V && isControlOrSuperDown(modifiers));
 
         if (isSearchFocused) {
             if (isPasteKey) {
@@ -2659,6 +3318,21 @@ public class MusicPlayerScreen extends Screen {
     private boolean handleCharTyped(char ch, int modifiers) {
         if (Character.isISOControl(ch) || ch < 32 || ch == 127) {
             return false;
+        }
+
+        if (passwordPromptRoom != null) {
+            promptPasswordText += ch;
+            return true;
+        }
+
+        if (selectedTab == 4 && isCreatingRoom) {
+            if (isRoomNameFocused) {
+                newRoomName += ch;
+                return true;
+            } else if (isRoomPasswordFocused) {
+                newRoomPassword += ch;
+                return true;
+            }
         }
 
         if (isSearchFocused) {
