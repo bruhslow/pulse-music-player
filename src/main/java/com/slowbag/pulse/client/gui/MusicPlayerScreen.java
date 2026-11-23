@@ -200,11 +200,11 @@ public class MusicPlayerScreen extends Screen {
 
     private int getExpLeftWidth() {
         int totalW = getExpTotalWidth();
-        return (this.width >= 500) ? (int) (totalW * 0.58) : totalW;
+        return (this.width >= 340) ? (int) (totalW * 0.58) : totalW;
     }
 
     private int getExpRightWidth() {
-        return (this.width >= 500) ? (getExpTotalWidth() - getExpLeftWidth() - 8) : 0;
+        return (this.width >= 340) ? (getExpTotalWidth() - getExpLeftWidth() - 8) : 0;
     }
 
     private int getExpStartX() {
@@ -256,7 +256,7 @@ public class MusicPlayerScreen extends Screen {
     }
 
     private boolean isTwoColumn() {
-        return this.width >= 500 && isExpanded;
+        return this.width >= 340 && isExpanded;
     }
 
     private int getTotalWidth() {
@@ -323,7 +323,7 @@ public class MusicPlayerScreen extends Screen {
                 }
 
                 // Right Column: Volume Card & Queue Card
-                if (this.width >= 500 && rightW > 50 && drawerH > 24) {
+                if (this.width >= 340 && rightW > 40 && drawerH > 24) {
                     int rightX = expStartX + leftW + 8;
                     int volY = heroY;
                     int volH = 26;
@@ -836,208 +836,212 @@ public class MusicPlayerScreen extends Screen {
 
             int itemY = listStartY;
             for (int i = startIdx; i < endIdx; i++) {
-                int rowBg = 0x18FFFFFF;
-                drawSoftBox(graphics, x + 8, itemY, w - 16, rowH - 4, 3, rowBg, 0x25FFFFFF);
+                try {
+                    int rowBg = 0x18FFFFFF;
+                    drawSoftBox(graphics, x + 8, itemY, w - 16, rowH - 4, 3, rowBg, 0x25FFFFFF);
 
-                int btnY = itemY + 5;
-                int btnH = 18;
+                    int btnY = itemY + 5;
+                    int btnH = 18;
 
-                if (i == 0) {
-                    // 1. Output Stream / Primary Audio Device
-                    String curDev = sm.getOutputDevice();
-                    int arrowBtnW = 18;
-                    int labelW = Math.max(65, Math.min(135, w - 215));
-                    int rightEdge = x + w - 14;
-                    int nextBtnX = rightEdge - arrowBtnW;
-                    int labelBoxX = nextBtnX - labelW - 4;
-                    int prevBtnX = labelBoxX - arrowBtnW - 4;
+                    if (i == 0) {
+                        // 1. Output Stream / Primary Audio Device
+                        String curDev = sm.getOutputDevice();
+                        int arrowBtnW = 18;
+                        int labelW = Math.max(65, Math.min(135, w - 215));
+                        int rightEdge = x + w - 14;
+                        int nextBtnX = rightEdge - arrowBtnW;
+                        int labelBoxX = nextBtnX - labelW - 4;
+                        int prevBtnX = labelBoxX - arrowBtnW - 4;
 
-                    int maxDescW = prevBtnX - (x + 14) - 6;
-                    boolean isVoiceChat = curDev.equalsIgnoreCase(com.slowbag.pulse.client.audio.SettingsManager.VOICE_CHAT_DEVICE);
-                    String header = isVoiceChat ? "§f🎤 Voice Chat Microphone:" : "§f🔊 Primary Audio Output:";
-                    String sub = isVoiceChat ? "§dDirect in-game mic broadcast to nearby players" : "§8Route sound to speakers or headphones";
-                    graphics.text(this.font, Component.literal(truncateToWidth(header, maxDescW)), x + 14, itemY + 3, 0xFFFFFFFF, false);
-                    graphics.text(this.font, Component.literal(truncateToWidth(sub, maxDescW)), x + 14, itemY + 15, isVoiceChat ? 0xFFE9D5FF : 0xFF888888, false);
+                        int maxDescW = prevBtnX - (x + 14) - 6;
+                        boolean isVoiceChat = curDev.equalsIgnoreCase(com.slowbag.pulse.client.audio.SettingsManager.VOICE_CHAT_DEVICE);
+                        String header = isVoiceChat ? "§fVoice Chat Microphone:" : "§fPrimary Audio Output:";
+                        String sub = isVoiceChat ? "§dDirect in-game mic broadcast to nearby players" : "§8Route sound to speakers or headphones";
+                        graphics.text(this.font, Component.literal(truncateToWidth(header, maxDescW)), x + 14, itemY + 3, 0xFFFFFFFF, false);
+                        graphics.text(this.font, Component.literal(truncateToWidth(sub, maxDescW)), x + 14, itemY + 15, isVoiceChat ? 0xFFE9D5FF : 0xFF888888, false);
 
-                    // Prev ◀
-                    boolean prevHov = mouseX >= prevBtnX && mouseX <= prevBtnX + arrowBtnW && mouseY >= btnY && mouseY <= btnY + btnH;
-                    drawSoftBox(graphics, prevBtnX, btnY, arrowBtnW, btnH, 3, prevHov ? 0x80A855F7 : 0x30FFFFFF, prevHov ? 0xFFA855F7 : 0x35FFFFFF);
-                    drawCleanCenteredText(graphics, "◀", prevBtnX + arrowBtnW / 2, btnY + 5, 0xFFFFFFFF);
+                        // Prev ◀
+                        boolean prevHov = mouseX >= prevBtnX && mouseX <= prevBtnX + arrowBtnW && mouseY >= btnY && mouseY <= btnY + btnH;
+                        drawSoftBox(graphics, prevBtnX, btnY, arrowBtnW, btnH, 3, prevHov ? 0x80A855F7 : 0x30FFFFFF, prevHov ? 0xFFA855F7 : 0x35FFFFFF);
+                        drawCleanCenteredText(graphics, "◀", prevBtnX + arrowBtnW / 2, btnY + 5, 0xFFFFFFFF);
 
-                    // Device Name Box
-                    boolean devHov = mouseX >= labelBoxX && mouseX <= labelBoxX + labelW && mouseY >= btnY && mouseY <= btnY + btnH;
-                    drawSoftBox(graphics, labelBoxX, btnY, labelW, btnH, 3, devHov ? 0x40A855F7 : 0x25000000, devHov ? 0xFFA855F7 : 0x50A855F7);
-                    drawCleanCenteredText(graphics, truncateToWidth("§d" + curDev, labelW - 4), labelBoxX + labelW / 2, btnY + 5, 0xFFFFFFFF);
+                        // Device Name Box
+                        boolean devHov = mouseX >= labelBoxX && mouseX <= labelBoxX + labelW && mouseY >= btnY && mouseY <= btnY + btnH;
+                        drawSoftBox(graphics, labelBoxX, btnY, labelW, btnH, 3, devHov ? 0x40A855F7 : 0x25000000, devHov ? 0xFFA855F7 : 0x50A855F7);
+                        drawCleanCenteredText(graphics, truncateToWidth("§d" + curDev, labelW - 4), labelBoxX + labelW / 2, btnY + 5, 0xFFFFFFFF);
 
-                    // Next ▶
-                    boolean nextHov = mouseX >= nextBtnX && mouseX <= nextBtnX + arrowBtnW && mouseY >= btnY && mouseY <= btnY + btnH;
-                    drawSoftBox(graphics, nextBtnX, btnY, arrowBtnW, btnH, 3, nextHov ? 0x80A855F7 : 0x30FFFFFF, nextHov ? 0xFFA855F7 : 0x35FFFFFF);
-                    drawCleanCenteredText(graphics, "▶", nextBtnX + arrowBtnW / 2, btnY + 5, 0xFFFFFFFF);
+                        // Next ▶
+                        boolean nextHov = mouseX >= nextBtnX && mouseX <= nextBtnX + arrowBtnW && mouseY >= btnY && mouseY <= btnY + btnH;
+                        drawSoftBox(graphics, nextBtnX, btnY, arrowBtnW, btnH, 3, nextHov ? 0x80A855F7 : 0x30FFFFFF, nextHov ? 0xFFA855F7 : 0x35FFFFFF);
+                        drawCleanCenteredText(graphics, "▶", nextBtnX + arrowBtnW / 2, btnY + 5, 0xFFFFFFFF);
 
-                } else if (i == 1) {
-                    // 2. Configurable Hotkey to Open Music Player GUI (Prominently placed on Row 2)
-                    com.slowbag.pulse.client.input.KeybindManager km = com.slowbag.pulse.client.input.KeybindManager.getInstance();
-                    int btnW = 96;
-                    int btnX = x + w - btnW - 14;
+                    } else if (i == 1) {
+                        // 2. Configurable Hotkey to Open Music Player GUI (Prominently placed on Row 2)
+                        com.slowbag.pulse.client.input.KeybindManager km = com.slowbag.pulse.client.input.KeybindManager.getInstance();
+                        int btnW = 96;
+                        int btnX = x + w - btnW - 14;
 
-                    int maxDescW = btnX - (x + 14) - 6;
-                    graphics.text(this.font, Component.literal(truncateToWidth("§f⌨ Open Player Hotkey:", maxDescW)), x + 14, itemY + 3, 0xFFFFFFFF, false);
-                    graphics.text(this.font, Component.literal(truncateToWidth("§8Click to record key or combo (e.g. J, Ctrl+Q)", maxDescW)), x + 14, itemY + 15, 0xFF888888, false);
+                        int maxDescW = btnX - (x + 14) - 6;
+                        graphics.text(this.font, Component.literal(truncateToWidth("§fOpen Player Hotkey:", maxDescW)), x + 14, itemY + 3, 0xFFFFFFFF, false);
+                        graphics.text(this.font, Component.literal(truncateToWidth("§8Click to record key or combo (e.g. J, Ctrl+Q)", maxDescW)), x + 14, itemY + 15, 0xFF888888, false);
 
-                    boolean bHov = mouseX >= btnX && mouseX <= btnX + btnW && mouseY >= btnY && mouseY <= btnY + btnH;
-                    boolean listening = km.isListening();
-                    String keyText = listening ? "§e[ Press key... ]" : ("§f[ " + km.getKeybindDisplay() + " ]");
-                    int bgCol = listening ? 0x90F59E0B : (bHov ? 0x80A855F7 : 0x30FFFFFF);
-                    int outlineCol = listening ? 0xFFFBBF24 : (bHov ? 0xFFA855F7 : 0x40FFFFFF);
-                    drawSoftBox(graphics, btnX, btnY, btnW, btnH, 3, bgCol, outlineCol);
-                    drawCleanCenteredText(graphics, keyText, btnX + btnW / 2, btnY + 5, 0xFFFFFFFF);
+                        boolean bHov = mouseX >= btnX && mouseX <= btnX + btnW && mouseY >= btnY && mouseY <= btnY + btnH;
+                        boolean listening = km.isListening();
+                        String keyText = listening ? "§e[ Press key... ]" : ("§f[ " + km.getKeybindDisplay() + " ]");
+                        int bgCol = listening ? 0x90F59E0B : (bHov ? 0x80A855F7 : 0x30FFFFFF);
+                        int outlineCol = listening ? 0xFFFBBF24 : (bHov ? 0xFFA855F7 : 0x40FFFFFF);
+                        drawSoftBox(graphics, btnX, btnY, btnW, btnH, 3, bgCol, outlineCol);
+                        drawCleanCenteredText(graphics, keyText, btnX + btnW / 2, btnY + 5, 0xFFFFFFFF);
 
-                } else if (i == 2) {
-                    // 3. In-Game HUD Overlay
-                    HudConfigManager hudCfg = HudConfigManager.getInstance();
-                    int moveBtnW = 44;
-                    int moveBtnX = x + w - moveBtnW - 14;
-                    int modeBtnW = 54;
-                    int modeBtnX = moveBtnX - modeBtnW - 6;
+                    } else if (i == 2) {
+                        // 3. In-Game HUD Overlay
+                        HudConfigManager hudCfg = HudConfigManager.getInstance();
+                        int moveBtnW = 44;
+                        int moveBtnX = x + w - moveBtnW - 14;
+                        int modeBtnW = 54;
+                        int modeBtnX = moveBtnX - modeBtnW - 6;
 
-                    int maxDescW = modeBtnX - (x + 14) - 6;
-                    graphics.text(this.font, Component.literal(truncateToWidth("§f🎛 In-Game HUD Overlay:", maxDescW)), x + 14, itemY + 3, 0xFFFFFFFF, false);
-                    graphics.text(this.font, Component.literal(truncateToWidth("§8Floating now-playing HUD widget in game", maxDescW)), x + 14, itemY + 15, 0xFF888888, false);
+                        int maxDescW = modeBtnX - (x + 14) - 6;
+                        graphics.text(this.font, Component.literal(truncateToWidth("§fIn-Game HUD Overlay:", maxDescW)), x + 14, itemY + 3, 0xFFFFFFFF, false);
+                        graphics.text(this.font, Component.literal(truncateToWidth("§8Floating now-playing HUD widget in game", maxDescW)), x + 14, itemY + 15, 0xFF888888, false);
 
-                    String hudText = !hudCfg.isHudEnabled() ? "Disabled" : hudCfg.getPosition();
-                    boolean modeHov = mouseX >= modeBtnX && mouseX <= modeBtnX + modeBtnW && mouseY >= btnY && mouseY <= btnY + btnH;
-                    drawSoftBox(graphics, modeBtnX, btnY, modeBtnW, btnH, 3, hudCfg.isHudEnabled() ? (modeHov ? 0x80A855F7 : 0x40A855F7) : (modeHov ? 0x50FFFFFF : 0x25FFFFFF), modeHov ? 0xFFFFFFFF : 0x35FFFFFF);
-                    drawCleanCenteredText(graphics, hudText, modeBtnX + modeBtnW / 2, btnY + 5, 0xFFFFFFFF);
+                        String hudText = !hudCfg.isHudEnabled() ? "Disabled" : hudCfg.getPosition();
+                        boolean modeHov = mouseX >= modeBtnX && mouseX <= modeBtnX + modeBtnW && mouseY >= btnY && mouseY <= btnY + btnH;
+                        drawSoftBox(graphics, modeBtnX, btnY, modeBtnW, btnH, 3, hudCfg.isHudEnabled() ? (modeHov ? 0x80A855F7 : 0x40A855F7) : (modeHov ? 0x50FFFFFF : 0x25FFFFFF), modeHov ? 0xFFFFFFFF : 0x35FFFFFF);
+                        drawCleanCenteredText(graphics, hudText, modeBtnX + modeBtnW / 2, btnY + 5, 0xFFFFFFFF);
 
-                    boolean moveHov = mouseX >= moveBtnX && mouseX <= moveBtnX + moveBtnW && mouseY >= btnY && mouseY <= btnY + btnH;
-                    drawSoftBox(graphics, moveBtnX, btnY, moveBtnW, btnH, 3, moveHov ? 0x8038BDF8 : 0x4038BDF8, moveHov ? 0xFFFFFFFF : 0x5038BDF8);
-                    drawCleanCenteredText(graphics, "✥ Move", moveBtnX + moveBtnW / 2, btnY + 5, 0xFFFFFFFF);
+                        boolean moveHov = mouseX >= moveBtnX && mouseX <= moveBtnX + moveBtnW && mouseY >= btnY && mouseY <= btnY + btnH;
+                        drawSoftBox(graphics, moveBtnX, btnY, moveBtnW, btnH, 3, moveHov ? 0x8038BDF8 : 0x4038BDF8, moveHov ? 0xFFFFFFFF : 0x5038BDF8);
+                        drawCleanCenteredText(graphics, "✥ Move", moveBtnX + moveBtnW / 2, btnY + 5, 0xFFFFFFFF);
 
-                } else if (i == 3) {
-                    // 4. Nametag Music Badge
-                    boolean badge = com.slowbag.pulse.client.audio.MusicBadgeManager.isBadgeEnabled();
-                    int btnW = 86;
-                    int btnX = x + w - btnW - 14;
+                    } else if (i == 3) {
+                        // 4. Nametag Music Badge
+                        boolean badge = com.slowbag.pulse.client.audio.MusicBadgeManager.isBadgeEnabled();
+                        int btnW = 86;
+                        int btnX = x + w - btnW - 14;
 
-                    int maxDescW = btnX - (x + 14) - 6;
-                    graphics.text(this.font, Component.literal(truncateToWidth("§f♫ Player Nametag Badge:", maxDescW)), x + 14, itemY + 3, 0xFFFFFFFF, false);
-                    graphics.text(this.font, Component.literal(truncateToWidth("§8Animated music note above nametag", maxDescW)), x + 14, itemY + 15, 0xFF888888, false);
+                        int maxDescW = btnX - (x + 14) - 6;
+                        graphics.text(this.font, Component.literal(truncateToWidth("§fPlayer Nametag Badge:", maxDescW)), x + 14, itemY + 3, 0xFFFFFFFF, false);
+                        graphics.text(this.font, Component.literal(truncateToWidth("§8Animated music note above nametag", maxDescW)), x + 14, itemY + 15, 0xFF888888, false);
 
-                    boolean bHov = mouseX >= btnX && mouseX <= btnX + btnW && mouseY >= btnY && mouseY <= btnY + btnH;
-                    drawSoftBox(graphics, btnX, btnY, btnW, btnH, 3, badge ? (bHov ? 0xFFC084FC : 0xFFA855F7) : (bHov ? 0x50FFFFFF : 0x25FFFFFF), bHov ? 0xFFE9D5FF : 0x35FFFFFF);
-                    drawCleanCenteredText(graphics, badge ? "♫ Active" : "✕ Hidden", btnX + btnW / 2, btnY + 5, 0xFFFFFFFF);
+                        boolean bHov = mouseX >= btnX && mouseX <= btnX + btnW && mouseY >= btnY && mouseY <= btnY + btnH;
+                        drawSoftBox(graphics, btnX, btnY, btnW, btnH, 3, badge ? (bHov ? 0xFFC084FC : 0xFFA855F7) : (bHov ? 0x50FFFFFF : 0x25FFFFFF), bHov ? 0xFFE9D5FF : 0x35FFFFFF);
+                        drawCleanCenteredText(graphics, badge ? "✔ Active" : "✕ Hidden", btnX + btnW / 2, btnY + 5, 0xFFFFFFFF);
 
-                } else if (i == 4) {
-                    // 5. Mono Audio Downmix (Accessibility)
-                    boolean mono = sm.isMonoAudio();
-                    int btnW = 86;
-                    int btnX = x + w - btnW - 14;
+                    } else if (i == 4) {
+                        // 5. Mono Audio Downmix (Accessibility)
+                        boolean mono = sm.isMonoAudio();
+                        int btnW = 86;
+                        int btnX = x + w - btnW - 14;
 
-                    int maxDescW = btnX - (x + 14) - 6;
-                    graphics.text(this.font, Component.literal(truncateToWidth("§f🎧 Mono Audio Downmix:", maxDescW)), x + 14, itemY + 3, 0xFFFFFFFF, false);
-                    graphics.text(this.font, Component.literal(truncateToWidth("§8Combines left & right channels for hearing", maxDescW)), x + 14, itemY + 15, 0xFF888888, false);
+                        int maxDescW = btnX - (x + 14) - 6;
+                        graphics.text(this.font, Component.literal(truncateToWidth("§fMono Audio Downmix:", maxDescW)), x + 14, itemY + 3, 0xFFFFFFFF, false);
+                        graphics.text(this.font, Component.literal(truncateToWidth("§8Combines left & right channels for hearing", maxDescW)), x + 14, itemY + 15, 0xFF888888, false);
 
-                    boolean bHov = mouseX >= btnX && mouseX <= btnX + btnW && mouseY >= btnY && mouseY <= btnY + btnH;
-                    drawSoftBox(graphics, btnX, btnY, btnW, btnH, 3, mono ? (bHov ? 0xFFC084FC : 0xFFA855F7) : (bHov ? 0x50FFFFFF : 0x25FFFFFF), bHov ? 0xFFE9D5FF : 0x35FFFFFF);
-                    drawCleanCenteredText(graphics, mono ? "✔ Mono (On)" : "Stereo (Off)", btnX + btnW / 2, btnY + 5, 0xFFFFFFFF);
+                        boolean bHov = mouseX >= btnX && mouseX <= btnX + btnW && mouseY >= btnY && mouseY <= btnY + btnH;
+                        drawSoftBox(graphics, btnX, btnY, btnW, btnH, 3, mono ? (bHov ? 0xFFC084FC : 0xFFA855F7) : (bHov ? 0x50FFFFFF : 0x25FFFFFF), bHov ? 0xFFE9D5FF : 0x35FFFFFF);
+                        drawCleanCenteredText(graphics, mono ? "✔ Mono (On)" : "Stereo (Off)", btnX + btnW / 2, btnY + 5, 0xFFFFFFFF);
 
-                } else if (i == 5) {
-                    // 6. Reduced Motion / Visualizer (Accessibility)
-                    boolean reduced = sm.isReducedMotion();
-                    int btnW = 86;
-                    int btnX = x + w - btnW - 14;
+                    } else if (i == 5) {
+                        // 6. Reduced Motion / Visualizer (Accessibility)
+                        boolean reduced = sm.isReducedMotion();
+                        int btnW = 86;
+                        int btnX = x + w - btnW - 14;
 
-                    int maxDescW = btnX - (x + 14) - 6;
-                    graphics.text(this.font, Component.literal(truncateToWidth("§f🌊 Waveform Motion:", maxDescW)), x + 14, itemY + 3, 0xFFFFFFFF, false);
-                    graphics.text(this.font, Component.literal(truncateToWidth("§8Pauses or softens dancing animations", maxDescW)), x + 14, itemY + 15, 0xFF888888, false);
+                        int maxDescW = btnX - (x + 14) - 6;
+                        graphics.text(this.font, Component.literal(truncateToWidth("§fWaveform Motion:", maxDescW)), x + 14, itemY + 3, 0xFFFFFFFF, false);
+                        graphics.text(this.font, Component.literal(truncateToWidth("§8Pauses or softens dancing animations", maxDescW)), x + 14, itemY + 15, 0xFF888888, false);
 
-                    boolean bHov = mouseX >= btnX && mouseX <= btnX + btnW && mouseY >= btnY && mouseY <= btnY + btnH;
-                    drawSoftBox(graphics, btnX, btnY, btnW, btnH, 3, reduced ? (bHov ? 0xFFE9D5FF : 0xFFA855F7) : (bHov ? 0xFFC084FC : 0xFFA855F7), bHov ? 0xFFFFFFFF : 0x35FFFFFF);
-                    drawCleanCenteredText(graphics, reduced ? "Reduced" : "Dynamic", btnX + btnW / 2, btnY + 5, reduced ? 0xFF000000 : 0xFFFFFFFF);
+                        boolean bHov = mouseX >= btnX && mouseX <= btnX + btnW && mouseY >= btnY && mouseY <= btnY + btnH;
+                        drawSoftBox(graphics, btnX, btnY, btnW, btnH, 3, reduced ? (bHov ? 0xFFE9D5FF : 0xFFA855F7) : (bHov ? 0xFFC084FC : 0xFFA855F7), bHov ? 0xFFFFFFFF : 0x35FFFFFF);
+                        drawCleanCenteredText(graphics, reduced ? "Reduced" : "Dynamic", btnX + btnW / 2, btnY + 5, reduced ? 0xFF000000 : 0xFFFFFFFF);
 
-                } else if (i == 6) {
-                    // 7. Background Audio Playback
-                    boolean bg = sm.isBackgroundPlayback();
-                    int btnW = 86;
-                    int btnX = x + w - btnW - 14;
+                    } else if (i == 6) {
+                        // 7. Background Audio Playback
+                        boolean bg = sm.isBackgroundPlayback();
+                        int btnW = 86;
+                        int btnX = x + w - btnW - 14;
 
-                    int maxDescW = btnX - (x + 14) - 6;
-                    graphics.text(this.font, Component.literal(truncateToWidth("§f🖥 Background Audio Playback:", maxDescW)), x + 14, itemY + 3, 0xFFFFFFFF, false);
-                    graphics.text(this.font, Component.literal(truncateToWidth("§8Keep songs playing when unfocused", maxDescW)), x + 14, itemY + 15, 0xFF888888, false);
+                        int maxDescW = btnX - (x + 14) - 6;
+                        graphics.text(this.font, Component.literal(truncateToWidth("§fBackground Audio Playback:", maxDescW)), x + 14, itemY + 3, 0xFFFFFFFF, false);
+                        graphics.text(this.font, Component.literal(truncateToWidth("§8Keep songs playing when unfocused", maxDescW)), x + 14, itemY + 15, 0xFF888888, false);
 
-                    boolean bHov = mouseX >= btnX && mouseX <= btnX + btnW && mouseY >= btnY && mouseY <= btnY + btnH;
-                    drawSoftBox(graphics, btnX, btnY, btnW, btnH, 3, bg ? (bHov ? 0xFFC084FC : 0xFFA855F7) : (bHov ? 0x50FFFFFF : 0x25FFFFFF), bHov ? 0xFFE9D5FF : 0x35FFFFFF);
-                    drawCleanCenteredText(graphics, bg ? "Always Play" : "Mute Focus", btnX + btnW / 2, btnY + 5, 0xFFFFFFFF);
+                        boolean bHov = mouseX >= btnX && mouseX <= btnX + btnW && mouseY >= btnY && mouseY <= btnY + btnH;
+                        drawSoftBox(graphics, btnX, btnY, btnW, btnH, 3, bg ? (bHov ? 0xFFC084FC : 0xFFA855F7) : (bHov ? 0x50FFFFFF : 0x25FFFFFF), bHov ? 0xFFE9D5FF : 0x35FFFFFF);
+                        drawCleanCenteredText(graphics, bg ? "Always Play" : "Mute Focus", btnX + btnW / 2, btnY + 5, 0xFFFFFFFF);
 
-                } else if (i == 7) {
-                    // 8. Network Lag Buffer Cushion
-                    int preloadSec = sm.getPreloadSeconds();
-                    int btnW = 86;
-                    int btnX = x + w - btnW - 14;
+                    } else if (i == 7) {
+                        // 8. Network Lag Buffer Cushion
+                        int preloadSec = sm.getPreloadSeconds();
+                        int btnW = 86;
+                        int btnX = x + w - btnW - 14;
 
-                    int maxDescW = btnX - (x + 14) - 6;
-                    graphics.text(this.font, Component.literal(truncateToWidth("§f⚡ Network Lag Buffer Shield:", maxDescW)), x + 14, itemY + 3, 0xFFFFFFFF, false);
-                    graphics.text(this.font, Component.literal(truncateToWidth("§8Preload audio to prevent lag stutter", maxDescW)), x + 14, itemY + 15, 0xFF888888, false);
+                        int maxDescW = btnX - (x + 14) - 6;
+                        graphics.text(this.font, Component.literal(truncateToWidth("§fNetwork Lag Buffer Shield:", maxDescW)), x + 14, itemY + 3, 0xFFFFFFFF, false);
+                        graphics.text(this.font, Component.literal(truncateToWidth("§8Preload audio to prevent lag stutter", maxDescW)), x + 14, itemY + 15, 0xFF888888, false);
 
-                    String bufLabel = (preloadSec == 2) ? "2s Fast" : ((preloadSec == 5) ? "✔ 5s Shield" : "🛡 10s Max");
-                    boolean bHov = mouseX >= btnX && mouseX <= btnX + btnW && mouseY >= btnY && mouseY <= btnY + btnH;
-                    drawSoftBox(graphics, btnX, btnY, btnW, btnH, 3, bHov ? 0x80A855F7 : 0x35FFFFFF, bHov ? 0xFFA855F7 : 0x40FFFFFF);
-                    drawCleanCenteredText(graphics, bufLabel, btnX + btnW / 2, btnY + 5, 0xFFFFFFFF);
+                        String bufLabel = (preloadSec == 2) ? "2s Fast" : ((preloadSec == 5) ? "✔ 5s Shield" : "10s Max");
+                        boolean bHov = mouseX >= btnX && mouseX <= btnX + btnW && mouseY >= btnY && mouseY <= btnY + btnH;
+                        drawSoftBox(graphics, btnX, btnY, btnW, btnH, 3, bHov ? 0x80A855F7 : 0x35FFFFFF, bHov ? 0xFFA855F7 : 0x40FFFFFF);
+                        drawCleanCenteredText(graphics, bufLabel, btnX + btnW / 2, btnY + 5, 0xFFFFFFFF);
 
-                } else if (i == 8) {
-                    // 9. Toast Alerts & Notifications
-                    boolean toast = sm.isToastNotifications();
-                    int btnW = 86;
-                    int btnX = x + w - btnW - 14;
+                    } else if (i == 8) {
+                        // 9. Toast Alerts & Notifications
+                        boolean toast = sm.isToastNotifications();
+                        int btnW = 86;
+                        int btnX = x + w - btnW - 14;
 
-                    int maxDescW = btnX - (x + 14) - 6;
-                    graphics.text(this.font, Component.literal(truncateToWidth("§f🔔 In-Game Toast Alerts:", maxDescW)), x + 14, itemY + 3, 0xFFFFFFFF, false);
-                    graphics.text(this.font, Component.literal(truncateToWidth("§8Display popups on track changes", maxDescW)), x + 14, itemY + 15, 0xFF888888, false);
+                        int maxDescW = btnX - (x + 14) - 6;
+                        graphics.text(this.font, Component.literal(truncateToWidth("§fIn-Game Toast Alerts:", maxDescW)), x + 14, itemY + 3, 0xFFFFFFFF, false);
+                        graphics.text(this.font, Component.literal(truncateToWidth("§8Display popups on track changes", maxDescW)), x + 14, itemY + 15, 0xFF888888, false);
 
-                    boolean bHov = mouseX >= btnX && mouseX <= btnX + btnW && mouseY >= btnY && mouseY <= btnY + btnH;
-                    drawSoftBox(graphics, btnX, btnY, btnW, btnH, 3, toast ? (bHov ? 0xFFC084FC : 0xFFA855F7) : (bHov ? 0x50FFFFFF : 0x25FFFFFF), bHov ? 0xFFE9D5FF : 0x35FFFFFF);
-                    drawCleanCenteredText(graphics, toast ? "✔ Enabled" : "✕ Muted", btnX + btnW / 2, btnY + 5, 0xFFFFFFFF);
+                        boolean bHov = mouseX >= btnX && mouseX <= btnX + btnW && mouseY >= btnY && mouseY <= btnY + btnH;
+                        drawSoftBox(graphics, btnX, btnY, btnW, btnH, 3, toast ? (bHov ? 0xFFC084FC : 0xFFA855F7) : (bHov ? 0x50FFFFFF : 0x25FFFFFF), bHov ? 0xFFE9D5FF : 0x35FFFFFF);
+                        drawCleanCenteredText(graphics, toast ? "✔ Enabled" : "✕ Muted", btnX + btnW / 2, btnY + 5, 0xFFFFFFFF);
 
-                } else if (i == 9) {
-                    // 10. Game Sound Auto-Ducking
-                    boolean duck = sm.isAutoDucking();
-                    int btnW = 86;
-                    int btnX = x + w - btnW - 14;
+                    } else if (i == 9) {
+                        // 10. Game Sound Auto-Ducking
+                        boolean duck = sm.isAutoDucking();
+                        int btnW = 86;
+                        int btnX = x + w - btnW - 14;
 
-                    int maxDescW = btnX - (x + 14) - 6;
-                    graphics.text(this.font, Component.literal(truncateToWidth("§f🔉 Game Sound Auto-Ducking:", maxDescW)), x + 14, itemY + 3, 0xFFFFFFFF, false);
-                    graphics.text(this.font, Component.literal(truncateToWidth("§8Lower ambient sounds during music", maxDescW)), x + 14, itemY + 15, 0xFF888888, false);
+                        int maxDescW = btnX - (x + 14) - 6;
+                        graphics.text(this.font, Component.literal(truncateToWidth("§fGame Sound Auto-Ducking:", maxDescW)), x + 14, itemY + 3, 0xFFFFFFFF, false);
+                        graphics.text(this.font, Component.literal(truncateToWidth("§8Lower ambient sounds during music", maxDescW)), x + 14, itemY + 15, 0xFF888888, false);
 
-                    boolean bHov = mouseX >= btnX && mouseX <= btnX + btnW && mouseY >= btnY && mouseY <= btnY + btnH;
-                    drawSoftBox(graphics, btnX, btnY, btnW, btnH, 3, duck ? (bHov ? 0xFFC084FC : 0xFFA855F7) : (bHov ? 0x50FFFFFF : 0x25FFFFFF), bHov ? 0xFFE9D5FF : 0x35FFFFFF);
-                    drawCleanCenteredText(graphics, duck ? "✔ Ducking" : "✕ Normal", btnX + btnW / 2, btnY + 5, 0xFFFFFFFF);
+                        boolean bHov = mouseX >= btnX && mouseX <= btnX + btnW && mouseY >= btnY && mouseY <= btnY + btnH;
+                        drawSoftBox(graphics, btnX, btnY, btnW, btnH, 3, duck ? (bHov ? 0xFFC084FC : 0xFFA855F7) : (bHov ? 0x50FFFFFF : 0x25FFFFFF), bHov ? 0xFFE9D5FF : 0x35FFFFFF);
+                        drawCleanCenteredText(graphics, duck ? "✔ Ducking" : "✕ Normal", btnX + btnW / 2, btnY + 5, 0xFFFFFFFF);
 
-                } else if (i == 10) {
-                    // 11. Continuous Playback
-                    boolean cont = sm.isContinuousPlayback();
-                    int btnW = 86;
-                    int btnX = x + w - btnW - 14;
+                    } else if (i == 10) {
+                        // 11. Continuous Playback
+                        boolean cont = sm.isContinuousPlayback();
+                        int btnW = 86;
+                        int btnX = x + w - btnW - 14;
 
-                    int maxDescW = btnX - (x + 14) - 6;
-                    graphics.text(this.font, Component.literal(truncateToWidth("§f♾ Continuous Playback:", maxDescW)), x + 14, itemY + 3, 0xFFFFFFFF, false);
-                    graphics.text(this.font, Component.literal(truncateToWidth("§8Keep playing similar songs at end", maxDescW)), x + 14, itemY + 15, 0xFF888888, false);
+                        int maxDescW = btnX - (x + 14) - 6;
+                        graphics.text(this.font, Component.literal(truncateToWidth("§fContinuous Playback:", maxDescW)), x + 14, itemY + 3, 0xFFFFFFFF, false);
+                        graphics.text(this.font, Component.literal(truncateToWidth("§8Keep playing similar songs at end", maxDescW)), x + 14, itemY + 15, 0xFF888888, false);
 
-                    boolean bHov = mouseX >= btnX && mouseX <= btnX + btnW && mouseY >= btnY && mouseY <= btnY + btnH;
-                    drawSoftBox(graphics, btnX, btnY, btnW, btnH, 3, cont ? (bHov ? 0xFFC084FC : 0xFFA855F7) : (bHov ? 0x50FFFFFF : 0x25FFFFFF), bHov ? 0xFFE9D5FF : 0x35FFFFFF);
-                    drawCleanCenteredText(graphics, cont ? "✔ Endless" : "✕ Stop", btnX + btnW / 2, btnY + 5, 0xFFFFFFFF);
+                        boolean bHov = mouseX >= btnX && mouseX <= btnX + btnW && mouseY >= btnY && mouseY <= btnY + btnH;
+                        drawSoftBox(graphics, btnX, btnY, btnW, btnH, 3, cont ? (bHov ? 0xFFC084FC : 0xFFA855F7) : (bHov ? 0x50FFFFFF : 0x25FFFFFF), bHov ? 0xFFE9D5FF : 0x35FFFFFF);
+                        drawCleanCenteredText(graphics, cont ? "✔ Endless" : "✕ Stop", btnX + btnW / 2, btnY + 5, 0xFFFFFFFF);
 
-                } else if (i == 11) {
-                    // 12. Audio Cache Storage
-                    int btnW = 86;
-                    int btnX = x + w - btnW - 14;
+                    } else if (i == 11) {
+                        // 12. Audio Cache Storage
+                        int btnW = 86;
+                        int btnX = x + w - btnW - 14;
 
-                    int maxDescW = btnX - (x + 14) - 6;
-                    graphics.text(this.font, Component.literal(truncateToWidth("§f🧹 Audio Stream Cache:", maxDescW)), x + 14, itemY + 3, 0xFFFFFFFF, false);
-                    graphics.text(this.font, Component.literal(truncateToWidth("§8Clear temp audio chunks on disk", maxDescW)), x + 14, itemY + 15, 0xFF888888, false);
+                        int maxDescW = btnX - (x + 14) - 6;
+                        graphics.text(this.font, Component.literal(truncateToWidth("§fAudio Stream Cache:", maxDescW)), x + 14, itemY + 3, 0xFFFFFFFF, false);
+                        graphics.text(this.font, Component.literal(truncateToWidth("§8Clear temp audio chunks on disk", maxDescW)), x + 14, itemY + 15, 0xFF888888, false);
 
-                    boolean bHov = mouseX >= btnX && mouseX <= btnX + btnW && mouseY >= btnY && mouseY <= btnY + btnH;
-                    drawSoftBox(graphics, btnX, btnY, btnW, btnH, 3, bHov ? 0x90FF3344 : 0x40FF3344, bHov ? 0xFFFF4455 : 0x60FF4455);
-                    drawCleanCenteredText(graphics, "🗑 Clear", btnX + btnW / 2, btnY + 5, 0xFFFFFFFF);
+                        boolean bHov = mouseX >= btnX && mouseX <= btnX + btnW && mouseY >= btnY && mouseY <= btnY + btnH;
+                        drawSoftBox(graphics, btnX, btnY, btnW, btnH, 3, bHov ? 0x90FF3344 : 0x40FF3344, bHov ? 0xFFFF4455 : 0x60FF4455);
+                        drawCleanCenteredText(graphics, "Clear Cache", btnX + btnW / 2, btnY + 5, 0xFFFFFFFF);
+                    }
+                } catch (Throwable rowError) {
+                    MusicPlayerMod.LOGGER.error("[Music Player] Error rendering settings row " + i, rowError);
                 }
 
                 itemY += rowH;
@@ -1212,9 +1216,10 @@ public class MusicPlayerScreen extends Screen {
 
         int itemY = y + 24;
         if (upNext.isEmpty()) {
-            graphics.centeredText(this.font, Component.literal("§7Queue is empty."), x + w / 2, itemY + 16, 0xFFA0988E);
-            graphics.centeredText(this.font, Component.literal("§8Click §d+Q §8on any track"), x + w / 2, itemY + 28, 0xFF706860);
-            graphics.centeredText(this.font, Component.literal("§8to play it next!"), x + w / 2, itemY + 40, 0xFF706860);
+            int centerY = y + 24 + Math.max(10, (h - 24) / 2);
+            graphics.centeredText(this.font, Component.literal("§7Queue is empty."), x + w / 2, centerY - 14, 0xFFA0988E);
+            graphics.centeredText(this.font, Component.literal("§8Click §d+Q §8on any track"), x + w / 2, centerY, 0xFF706860);
+            graphics.centeredText(this.font, Component.literal("§8to play it next!"), x + w / 2, centerY + 14, 0xFF706860);
         } else {
             int visibleRows = Math.max(2, (h - 26) / 26);
             int startIdx = Math.min(queueScrollOffset, Math.max(0, upNext.size() - visibleRows));
@@ -1399,21 +1404,31 @@ public class MusicPlayerScreen extends Screen {
     private String truncateToWidth(String text, int maxWidth, boolean bold) {
         if (text == null || text.isEmpty()) return "";
         if (maxWidth <= 15) return "";
-        String clean = text.replaceAll("§[0-9a-fk-or]", "");
-        String formatted = bold ? ("§l" + clean) : clean;
-        if (this.font.width(Component.literal(formatted)) <= maxWidth) return text;
-        int dotsW = this.font.width(Component.literal(bold ? "§l.." : ".."));
-        int avail = Math.max(8, maxWidth - dotsW - 3);
-        StringBuilder sb = new StringBuilder();
-        for (int i = 0; i < clean.length(); i++) {
-            sb.append(clean.charAt(i));
-            String candidate = bold ? ("§l" + sb.toString()) : sb.toString();
-            if (this.font.width(Component.literal(candidate)) > avail) {
-                if (sb.length() > 1) sb.deleteCharAt(sb.length() - 1);
-                break;
+        try {
+            String clean = text.replaceAll("§[0-9a-fk-or]", "");
+            String formatted = bold ? ("§l" + clean) : clean;
+            if (this.font.width(Component.literal(formatted)) <= maxWidth) return text;
+            int dotsW = this.font.width(Component.literal(bold ? ".." : ".."));
+            int avail = Math.max(8, maxWidth - dotsW - 3);
+            StringBuilder sb = new StringBuilder();
+            int len = clean.length();
+            for (int offset = 0; offset < len; ) {
+                int codePoint = clean.codePointAt(offset);
+                int charCount = Character.charCount(codePoint);
+                sb.append(clean, offset, offset + charCount);
+                String candidate = bold ? ("§l" + sb.toString()) : sb.toString();
+                if (this.font.width(Component.literal(candidate)) > avail) {
+                    if (sb.length() >= charCount) {
+                        sb.delete(sb.length() - charCount, sb.length());
+                    }
+                    break;
+                }
+                offset += charCount;
             }
+            return sb.toString().trim() + "..";
+        } catch (Throwable t) {
+            return text;
         }
-        return sb.toString().trim() + "..";
     }
 
     private void drawGlassButton(GuiGraphicsExtractor graphics, int bx, int by, int bw, int bh, String text, int accent, int mx, int my) {
@@ -1447,7 +1462,7 @@ public class MusicPlayerScreen extends Screen {
                 int drawerH = getDrawerHeight();
 
                 // Right column queue scroll (Only when hovering over the right column)
-                if (this.width >= 460 && rightW > 40 && mx >= expStartX + leftW + 6 && mx <= expStartX + leftW + 8 + rightW) {
+                if (this.width >= 340 && rightW > 40 && mx >= expStartX + leftW + 6 && mx <= expStartX + leftW + 8 + rightW) {
                     List<AudioTrack> upNext = audioManager.getUpcomingQueue();
                     int visibleQ = Math.max(2, (drawerH - 26) / 26);
                     if (verticalAmount > 0) {
@@ -2265,7 +2280,7 @@ public class MusicPlayerScreen extends Screen {
             }
 
             // 4. Right Column: Volume Card, Queue Card (Expanded mode only)
-            if (twoCol && rightW > 50) {
+            if (twoCol && rightW > 40) {
                 int rightX = startX + leftW + 8;
                 int volY = heroY;
                 int volH = 26;
@@ -2459,7 +2474,7 @@ public class MusicPlayerScreen extends Screen {
             draggedScrubRatio = Math.max(0.0, Math.min(1.0, (mx - scrubX) / (double) scrubW));
             return true;
         }
-        if (isDraggingVolume && isExpanded && this.width >= 500) {
+        if (isDraggingVolume && isExpanded && this.width >= 340) {
             int expStartX = getExpStartX();
             int leftW = getExpLeftWidth();
             int rightX = expStartX + leftW + 8;
