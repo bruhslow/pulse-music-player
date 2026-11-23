@@ -57,6 +57,7 @@ public class MusicPlayerClientMod implements ClientModInitializer {
             ClientPlayConnectionEvents.JOIN.register((handler, sender, client) -> {
                 try {
                     PartyManager.getInstance().refreshRooms();
+                    com.slowbag.pulse.client.audio.MusicBadgeManager.getInstance().broadcastPresenceNow();
                 } catch (Throwable ignored) {}
             });
             ClientPlayConnectionEvents.DISCONNECT.register((handler, client) -> {

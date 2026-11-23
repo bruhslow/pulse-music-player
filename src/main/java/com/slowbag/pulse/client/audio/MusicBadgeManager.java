@@ -2,6 +2,7 @@ package com.slowbag.pulse.client.audio;
 
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
+import com.slowbag.pulse.network.PulseMqttClient;
 import net.minecraft.client.Minecraft;
 import net.minecraft.network.chat.Component;
 import net.minecraft.world.entity.Entity;
@@ -56,6 +57,14 @@ public class MusicBadgeManager {
         loadConfig();
         startPresenceBroadcaster();
         startPresenceListener();
+        try {
+            PulseMqttClient.getInstance().subscribe("pulse/presence/global");
+            PulseMqttClient.getInstance().addListener((topic, payload) -> {
+                if ("pulse/presence/global".equals(topic)) {
+                    handlePresencePayload(payload);
+                }
+            });
+        } catch (Throwable ignored) {}
     }
 
     public static boolean isBadgeEnabled() {
@@ -246,6 +255,7 @@ public class MusicBadgeManager {
                 payload.addProperty("track", curTrack.getTitle());
             }
             payload.addProperty("time", now);
+            PulseMqttClient.getInstance().publish("pulse/presence/global", payload.toString());
             sendPresence(payload.toString());
         } catch (Throwable ignored) {}
     }

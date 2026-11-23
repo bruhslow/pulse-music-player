@@ -5,6 +5,7 @@ import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import com.slowbag.pulse.MusicPlayerMod;
+import com.slowbag.pulse.network.PulseMqttClient;
 import com.slowbag.pulse.network.PulseNetworkPayload;
 import net.fabricmc.fabric.api.client.networking.v1.ClientPlayNetworking;
 import net.minecraft.client.Minecraft;
@@ -171,6 +172,23 @@ public class PartyManager {
         startDirectoryListener();
         startPersonalInviteListener();
         startServerDiscoveryListener();
+        try {
+            PulseMqttClient.getInstance().subscribe("pulse/rooms/global");
+            PulseMqttClient.getInstance().addListener(this::handleMqttMessage);
+        } catch (Throwable ignored) {}
+    }
+
+    private void handleMqttMessage(String topic, String payload) {
+        if (topic == null || payload == null) return;
+        try {
+            if ("pulse/rooms/global".equals(topic)) {
+                handleDirectoryPayload(payload);
+            } else if (topic.startsWith("pulse/room/")) {
+                handleRoomPayload(payload);
+            } else if (topic.startsWith("pulse/user/")) {
+                handlePersonalInvite(payload);
+            }
+        } catch (Throwable ignored) {}
     }
 
     public void init() {
@@ -566,6 +584,11 @@ public class PartyManager {
         startRoomListener(this.roomCode);
         startHostHeartbeat();
 
+        try {
+            PulseMqttClient.getInstance().subscribe("pulse/room/" + this.roomCode.toLowerCase());
+            PulseMqttClient.getInstance().subscribe("pulse/room/" + sanitizeTopic(this.roomName));
+        } catch (Throwable ignored) {}
+
         if (isServerNetworkingActive()) {
             JsonObject obj = new JsonObject();
             obj.addProperty("action", "create_room");
@@ -621,6 +644,10 @@ public class PartyManager {
         // 2. Start P2P listeners and heartbeats
         startRoomListener(topicSuffix);
         startMemberHeartbeat();
+
+        try {
+            PulseMqttClient.getInstance().subscribe("pulse/room/" + topicSuffix.toLowerCase());
+        } catch (Throwable ignored) {}
 
         // 3. Send join handshake to the room
         JsonObject joinPkt = new JsonObject();
@@ -694,6 +721,13 @@ public class PartyManager {
             leaveMsg.addProperty("sender", getPlayerName());
             leaveMsg.addProperty("code", curCode);
             sendNtfyMessage("pulse_room_" + curCode.toLowerCase(), leaveMsg);
+
+            try {
+                PulseMqttClient.getInstance().unsubscribe("pulse/room/" + curCode.toLowerCase());
+                if (curName != null) {
+                    PulseMqttClient.getInstance().unsubscribe("pulse/room/" + sanitizeTopic(curName));
+                }
+            } catch (Throwable ignored) {}
         }
 
         if (isServerNetworkingActive() && curName != null) {
@@ -1665,6 +1699,12 @@ public class PartyManager {
     }
 
     private void sendNtfyMessage(String topic, JsonObject obj) {
+        // Broadcast over persistent real-time MQTT broker (<25ms latency, no rate limits)
+        try {
+            String mqttTopic = topic.replace("pulse_room_", "pulse/room/").replace("pulse_rooms_global", "pulse/rooms/global");
+            PulseMqttClient.getInstance().publish(mqttTopic, obj.toString());
+        } catch (Throwable ignored) {}
+
         partyExecutor.submit(() -> {
             try {
                 URL url = new URI("https://ntfy.sh/" + topic).toURL();
