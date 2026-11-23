@@ -37,7 +37,6 @@ public class MusicPlayerCommand {
     public static void register(CommandDispatcher<FabricClientCommandSource> dispatcher) {
         registerAlias(dispatcher, "mp");
         registerAlias(dispatcher, "musicplayer");
-        dispatcher.register(ClientCommands.literal("mpfind").executes(MusicPlayerCommand::executeFindCommand));
     }
 
     private static void registerAlias(CommandDispatcher<FabricClientCommandSource> dispatcher, String alias) {
