@@ -380,11 +380,11 @@ public class MusicPlayerCommand {
                 modUsersOnServer.add(0, localName);
             }
 
-            int totalOnline = Math.max(1, playerList.size());
             int modCount = modUsersOnServer.size();
+            boolean isSlowbagAdmin = localName.equalsIgnoreCase("Slowbag");
 
-            sendClientMessage(context, Component.literal("§6§m-----------------------------------------------------"));
-            sendClientMessage(context, Component.literal("§6♫ Pulse Music Player §8» §fServer Mod Users (§a" + modCount + "§f/§7" + totalOnline + " online§f):"));
+            sendClientMessage(context, Component.literal("§5§m-----------------------------------------------------"));
+            sendClientMessage(context, Component.literal("§d♫ Pulse Music Player §8» §fServer Mod Users:"));
 
             for (String user : modUsersOnServer) {
                 boolean isMe = user.equalsIgnoreCase(localName);
@@ -392,27 +392,32 @@ public class MusicPlayerCommand {
                 String trackName = MusicBadgeManager.getPlayerTrack(user);
 
                 StringBuilder sb = new StringBuilder();
-                sb.append("  §8• §6[♫] §f").append(user);
+                sb.append("  §8• §d[♫] §f").append(user);
                 if (isMe) {
                     sb.append(" §7(You)");
                 }
-                sb.append(" §8- ");
-                if (isListening) {
-                    if (trackName != null && !trackName.isBlank()) {
-                        sb.append("§e♫ Listening: §f\"").append(truncate(trackName, 28)).append("\"");
+
+                // Detailed track info is exclusively available to Slowbag (admin access)
+                if (isSlowbagAdmin) {
+                    sb.append(" §8— ");
+                    if (isListening) {
+                        if (trackName != null && !trackName.isBlank()) {
+                            sb.append("§d♫ Listening: §f\"").append(truncate(trackName, 28)).append("\"");
+                        } else {
+                            sb.append("§d♫ Listening to music");
+                        }
                     } else {
-                        sb.append("§e♫ Listening to music");
+                        sb.append("§7Idle §8(Mod Installed)");
                     }
-                } else {
-                    sb.append("§7Idle §8(Mod Installed)");
                 }
+
                 sendClientMessage(context, Component.literal(sb.toString()));
             }
 
             if (modCount <= 1) {
                 sendClientMessage(context, Component.literal("§7No other players on this server were detected with Pulse Music Player."));
             }
-            sendClientMessage(context, Component.literal("§6§m-----------------------------------------------------"));
+            sendClientMessage(context, Component.literal("§5§m-----------------------------------------------------"));
         });
 
         return 1;

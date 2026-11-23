@@ -16,11 +16,7 @@ import org.lwjgl.glfw.GLFW;
 
 public class MusicPlayerClientMod implements ClientModInitializer {
 
-    private static boolean wasNextPressed = false;
-    private static boolean wasPrevPressed = false;
-    private static boolean wasPPressed = false;
-    private static boolean wasVolUpPressed = false;
-    private static boolean wasVolDownPressed = false;
+    private static boolean wasHotkeyDown = false;
 
     @Override
     public void onInitializeClient() {
@@ -73,14 +69,10 @@ public class MusicPlayerClientMod implements ClientModInitializer {
             }, "MusicPlayer-ShutdownHook"));
         } catch (Throwable ignored) {}
 
-        // 6. Register In-Game Media Hotkeys (Instant responsiveness, Zero FPS overhead)
+        // 6. Register Configurable Hotkey for Opening GUI (default: 'J', modifiers supported)
         ClientTickEvents.END_CLIENT_TICK.register(client -> {
             if (client == null || client.player == null || client.gui == null) {
-                wasNextPressed = false;
-                wasPrevPressed = false;
-                wasPPressed = false;
-                wasVolUpPressed = false;
-                wasVolDownPressed = false;
+                wasHotkeyDown = false;
                 return;
             }
 
@@ -92,49 +84,29 @@ public class MusicPlayerClientMod implements ClientModInitializer {
                     }
                 }
 
-                // If GUI is completely closed, allow quick in-game media controls
-                if (client.gui.screen() == null) {
-                    // ]: Next Track
-                    boolean isNextDown = InputConstants.isKeyDown(client.getWindow(), GLFW.GLFW_KEY_RIGHT_BRACKET);
-                    if (isNextDown && !wasNextPressed) {
-                        AudioManager.getInstance().next();
-                    }
-                    wasNextPressed = isNextDown;
+                // If user pressed configured hotkey combo
+                com.slowbag.pulse.client.input.KeybindManager km = com.slowbag.pulse.client.input.KeybindManager.getInstance();
+                if (km.isConfigured() && client.getWindow() != null) {
+                    long win = client.getWindow().handle();
+                    boolean isKeyDown = GLFW.glfwGetKey(win, km.getKeyCode()) == GLFW.GLFW_PRESS;
+                    boolean ctrlDown = (GLFW.glfwGetKey(win, GLFW.GLFW_KEY_LEFT_CONTROL) == GLFW.GLFW_PRESS || GLFW.glfwGetKey(win, GLFW.GLFW_KEY_RIGHT_CONTROL) == GLFW.GLFW_PRESS);
+                    boolean altDown = (GLFW.glfwGetKey(win, GLFW.GLFW_KEY_LEFT_ALT) == GLFW.GLFW_PRESS || GLFW.glfwGetKey(win, GLFW.GLFW_KEY_RIGHT_ALT) == GLFW.GLFW_PRESS);
+                    boolean shiftDown = (GLFW.glfwGetKey(win, GLFW.GLFW_KEY_LEFT_SHIFT) == GLFW.GLFW_PRESS || GLFW.glfwGetKey(win, GLFW.GLFW_KEY_RIGHT_SHIFT) == GLFW.GLFW_PRESS);
 
-                    // [: Previous Track
-                    boolean isPrevDown = InputConstants.isKeyDown(client.getWindow(), GLFW.GLFW_KEY_LEFT_BRACKET);
-                    if (isPrevDown && !wasPrevPressed) {
-                        AudioManager.getInstance().previous();
+                    boolean match = isKeyDown && (ctrlDown == km.isCtrl()) && (altDown == km.isAlt()) && (shiftDown == km.isShift());
+                    if (match && !wasHotkeyDown) {
+                        if (client.gui.screen() == null) {
+                            client.gui.setScreen(new MusicPlayerScreen(null));
+                        } else if (client.gui.screen() instanceof MusicPlayerScreen) {
+                            // If screen is open and not listening to keybind recording, close screen
+                            if (!km.isListening()) {
+                                client.gui.setScreen(null);
+                            }
+                        }
                     }
-                    wasPrevPressed = isPrevDown;
-
-                    // P: Toggle Play / Pause
-                    boolean isPDown = InputConstants.isKeyDown(client.getWindow(), GLFW.GLFW_KEY_P);
-                    if (isPDown && !wasPPressed) {
-                        AudioManager.getInstance().togglePause();
-                    }
-                    wasPPressed = isPDown;
-
-                    // . (Period): Volume Up (+5%)
-                    boolean isVolUpDown = InputConstants.isKeyDown(client.getWindow(), GLFW.GLFW_KEY_PERIOD);
-                    if (isVolUpDown && !wasVolUpPressed) {
-                        AudioManager.getInstance().setVolume(AudioManager.getInstance().getVolume() + 0.05f);
-                    }
-                    wasVolUpPressed = isVolUpDown;
-
-                    // , (Comma): Volume Down (-5%)
-                    boolean isVolDownDown = InputConstants.isKeyDown(client.getWindow(), GLFW.GLFW_KEY_COMMA);
-                    if (isVolDownDown && !wasVolDownPressed) {
-                        AudioManager.getInstance().setVolume(AudioManager.getInstance().getVolume() - 0.05f);
-                    }
-                    wasVolDownPressed = isVolDownDown;
-
+                    wasHotkeyDown = match;
                 } else {
-                    wasNextPressed = false;
-                    wasPrevPressed = false;
-                    wasPPressed = false;
-                    wasVolUpPressed = false;
-                    wasVolDownPressed = false;
+                    wasHotkeyDown = false;
                 }
             } catch (Throwable ignored) {}
         });

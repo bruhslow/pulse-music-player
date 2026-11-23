@@ -15,6 +15,10 @@ public class AnimationUtil {
         return x < 0.5f ? 2.0f * x * x : 1.0f - (float) Math.pow(-2.0f * x + 2.0f, 2.0f) / 2.0f;
     }
 
+    public static float easeInOutCubic(float x) {
+        return x < 0.5f ? 4.0f * x * x * x : 1.0f - (float) Math.pow(-2.0f * x + 2.0f, 3.0f) / 2.0f;
+    }
+
     public static int colorLerp(int colorA, int colorB, float t) {
         t = Math.max(0.0f, Math.min(1.0f, t));
         int aA = (colorA >> 24) & 0xFF;

@@ -1419,7 +1419,7 @@ public class PartyManager {
 
             String joinCmd = "/mp";
 
-            Component inviteMsg = Component.literal("§6§l∿ PULSE §8| §f" + sender + " §7invited you to join room §6\"" + room + "\"§7!  ")
+            Component inviteMsg = Component.literal("§d§l∿ PULSE §8| §f" + sender + " §7invited you to join room §d\"" + room + "\"§7!  ")
                     .append(Component.literal("§a§l[▶ OPEN PULSE]")
                             .withStyle(style -> style
                                     .withColor(0x00FF88)
@@ -1568,7 +1568,7 @@ public class PartyManager {
                     // 2. Otherwise display interactive clickable prompt in chat
                     if (!isInRoom()) {
                         String joinCmd = "/mp";
-                        Component prompt = Component.literal("§6§l∿ PULSE §8| §f" + host + " §7started playing music on this server! ")
+                        Component prompt = Component.literal("§d§l∿ PULSE §8| §f" + host + " §7started playing music on this server! ")
                                 .append(Component.literal("§a§l[▶ CLICK TO LISTEN TOGETHER]")
                                         .withStyle(style -> style
                                                 .withColor(0x00FF88)

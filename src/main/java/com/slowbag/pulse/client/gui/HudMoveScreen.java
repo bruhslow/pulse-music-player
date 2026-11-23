@@ -52,8 +52,8 @@ public class HudMoveScreen extends Screen {
         int headerH = 34;
         int headerX = (this.width - headerW) / 2;
         int headerY = 10;
-        MusicPlayerScreen.drawSoftBox(graphics, headerX, headerY, headerW, headerH, 5, 0xF0181A1B, 0xFFD97746);
-        graphics.centeredText(this.font, Component.literal("§6§l✦ DRAG HUD ANYWHERE ON SCREEN ✦"), this.width / 2, headerY + 6, 0xFFFFFFFF);
+        MusicPlayerScreen.drawSoftBox(graphics, headerX, headerY, headerW, headerH, 5, 0xF0181A1B, 0xFFA855F7);
+        graphics.centeredText(this.font, Component.literal("§d§l✦ DRAG HUD ANYWHERE ON SCREEN ✦"), this.width / 2, headerY + 6, 0xFFFFFFFF);
         graphics.centeredText(this.font, Component.literal("§7Click and hold the music card to drag • Release to save position"), this.width / 2, headerY + 19, 0xFFA0988E);
 
         // Render HUD Card Preview
@@ -64,8 +64,8 @@ public class HudMoveScreen extends Screen {
         String artist = track != null ? track.getArtist() : "Lofi Girl Records";
 
         // HUD Capsule Body (Rounded pill with soft 5px curved corners)
-        int cardBg = isDragging ? 0xF02A241F : 0xEE141618;
-        int borderCol = isDragging ? 0xFFFFD700 : 0xFFD97746;
+        int cardBg = isDragging ? 0xF0221A2B : 0xEE14121E;
+        int borderCol = isDragging ? 0xFFC084FC : 0xFFA855F7;
 
         graphics.fill(previewX + 5, previewY, previewX + hudW - 5, previewY + 1, cardBg);
         graphics.fill(previewX + 3, previewY + 1, previewX + hudW - 3, previewY + 2, cardBg);
@@ -117,9 +117,9 @@ public class HudMoveScreen extends Screen {
             double normX = px / 10.0;
             double wave = Math.sin(normX * 4.2 + moveTime) * 0.7;
             int curY = cy + (int) Math.round(wave * 4.0);
-            graphics.fill(curX, curY - 1, curX + 1, curY, 0x60D97746);
+            graphics.fill(curX, curY - 1, curX + 1, curY, 0x60A855F7);
             graphics.fill(curX, curY, curX + 1, curY + 1, 0xFFFFF0D0);
-            graphics.fill(curX, curY + 1, curX + 1, curY + 2, 0x60D97746);
+            graphics.fill(curX, curY + 1, curX + 1, curY + 2, 0x60A855F7);
         }
         graphics.fill(cx - 1, cy - 1, cx + 2, cy + 2, 0xFFFFFFFF);
 
@@ -165,7 +165,7 @@ public class HudMoveScreen extends Screen {
         int compBtnW = 110;
         int compBtnX = 12 + (btnW + 6) * 4;
         boolean compHov = mouseX >= compBtnX && mouseX <= compBtnX + compBtnW && mouseY >= bottomY && mouseY <= bottomY + btnH;
-        MusicPlayerScreen.drawSoftBox(graphics, compBtnX, bottomY, compBtnW, btnH, 3, compactOn ? (compHov ? 0xFFE0783E : 0xFFD97746) : (compHov ? 0x60FFFFFF : 0x25FFFFFF), compHov ? 0xFFFFFFFF : 0x35FFFFFF);
+        MusicPlayerScreen.drawSoftBox(graphics, compBtnX, bottomY, compBtnW, btnH, 3, compactOn ? (compHov ? 0xFFC084FC : 0xFFA855F7) : (compHov ? 0x60FFFFFF : 0x25FFFFFF), compHov ? 0xFFFFFFFF : 0x35FFFFFF);
         graphics.centeredText(this.font, Component.literal(compactOn ? "§fAuto-Compact: §aON" : "§7Auto-Compact: §cOFF"), compBtnX + compBtnW / 2, bottomY + 6, 0xFFFFFFFF);
 
         // Save & Done Button (Green pill on far right)
@@ -176,12 +176,12 @@ public class HudMoveScreen extends Screen {
         graphics.centeredText(this.font, Component.literal("§f✔ Save & Done"), doneX + doneW / 2, bottomY + 6, 0xFFFFFFFF);
 
         // Coordinates display
-        graphics.text(this.font, Component.literal("§7Position: §6X=" + previewX + ", Y=" + previewY), previewX, previewY - 10, 0xFFFFFFFF, false);
+        graphics.text(this.font, Component.literal("§7Position: §dX=" + previewX + ", Y=" + previewY), previewX, previewY - 10, 0xFFFFFFFF, false);
     }
 
     private void drawSnapButton(GuiGraphicsExtractor graphics, int bx, int by, int bw, int bh, String label, int mx, int my, Runnable action) {
         boolean hov = mx >= bx && mx <= bx + bw && my >= by && my <= by + bh;
-        MusicPlayerScreen.drawSoftBox(graphics, bx, by, bw, bh, 3, hov ? 0x80D97746 : 0x25FFFFFF, hov ? 0xFFD97746 : 0x30FFFFFF);
+        MusicPlayerScreen.drawSoftBox(graphics, bx, by, bw, bh, 3, hov ? 0x80A855F7 : 0x25FFFFFF, hov ? 0xFFA855F7 : 0x30FFFFFF);
         graphics.centeredText(this.font, Component.literal("§f" + label), bx + bw / 2, by + 6, 0xFFFFFFFF);
     }
 

@@ -12,7 +12,7 @@ def minecraft_version = "26.2"
 def loader_version = "0.15.0"
 def fabric_api_version = "0.161.0+26.2"
 
-def mod_version = "1.7.0"
+def mod_version = "1.7.1"
 def mod_id = "musicplayer"
 
 group = "com.slowbag"
@@ -101,12 +101,7 @@ jar {
 
         patchJar(builtJar)
 
-        // Also create a copy named -mc26.jar for backward compatibility
-        def jar26 = new File(libsDir, "pulse-music-player-${mod_version}-mc26.jar")
-        Files.copy(builtJar.toPath(), jar26.toPath(), StandardCopyOption.REPLACE_EXISTING)
-
         println("[Pulse Build] Successfully built dedicated 26.x release:")
         println("  -> " + builtJar.name + " (Minecraft 26.x series: 26.1, 26.2, 26.3, 26.4+)")
-        println("  -> " + jar26.name)
     }
 }

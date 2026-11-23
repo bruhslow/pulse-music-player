@@ -13,20 +13,21 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.resources.Identifier;
 
 /**
- * Modern Sleek Dynamic HUD Overlay with Rotating Turntable Disc and Fluid Dancing Waveform Bars.
+ * Modern Sleek Top-Bar In-Game HUD matching the user's reference layout.
+ * Features:
+ * - Line 1: Centered track info (♪ Title • Artist  0:07 / 2:45)
+ * - Line 2: Slim floating capsule pill containing:
+ *     * Left: Glowing cyan/purple dot
+ *     * Center: Song progress stance bar
+ *     * Right: Reactive curly audio wave animated to the beat
  */
 public class HudOverlayRenderer {
 
     private static float animProgress = 0.0f;
-    private static float compactProgress = 0.0f;
     private static float smoothPeak = 0.0f;
-    private static float vinylAngle = 0.0f;
-    private static final float[] smoothBars = new float[6];
-
     private static AudioTrack lastTrack = null;
     private static boolean wasPlaying = false;
     private static long songStartTime = 0;
-    private static final long EXPAND_DURATION_MS = 6500;
 
     public static void register() {
         try {
@@ -35,7 +36,7 @@ public class HudOverlayRenderer {
                     Identifier.fromNamespaceAndPath(MusicPlayerMod.MOD_ID, "hud_overlay"),
                     HudOverlayRenderer::render
             );
-            MusicPlayerMod.LOGGER.info("[Music Player] Sleek Turntable Circle HUD overlay registered.");
+            MusicPlayerMod.LOGGER.info("[Music Player] Sleek Top-Bar HUD overlay registered.");
         } catch (Throwable t) {
             MusicPlayerMod.LOGGER.error("[Music Player] Failed to register HUD", t);
         }
@@ -59,7 +60,6 @@ public class HudOverlayRenderer {
         AudioTrack track = audio.getCurrentTrack();
         boolean isPlaying = audio.isPlaying();
 
-        // Detect new song start or resume from pause to trigger the expand slide-out
         if (track != null && !track.equals(lastTrack)) {
             lastTrack = track;
             songStartTime = System.currentTimeMillis();
@@ -71,185 +71,132 @@ public class HudOverlayRenderer {
 
         // Fade-in when playing, fade-out when stopped
         float targetAnim = (isPlaying && track != null) ? 1.0f : 0.0f;
-        animProgress = AnimationUtil.lerp(animProgress, targetAnim, 0.12f);
+        animProgress = AnimationUtil.lerp(animProgress, targetAnim, 0.14f);
         if (animProgress < 0.02f) return;
 
         float ease = AnimationUtil.easeOutCubic(animProgress);
         int screenW = client.getWindow().getGuiScaledWidth();
         int screenH = client.getWindow().getGuiScaledHeight();
 
-        // Determine if HUD should be in expanded mode or compact pill
-        long timeSinceStart = System.currentTimeMillis() - songStartTime;
-        boolean shouldCompact = config.isAutoCompact() && (timeSinceStart > EXPAND_DURATION_MS) && !audio.isPaused();
-        float targetCompact = shouldCompact ? 1.0f : 0.0f;
-        compactProgress = AnimationUtil.lerp(compactProgress, targetCompact, 0.08f);
+        int hudW = 210;
+        int hudH = 14;
 
-        int maxW = 220;
-        int minW = 124;
-        int hudW = (int) AnimationUtil.lerp(maxW, minW, compactProgress);
-        int hudH = 32; // Generous height for circular turntable and legible text
+        int posX = config.getHudX(screenW, hudW);
+        int posY = config.getHudY(screenH, hudH);
 
-        // Anchor calculation
-        int baseX = config.getHudX(screenW, maxW);
-        int baseY = config.getHudY(screenH, hudH);
-
-        int posX;
-        if (baseX > screenW / 2) {
-            int rightAnchor = baseX + maxW;
-            posX = rightAnchor - hudW;
-        } else {
-            posX = baseX;
-        }
-        int posY = baseY;
+        // Ensure default top position has room for top title text
+        if (posY < 14) posY = 15;
 
         int alpha = (int) (240 * ease);
-        int bg = (alpha << 24) | 0x141618;
+        int bg = (alpha << 24) | 0x12101A; // Dark obsidian violet
 
         float peak = audio.getPeakLevel();
         smoothPeak = AnimationUtil.lerp(smoothPeak, peak, 0.35f);
 
-        int borderR = (int) AnimationUtil.lerp(0xD9, 0xFF, smoothPeak);
-        int borderG = (int) AnimationUtil.lerp(0x77, 0xA8, smoothPeak);
-        int borderB = (int) AnimationUtil.lerp(0x46, 0x60, smoothPeak);
+        int borderR = (int) AnimationUtil.lerp(0xA8, 0xC0, smoothPeak);
+        int borderG = (int) AnimationUtil.lerp(0x55, 0x84, smoothPeak);
+        int borderB = (int) AnimationUtil.lerp(0xF7, 0xFC, smoothPeak);
         int borderColor = (alpha << 24) | (borderR << 16) | (borderG << 8) | borderB;
 
-        // 1. Sleek Curvy Pill Card Background & Amber Border
+        Font font = client.font;
+
+        // 1. Line 1: Centered Song Title, Artist & Time Above Pill
+        long elapsedSecs = audio.getElapsedSeconds();
+        long durationSecs = (track != null) ? track.getDurationSeconds() : 0;
+        String timeStr = (elapsedSecs / 60) + ":" + String.format("%02d", elapsedSecs % 60);
+        String totalStr = (durationSecs > 0) ? ((durationSecs / 60) + ":" + String.format("%02d", durationSecs % 60)) : "--:--";
+
+        String title = track != null ? track.getTitle() : "Pulse Music";
+        String artist = track != null ? track.getArtist() : "Unknown Artist";
+
+        String formattedHeader = "§d♪ §f" + truncateText(font, title, 100) + " §7• " + truncateText(font, artist, 80) + "  §d" + timeStr + " §8/ §7" + totalStr;
+        int textY = posY - 10;
+        graphics.centeredText(font, Component.literal(formattedHeader), posX + hudW / 2, textY, (alpha << 24) | 0xFFFFFF);
+
+        // 2. Line 2: Slim Floating Capsule Pill
         drawPillBackground(graphics, posX, posY, hudW, hudH, bg, borderColor);
 
-        // Glass top specular highlight
-        int highlightColor = ((int) (alpha * 0.30f) << 24) | 0xFFFFFF;
+        // Specular top highlight
+        int highlightColor = ((int) (alpha * 0.25f) << 24) | 0xFFFFFF;
         graphics.fill(posX + 4, posY + 1, posX + hudW - 4, posY + 2, highlightColor);
 
-        // Ensure album artwork is loading if not already initiated
-        if (AlbumArtManager.getInstance().getCurrentUrl() == null && track.getArtworkUrl() != null) {
-            AlbumArtManager.getInstance().loadArtworkAsync(track.getArtworkUrl());
+        // 3. Left: Glowing Cyan/Purple Dot
+        int dotX = posX + 8;
+        int dotY = posY + hudH / 2;
+        int dotGlowColor = ((int) (alpha * (0.35f + smoothPeak * 0.40f)) << 24) | 0x38BDF8;
+        drawCircle(graphics, dotX, dotY, 3, dotGlowColor);
+        drawCircle(graphics, dotX, dotY, 2, (alpha << 24) | 0xFF38BDF8);
+
+        // 4. Middle: Song Progress Stance Bar
+        int waveAreaW = 30;
+        int trackX = posX + 17;
+        int trackW = hudW - 17 - waveAreaW - 6;
+        int trackY = posY + (hudH - 3) / 2;
+        int trackH = 3;
+
+        // Groove Background
+        graphics.fill(trackX, trackY, trackX + trackW, trackY + trackH, (alpha << 24) | 0x30FFFFFF);
+
+        // Progress Fill
+        float progress = 0.0f;
+        if (durationSecs > 0) {
+            progress = Math.min(1.0f, (float) elapsedSecs / (float) durationSecs);
+        } else if (track != null && track.isLiveStream()) {
+            progress = 1.0f;
         }
 
-        // 2. Circle on the Left with Animated Audio Wave Line Inside
-        int cx = posX + 18;
-        int cy = posY + 16;
-        int circleRadius = 13;
-
-        // Bass pulse aura glow around the enlarged circle
-        int pulseRadius = circleRadius + (int) (smoothPeak * 2.0f);
-        int glowColor = ((int) (alpha * (0.22f + smoothPeak * 0.40f)) << 24) | (borderR << 16) | (borderG << 8) | borderB;
-        drawCircle(graphics, cx, cy, pulseRadius + 1, glowColor);
-
-        // Dark glass circle interior
-        int discColor = (alpha << 24) | 0x141518;
-        drawCircle(graphics, cx, cy, circleRadius, discColor);
-
-        // Subtle concentric groove accent inside circle
-        drawCircleRing(graphics, cx, cy, circleRadius - 3, ((int) (alpha * 0.20f) << 24) | 0x40FFFFFF);
-
-        // Circular ring border
-        drawCircleRing(graphics, cx, cy, circleRadius, borderColor);
-
-        // Moving animated audio line inside the circle
-        double timeMs = System.currentTimeMillis();
-        double wavePhase = timeMs * 0.007;
-        float amp = (isPlaying && !audio.isPaused()) ? (2.0f + smoothPeak * 5.0f) : 0.0f;
-        int waveLineColor = (alpha << 24) | 0xFFFFF0D0;
-        int waveGlowColor = ((int) (alpha * 0.45f) << 24) | (borderR << 16) | (borderG << 8) | borderB;
-
-        int prevX = cx - circleRadius + 2;
-        int prevY = cy;
-
-        for (int px = -circleRadius + 2; px <= circleRadius - 2; px++) {
-            int curX = cx + px;
-            float normX = (float) px / (float) (circleRadius - 2);
-            float window = (float) Math.cos(normX * (Math.PI / 2.0));
-            float maxH = (float) Math.sqrt(Math.max(0, (circleRadius - 1) * (circleRadius - 1) - px * px)) - 1.5f;
-
-            double wave = Math.sin(normX * 4.2 + wavePhase) * 0.65 + Math.sin(normX * 8.5 - wavePhase * 1.4) * 0.35;
-            int offset = (int) Math.round(wave * amp * window);
-            offset = Math.max(-(int) maxH, Math.min((int) maxH, offset));
-            int curY = cy + offset;
-
-            // Connect previous point to current point for a continuous, smooth wave line
-            int minY = Math.min(prevY, curY);
-            int maxY = Math.max(prevY, curY);
-            for (int yStep = minY; yStep <= maxY; yStep++) {
-                // Soft glow halo
-                graphics.fill(curX, yStep - 1, curX + 1, yStep, waveGlowColor);
-                graphics.fill(curX, yStep + 1, curX + 1, yStep + 2, waveGlowColor);
-                // Crisp bright core wave line
-                graphics.fill(curX, yStep, curX + 1, yStep + 1, waveLineColor);
-            }
-
-            prevX = curX;
-            prevY = curY;
+        int fillW = (int) (trackW * progress);
+        if (fillW > 0) {
+            graphics.fill(trackX, trackY, trackX + fillW, trackY + trackH, (alpha << 24) | 0xFFA855F7);
         }
 
-        // Center beacon dot on the moving wave
+        // Stance Thumb Knob
+        int knobX = Math.min(trackX + trackW - 2, trackX + fillW);
+        graphics.fill(knobX - 1, trackY - 1, knobX + 2, trackY + trackH + 1, (alpha << 24) | 0xFFFFFFFF);
+        graphics.fill(knobX, trackY, knobX + 1, trackY + trackH, (alpha << 24) | 0xFFC084FC);
+
+        // 5. Right: Reactive Curly Audio Wave moving with the beat
+        int waveStartX = posX + hudW - waveAreaW;
+        int waveEndX = posX + hudW - 8;
+        int waveCenterY = posY + hudH / 2;
+
         if (isPlaying && !audio.isPaused()) {
-            graphics.fill(cx - 1, cy - 1, cx + 2, cy + 2, (alpha << 24) | 0xFFFFFFFF);
-        } else if (audio.isPaused()) {
-            // Little pause pause glyph in center
-            graphics.fill(cx - 2, cy - 3, cx - 1, cy + 4, (alpha << 24) | 0xFFD97746);
-            graphics.fill(cx + 1, cy - 3, cx + 2, cy + 4, (alpha << 24) | 0xFFD97746);
-        }
+            double timeMs = System.currentTimeMillis();
+            double wavePhase = timeMs * 0.009;
+            float amp = 1.4f + smoothPeak * 3.6f;
 
-        // 3. Middle Text: Song Info with Smooth Marquee Scrolling (Right to Left)
-        Font font = client.font;
-        int textX = cx + circleRadius + 8;
-        int availTextW = (posX + hudW - 10) - textX;
+            int prevWX = waveStartX;
+            int prevWY = waveCenterY;
 
-        if (availTextW > 20) {
-            if (compactProgress < 0.6f) {
-                // Expanded mode: Line 1 Title (Smooth marquee scroll from right to left), Line 2 Artist & Time
-                String title = track.getTitle();
-                int titleWidth = font.width(title);
+            for (int wx = waveStartX; wx <= waveEndX; wx++) {
+                float normX = (float) (wx - waveStartX) / (float) (waveEndX - waveStartX);
+                // Curly harmonic sine wave
+                double wave = Math.sin(normX * Math.PI * 3.5 + wavePhase) * 0.7 + Math.sin(normX * Math.PI * 7.0 - wavePhase * 1.5) * 0.3;
+                int offset = (int) Math.round(wave * amp);
+                offset = Math.max(-4, Math.min(4, offset));
+                int wy = waveCenterY + offset;
 
-                if (titleWidth > availTextW) {
-                    graphics.enableScissor(textX, posY + 3, textX + availTextW, posY + 16);
-                    int gap = 36;
-                    int cycleW = titleWidth + gap;
-                    float scrollOffset = (float) ((timeMs * 0.026) % cycleW);
-                    int drawX = (int) (textX - scrollOffset);
-                    while (drawX < textX + availTextW) {
-                        if (drawX + titleWidth > textX) {
-                            graphics.text(font, Component.literal("§f§l" + title), drawX, posY + 5, (alpha << 24) | 0xFFFFFF, false);
-                        }
-                        drawX += cycleW;
-                    }
-                    graphics.disableScissor();
-                } else {
-                    graphics.text(font, Component.literal("§f§l" + title), textX, posY + 5, (alpha << 24) | 0xFFFFFF, false);
+                int minY = Math.min(prevWY, wy);
+                int maxY = Math.max(prevWY, wy);
+                for (int sy = minY; sy <= maxY; sy++) {
+                    graphics.fill(wx, sy, wx + 1, sy + 1, (alpha << 24) | 0xFFC084FC);
                 }
-
-                String artistTime = track.getArtist();
-                long elapsedSecs = audio.getElapsedSeconds();
-                String timeStr = (elapsedSecs / 60) + ":" + String.format("%02d", elapsedSecs % 60);
-                String safeArtist = truncateText(font, artistTime + " §8• §6" + timeStr, availTextW);
-                graphics.text(font, Component.literal("§7" + safeArtist), textX, posY + 17, (alpha << 24) | 0xA0988E, false);
-            } else {
-                // Compact pill mode: 1 centered clean line (Smooth marquee scroll if long)
-                String compactLabel = track.getTitle() + " • " + track.getArtist();
-                int labelW = font.width(compactLabel);
-
-                if (labelW > availTextW) {
-                    graphics.enableScissor(textX, posY + 8, textX + availTextW, posY + 24);
-                    int gap = 36;
-                    int cycleW = labelW + gap;
-                    float scrollOffset = (float) ((timeMs * 0.026) % cycleW);
-                    int drawX = (int) (textX - scrollOffset);
-                    while (drawX < textX + availTextW) {
-                        if (drawX + labelW > textX) {
-                            graphics.text(font, Component.literal("§f" + compactLabel), drawX, posY + 12, (alpha << 24) | 0xFFFFFF, false);
-                        }
-                        drawX += cycleW;
-                    }
-                    graphics.disableScissor();
-                } else {
-                    graphics.text(font, Component.literal("§f" + compactLabel), textX, posY + 12, (alpha << 24) | 0xFFFFFF, false);
-                }
+                prevWX = wx;
+                prevWY = wy;
             }
+        } else if (audio.isPaused()) {
+            // Little pause bars on the right
+            int pauseX = waveStartX + (waveAreaW - 8) / 2;
+            graphics.fill(pauseX, posY + 4, pauseX + 2, posY + hudH - 4, (alpha << 24) | 0xFFA855F7);
+            graphics.fill(pauseX + 4, posY + 4, pauseX + 6, posY + hudH - 4, (alpha << 24) | 0xFFA855F7);
+        } else {
+            // Subtle flat baseline
+            graphics.fill(waveStartX + 2, waveCenterY, waveEndX - 2, waveCenterY + 1, (alpha << 24) | 0x60A855F7);
         }
     }
 
     private static void drawPillBackground(GuiGraphicsExtractor graphics, int x, int y, int w, int h, int bg, int outline) {
-        // Soft rounded capsule fill (5px smooth corner fillets)
+        // Soft rounded capsule fill
         graphics.fill(x + 5, y, x + w - 5, y + 1, bg);
         graphics.fill(x + 3, y + 1, x + w - 3, y + 2, bg);
         graphics.fill(x + 2, y + 2, x + w - 2, y + 3, bg);
@@ -260,7 +207,7 @@ public class HudOverlayRenderer {
         graphics.fill(x + 3, y + h - 2, x + w - 3, y + h - 1, bg);
         graphics.fill(x + 5, y + h - 1, x + w - 5, y + h, bg);
 
-        // Smooth continuous curved outline (no sharp edges)
+        // Smooth continuous curved outline
         graphics.fill(x + 5, y, x + w - 5, y + 1, outline);
         graphics.fill(x + 5, y + h - 1, x + w - 5, y + h, outline);
         graphics.fill(x, y + 5, x + 1, y + h - 5, outline);

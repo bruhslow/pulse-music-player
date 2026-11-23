@@ -134,11 +134,11 @@ public class MusicBadgeManager {
         String note;
         switch (step) {
             case 0:
-                color = "§6"; // Warm Amber
+                color = "§d"; // Radiant Violet
                 note = "♫";
                 break;
             case 1:
-                color = "§e"; // Bright Gold
+                color = "§5"; // Deep Purple
                 note = "♪";
                 break;
             case 2:
@@ -146,11 +146,11 @@ public class MusicBadgeManager {
                 note = "♫";
                 break;
             case 3:
-                color = "§6"; // Pulse Gold
+                color = "§d"; // Pulse Violet
                 note = "♪";
                 break;
             default:
-                color = "§6";
+                color = "§d";
                 note = "♫";
                 break;
         }
@@ -167,7 +167,7 @@ public class MusicBadgeManager {
         if (isPlayerListening(playerName)) {
             return Component.literal(getBeatingMusicPrefix()).append(original);
         } else if (isModUser(playerName)) {
-            return Component.literal("§8[§6♫§8] ").append(original);
+            return Component.literal("§8[§d♫§8] ").append(original);
         }
 
         return original;

@@ -16,7 +16,7 @@ public class HudConfigManager {
     private static final HudConfigManager INSTANCE = new HudConfigManager();
 
     private boolean hudEnabled = true;
-    private String position = "RIGHT"; // "RIGHT", "LEFT", "CUSTOM"
+    private String position = "TOP"; // "TOP", "RIGHT", "LEFT", "CUSTOM"
     private int customX = -1;
     private int customY = -1;
     private boolean autoCompact = true; // Auto-compact to beating circle after song intro
@@ -112,8 +112,11 @@ public class HudConfigManager {
         if ("LEFT".equalsIgnoreCase(position)) {
             return 12;
         }
-        // Default RIGHT
-        return screenW - currentW - 12;
+        if ("RIGHT".equalsIgnoreCase(position)) {
+            return screenW - currentW - 12;
+        }
+        // Default: TOP (Centered)
+        return (screenW - currentW) / 2;
     }
 
     public synchronized int getHudY(int screenH, int currentH) {
@@ -121,15 +124,19 @@ public class HudConfigManager {
         if ("CUSTOM".equalsIgnoreCase(position) && customY >= 0) {
             return Math.max(4, Math.min(screenH - currentH - 4, customY));
         }
-        return 12;
+        return 16;
     }
 
     /**
-     * Cycles through: Right -> Left -> Custom -> Disabled -> Right
+     * Cycles through: Top -> Right -> Left -> Custom -> Disabled -> Top
      */
     public synchronized String cycleSetting() {
         if (!hudEnabled) {
             hudEnabled = true;
+            position = "TOP";
+            save();
+            return "Top Bar";
+        } else if ("TOP".equalsIgnoreCase(position)) {
             position = "RIGHT";
             save();
             return "Right";
@@ -153,9 +160,9 @@ public class HudConfigManager {
             return "Disabled";
         } else {
             hudEnabled = true;
-            position = "RIGHT";
+            position = "TOP";
             save();
-            return "Right";
+            return "Top Bar";
         }
     }
 
