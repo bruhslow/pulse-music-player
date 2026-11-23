@@ -26,10 +26,27 @@ public class KeybindManager {
     private boolean shift = false;
     private boolean isListening = false;
 
-    private static final File CONFIG_FILE = new File(Minecraft.getInstance().gameDirectory, "config/pulse_keybind.json");
+    private static File getConfigFile() {
+        File gameDir = null;
+        try {
+            if (Minecraft.getInstance() != null) {
+                gameDir = Minecraft.getInstance().gameDirectory;
+            }
+        } catch (Throwable ignored) {}
+        if (gameDir == null) {
+            gameDir = new File(".");
+        }
+        File configDir = new File(gameDir, "config");
+        if (!configDir.exists()) {
+            configDir.mkdirs();
+        }
+        return new File(configDir, "pulse_keybind.json");
+    }
 
     private KeybindManager() {
-        loadConfig();
+        try {
+            loadConfig();
+        } catch (Throwable ignored) {}
     }
 
     public int getKeyCode() {
@@ -137,8 +154,9 @@ public class KeybindManager {
     }
 
     private void loadConfig() {
-        if (!CONFIG_FILE.exists()) return;
-        try (FileReader reader = new FileReader(CONFIG_FILE)) {
+        File file = getConfigFile();
+        if (!file.exists()) return;
+        try (FileReader reader = new FileReader(file)) {
             JsonObject json = JsonParser.parseReader(reader).getAsJsonObject();
             if (json.has("keyCode")) this.keyCode = json.get("keyCode").getAsInt();
             if (json.has("ctrl")) this.ctrl = json.get("ctrl").getAsBoolean();
@@ -149,15 +167,16 @@ public class KeybindManager {
 
     private void saveConfig() {
         try {
-            if (!CONFIG_FILE.getParentFile().exists()) {
-                CONFIG_FILE.getParentFile().mkdirs();
+            File file = getConfigFile();
+            if (file.getParentFile() != null && !file.getParentFile().exists()) {
+                file.getParentFile().mkdirs();
             }
             JsonObject json = new JsonObject();
             json.addProperty("keyCode", keyCode);
             json.addProperty("ctrl", ctrl);
             json.addProperty("alt", alt);
             json.addProperty("shift", shift);
-            try (FileWriter writer = new FileWriter(CONFIG_FILE)) {
+            try (FileWriter writer = new FileWriter(file)) {
                 writer.write(json.toString());
             }
         } catch (Throwable ignored) {}

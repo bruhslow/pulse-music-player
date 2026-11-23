@@ -85,27 +85,31 @@ public class MusicPlayerClientMod implements ClientModInitializer {
                 }
 
                 // If user pressed configured hotkey combo
-                com.slowbag.pulse.client.input.KeybindManager km = com.slowbag.pulse.client.input.KeybindManager.getInstance();
-                if (km.isConfigured() && client.getWindow() != null) {
-                    long win = client.getWindow().handle();
-                    boolean isKeyDown = GLFW.glfwGetKey(win, km.getKeyCode()) == GLFW.GLFW_PRESS;
-                    boolean ctrlDown = (GLFW.glfwGetKey(win, GLFW.GLFW_KEY_LEFT_CONTROL) == GLFW.GLFW_PRESS || GLFW.glfwGetKey(win, GLFW.GLFW_KEY_RIGHT_CONTROL) == GLFW.GLFW_PRESS);
-                    boolean altDown = (GLFW.glfwGetKey(win, GLFW.GLFW_KEY_LEFT_ALT) == GLFW.GLFW_PRESS || GLFW.glfwGetKey(win, GLFW.GLFW_KEY_RIGHT_ALT) == GLFW.GLFW_PRESS);
-                    boolean shiftDown = (GLFW.glfwGetKey(win, GLFW.GLFW_KEY_LEFT_SHIFT) == GLFW.GLFW_PRESS || GLFW.glfwGetKey(win, GLFW.GLFW_KEY_RIGHT_SHIFT) == GLFW.GLFW_PRESS);
+                try {
+                    com.slowbag.pulse.client.input.KeybindManager km = com.slowbag.pulse.client.input.KeybindManager.getInstance();
+                    if (km != null && km.isConfigured() && client.getWindow() != null) {
+                        long win = client.getWindow().handle();
+                        boolean isKeyDown = GLFW.glfwGetKey(win, km.getKeyCode()) == GLFW.GLFW_PRESS;
+                        boolean ctrlDown = (GLFW.glfwGetKey(win, GLFW.GLFW_KEY_LEFT_CONTROL) == GLFW.GLFW_PRESS || GLFW.glfwGetKey(win, GLFW.GLFW_KEY_RIGHT_CONTROL) == GLFW.GLFW_PRESS);
+                        boolean altDown = (GLFW.glfwGetKey(win, GLFW.GLFW_KEY_LEFT_ALT) == GLFW.GLFW_PRESS || GLFW.glfwGetKey(win, GLFW.GLFW_KEY_RIGHT_ALT) == GLFW.GLFW_PRESS);
+                        boolean shiftDown = (GLFW.glfwGetKey(win, GLFW.GLFW_KEY_LEFT_SHIFT) == GLFW.GLFW_PRESS || GLFW.glfwGetKey(win, GLFW.GLFW_KEY_RIGHT_SHIFT) == GLFW.GLFW_PRESS);
 
-                    boolean match = isKeyDown && (ctrlDown == km.isCtrl()) && (altDown == km.isAlt()) && (shiftDown == km.isShift());
-                    if (match && !wasHotkeyDown) {
-                        if (client.gui.screen() == null) {
-                            client.gui.setScreen(new MusicPlayerScreen(null));
-                        } else if (client.gui.screen() instanceof MusicPlayerScreen) {
-                            // If screen is open and not listening to keybind recording, close screen
-                            if (!km.isListening()) {
-                                client.gui.setScreen(null);
+                        boolean match = isKeyDown && (ctrlDown == km.isCtrl()) && (altDown == km.isAlt()) && (shiftDown == km.isShift());
+                        if (match && !wasHotkeyDown) {
+                            if (client.gui.screen() == null) {
+                                client.gui.setScreen(new MusicPlayerScreen(null));
+                            } else if (client.gui.screen() instanceof MusicPlayerScreen) {
+                                // If screen is open and not listening to keybind recording, close screen
+                                if (!km.isListening()) {
+                                    client.gui.setScreen(null);
+                                }
                             }
                         }
+                        wasHotkeyDown = match;
+                    } else {
+                        wasHotkeyDown = false;
                     }
-                    wasHotkeyDown = match;
-                } else {
+                } catch (Throwable ignored) {
                     wasHotkeyDown = false;
                 }
             } catch (Throwable ignored) {}

@@ -886,8 +886,8 @@ public class MusicPlayerScreen extends Screen {
                         graphics.text(this.font, Component.literal(truncateToWidth("§8Click to record key or combo (e.g. J, Ctrl+Q)", maxDescW)), x + 14, itemY + 15, 0xFF888888, false);
 
                         boolean bHov = mouseX >= btnX && mouseX <= btnX + btnW && mouseY >= btnY && mouseY <= btnY + btnH;
-                        boolean listening = km.isListening();
-                        String keyText = listening ? "§e[ Press key... ]" : ("§f[ " + km.getKeybindDisplay() + " ]");
+                        boolean listening = (km != null && km.isListening());
+                        String keyText = listening ? "§e[ Press key... ]" : ("§f[ " + (km != null ? km.getKeybindDisplay() : "J") + " ]");
                         int bgCol = listening ? 0x90F59E0B : (bHov ? 0x80A855F7 : 0x30FFFFFF);
                         int outlineCol = listening ? 0xFFFBBF24 : (bHov ? 0xFFA855F7 : 0x40FFFFFF);
                         drawSoftBox(graphics, btnX, btnY, btnW, btnH, 3, bgCol, outlineCol);
