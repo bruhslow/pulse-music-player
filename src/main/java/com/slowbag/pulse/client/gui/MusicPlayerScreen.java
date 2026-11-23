@@ -584,13 +584,13 @@ public class MusicPlayerScreen extends Screen {
         int row2Y = y + 48;
         boolean loop = audioManager.isLoopCurrent();
         isFav = (track != null) && com.slowbag.pulse.client.audio.FavoritesManager.getInstance().isFavorite(track);
-        drawGlassButton(graphics, ctrlX + 8, row2Y, 48, 16, loop ? "§d🔁 Loop" : "§7🔁 Loop", loop ? 0xFFA855F7 : 0x25FFFFFF, mouseX, mouseY);
-        drawGlassButton(graphics, ctrlX + 60, row2Y, 48, 16, isFav ? "§d★ Star" : "§7☆ Star", isFav ? 0xFFA855F7 : 0x25FFFFFF, mouseX, mouseY);
+        drawGlassButton(graphics, ctrlX + 8, row2Y, 52, 16, loop ? "§d🔁 Loop" : "§7🔁 Loop", loop ? 0xFFA855F7 : 0x25FFFFFF, mouseX, mouseY);
+        drawGlassButton(graphics, ctrlX + 64, row2Y, 52, 16, isFav ? "§d★ Star" : "§7☆ Star", isFav ? 0xFFA855F7 : 0x25FFFFFF, mouseX, mouseY);
 
-        // Row 3: Utility Controls: Refresh & + Queue (Curvy rounded buttons, text fits cleanly)
+        // Row 3: Utility Controls: Reload & + Queue (Curvy rounded buttons, text fits cleanly)
         int row3Y = y + 68;
-        drawGlassButton(graphics, ctrlX + 8, row3Y, 48, 16, "§7🔄 Refresh", 0x20FFFFFF, mouseX, mouseY);
-        drawGlassButton(graphics, ctrlX + 60, row3Y, 48, 16, "§7➕ Queue", 0x20FFFFFF, mouseX, mouseY);
+        drawGlassButton(graphics, ctrlX + 8, row3Y, 52, 16, "§7🔄 Reload", 0x20FFFFFF, mouseX, mouseY);
+        drawGlassButton(graphics, ctrlX + 64, row3Y, 52, 16, "§7+ Queue", 0x20FFFFFF, mouseX, mouseY);
     }
 
     // Browser Card (Bottom-Left)
@@ -875,35 +875,25 @@ public class MusicPlayerScreen extends Screen {
                     drawCleanCenteredText(graphics, "▶", nextBtnX + arrowBtnW / 2, btnY + 5, 0xFFFFFFFF);
 
                 } else if (i == 1) {
-                    // 2. Mono Audio Downmix (Accessibility)
-                    boolean mono = sm.isMonoAudio();
-                    int btnW = 86;
+                    // 2. Configurable Hotkey to Open Music Player GUI (Prominently placed on Row 2)
+                    com.slowbag.pulse.client.input.KeybindManager km = com.slowbag.pulse.client.input.KeybindManager.getInstance();
+                    int btnW = 96;
                     int btnX = x + w - btnW - 14;
 
                     int maxDescW = btnX - (x + 14) - 6;
-                    graphics.text(this.font, Component.literal(truncateToWidth("§f🎧 Mono Audio Downmix:", maxDescW)), x + 14, itemY + 3, 0xFFFFFFFF, false);
-                    graphics.text(this.font, Component.literal(truncateToWidth("§8Combines left & right channels for hearing", maxDescW)), x + 14, itemY + 15, 0xFF888888, false);
+                    graphics.text(this.font, Component.literal(truncateToWidth("§f⌨ Open Player Hotkey:", maxDescW)), x + 14, itemY + 3, 0xFFFFFFFF, false);
+                    graphics.text(this.font, Component.literal(truncateToWidth("§8Click to record key or combo (e.g. J, Ctrl+Q)", maxDescW)), x + 14, itemY + 15, 0xFF888888, false);
 
                     boolean bHov = mouseX >= btnX && mouseX <= btnX + btnW && mouseY >= btnY && mouseY <= btnY + btnH;
-                    drawSoftBox(graphics, btnX, btnY, btnW, btnH, 3, mono ? (bHov ? 0xFFC084FC : 0xFFA855F7) : (bHov ? 0x50FFFFFF : 0x25FFFFFF), bHov ? 0xFFE9D5FF : 0x35FFFFFF);
-                    drawCleanCenteredText(graphics, mono ? "✔ Mono (On)" : "Stereo (Off)", btnX + btnW / 2, btnY + 5, 0xFFFFFFFF);
+                    boolean listening = km.isListening();
+                    String keyText = listening ? "§e[ Press key... ]" : ("§f[ " + km.getKeybindDisplay() + " ]");
+                    int bgCol = listening ? 0x90F59E0B : (bHov ? 0x80A855F7 : 0x30FFFFFF);
+                    int outlineCol = listening ? 0xFFFBBF24 : (bHov ? 0xFFA855F7 : 0x40FFFFFF);
+                    drawSoftBox(graphics, btnX, btnY, btnW, btnH, 3, bgCol, outlineCol);
+                    drawCleanCenteredText(graphics, keyText, btnX + btnW / 2, btnY + 5, 0xFFFFFFFF);
 
                 } else if (i == 2) {
-                    // 3. Reduced Motion / Visualizer (Accessibility)
-                    boolean reduced = sm.isReducedMotion();
-                    int btnW = 86;
-                    int btnX = x + w - btnW - 14;
-
-                    int maxDescW = btnX - (x + 14) - 6;
-                    graphics.text(this.font, Component.literal(truncateToWidth("§f🌊 Waveform Motion:", maxDescW)), x + 14, itemY + 3, 0xFFFFFFFF, false);
-                    graphics.text(this.font, Component.literal(truncateToWidth("§8Pauses or softens dancing animations", maxDescW)), x + 14, itemY + 15, 0xFF888888, false);
-
-                    boolean bHov = mouseX >= btnX && mouseX <= btnX + btnW && mouseY >= btnY && mouseY <= btnY + btnH;
-                    drawSoftBox(graphics, btnX, btnY, btnW, btnH, 3, reduced ? (bHov ? 0xFFE9D5FF : 0xFFA855F7) : (bHov ? 0xFFC084FC : 0xFFA855F7), bHov ? 0xFFFFFFFF : 0x35FFFFFF);
-                    drawCleanCenteredText(graphics, reduced ? "Reduced" : "Dynamic", btnX + btnW / 2, btnY + 5, reduced ? 0xFF000000 : 0xFFFFFFFF);
-
-                } else if (i == 3) {
-                    // 4. In-Game HUD
+                    // 3. In-Game HUD Overlay
                     HudConfigManager hudCfg = HudConfigManager.getInstance();
                     int moveBtnW = 44;
                     int moveBtnX = x + w - moveBtnW - 14;
@@ -923,8 +913,8 @@ public class MusicPlayerScreen extends Screen {
                     drawSoftBox(graphics, moveBtnX, btnY, moveBtnW, btnH, 3, moveHov ? 0x8038BDF8 : 0x4038BDF8, moveHov ? 0xFFFFFFFF : 0x5038BDF8);
                     drawCleanCenteredText(graphics, "✥ Move", moveBtnX + moveBtnW / 2, btnY + 5, 0xFFFFFFFF);
 
-                } else if (i == 4) {
-                    // 5. Nametag Music Badge
+                } else if (i == 3) {
+                    // 4. Nametag Music Badge
                     boolean badge = com.slowbag.pulse.client.audio.MusicBadgeManager.isBadgeEnabled();
                     int btnW = 86;
                     int btnX = x + w - btnW - 14;
@@ -937,8 +927,36 @@ public class MusicPlayerScreen extends Screen {
                     drawSoftBox(graphics, btnX, btnY, btnW, btnH, 3, badge ? (bHov ? 0xFFC084FC : 0xFFA855F7) : (bHov ? 0x50FFFFFF : 0x25FFFFFF), bHov ? 0xFFE9D5FF : 0x35FFFFFF);
                     drawCleanCenteredText(graphics, badge ? "♫ Active" : "✕ Hidden", btnX + btnW / 2, btnY + 5, 0xFFFFFFFF);
 
+                } else if (i == 4) {
+                    // 5. Mono Audio Downmix (Accessibility)
+                    boolean mono = sm.isMonoAudio();
+                    int btnW = 86;
+                    int btnX = x + w - btnW - 14;
+
+                    int maxDescW = btnX - (x + 14) - 6;
+                    graphics.text(this.font, Component.literal(truncateToWidth("§f🎧 Mono Audio Downmix:", maxDescW)), x + 14, itemY + 3, 0xFFFFFFFF, false);
+                    graphics.text(this.font, Component.literal(truncateToWidth("§8Combines left & right channels for hearing", maxDescW)), x + 14, itemY + 15, 0xFF888888, false);
+
+                    boolean bHov = mouseX >= btnX && mouseX <= btnX + btnW && mouseY >= btnY && mouseY <= btnY + btnH;
+                    drawSoftBox(graphics, btnX, btnY, btnW, btnH, 3, mono ? (bHov ? 0xFFC084FC : 0xFFA855F7) : (bHov ? 0x50FFFFFF : 0x25FFFFFF), bHov ? 0xFFE9D5FF : 0x35FFFFFF);
+                    drawCleanCenteredText(graphics, mono ? "✔ Mono (On)" : "Stereo (Off)", btnX + btnW / 2, btnY + 5, 0xFFFFFFFF);
+
                 } else if (i == 5) {
-                    // 6. Background Playback
+                    // 6. Reduced Motion / Visualizer (Accessibility)
+                    boolean reduced = sm.isReducedMotion();
+                    int btnW = 86;
+                    int btnX = x + w - btnW - 14;
+
+                    int maxDescW = btnX - (x + 14) - 6;
+                    graphics.text(this.font, Component.literal(truncateToWidth("§f🌊 Waveform Motion:", maxDescW)), x + 14, itemY + 3, 0xFFFFFFFF, false);
+                    graphics.text(this.font, Component.literal(truncateToWidth("§8Pauses or softens dancing animations", maxDescW)), x + 14, itemY + 15, 0xFF888888, false);
+
+                    boolean bHov = mouseX >= btnX && mouseX <= btnX + btnW && mouseY >= btnY && mouseY <= btnY + btnH;
+                    drawSoftBox(graphics, btnX, btnY, btnW, btnH, 3, reduced ? (bHov ? 0xFFE9D5FF : 0xFFA855F7) : (bHov ? 0xFFC084FC : 0xFFA855F7), bHov ? 0xFFFFFFFF : 0x35FFFFFF);
+                    drawCleanCenteredText(graphics, reduced ? "Reduced" : "Dynamic", btnX + btnW / 2, btnY + 5, reduced ? 0xFF000000 : 0xFFFFFFFF);
+
+                } else if (i == 6) {
+                    // 7. Background Audio Playback
                     boolean bg = sm.isBackgroundPlayback();
                     int btnW = 86;
                     int btnX = x + w - btnW - 14;
@@ -951,8 +969,8 @@ public class MusicPlayerScreen extends Screen {
                     drawSoftBox(graphics, btnX, btnY, btnW, btnH, 3, bg ? (bHov ? 0xFFC084FC : 0xFFA855F7) : (bHov ? 0x50FFFFFF : 0x25FFFFFF), bHov ? 0xFFE9D5FF : 0x35FFFFFF);
                     drawCleanCenteredText(graphics, bg ? "Always Play" : "Mute Focus", btnX + btnW / 2, btnY + 5, 0xFFFFFFFF);
 
-                } else if (i == 6) {
-                    // 7. Network Lag Buffer Cushion
+                } else if (i == 7) {
+                    // 8. Network Lag Buffer Cushion
                     int preloadSec = sm.getPreloadSeconds();
                     int btnW = 86;
                     int btnX = x + w - btnW - 14;
@@ -966,8 +984,8 @@ public class MusicPlayerScreen extends Screen {
                     drawSoftBox(graphics, btnX, btnY, btnW, btnH, 3, bHov ? 0x80A855F7 : 0x35FFFFFF, bHov ? 0xFFA855F7 : 0x40FFFFFF);
                     drawCleanCenteredText(graphics, bufLabel, btnX + btnW / 2, btnY + 5, 0xFFFFFFFF);
 
-                } else if (i == 7) {
-                    // 8. Toast Alerts & Notifications
+                } else if (i == 8) {
+                    // 9. Toast Alerts & Notifications
                     boolean toast = sm.isToastNotifications();
                     int btnW = 86;
                     int btnX = x + w - btnW - 14;
@@ -980,8 +998,8 @@ public class MusicPlayerScreen extends Screen {
                     drawSoftBox(graphics, btnX, btnY, btnW, btnH, 3, toast ? (bHov ? 0xFFC084FC : 0xFFA855F7) : (bHov ? 0x50FFFFFF : 0x25FFFFFF), bHov ? 0xFFE9D5FF : 0x35FFFFFF);
                     drawCleanCenteredText(graphics, toast ? "✔ Enabled" : "✕ Muted", btnX + btnW / 2, btnY + 5, 0xFFFFFFFF);
 
-                } else if (i == 8) {
-                    // 9. Game Sound Auto-Ducking
+                } else if (i == 9) {
+                    // 10. Game Sound Auto-Ducking
                     boolean duck = sm.isAutoDucking();
                     int btnW = 86;
                     int btnX = x + w - btnW - 14;
@@ -994,8 +1012,8 @@ public class MusicPlayerScreen extends Screen {
                     drawSoftBox(graphics, btnX, btnY, btnW, btnH, 3, duck ? (bHov ? 0xFFC084FC : 0xFFA855F7) : (bHov ? 0x50FFFFFF : 0x25FFFFFF), bHov ? 0xFFE9D5FF : 0x35FFFFFF);
                     drawCleanCenteredText(graphics, duck ? "✔ Ducking" : "✕ Normal", btnX + btnW / 2, btnY + 5, 0xFFFFFFFF);
 
-                } else if (i == 9) {
-                    // 10. Continuous Playback
+                } else if (i == 10) {
+                    // 11. Continuous Playback
                     boolean cont = sm.isContinuousPlayback();
                     int btnW = 86;
                     int btnX = x + w - btnW - 14;
@@ -1008,8 +1026,8 @@ public class MusicPlayerScreen extends Screen {
                     drawSoftBox(graphics, btnX, btnY, btnW, btnH, 3, cont ? (bHov ? 0xFFC084FC : 0xFFA855F7) : (bHov ? 0x50FFFFFF : 0x25FFFFFF), bHov ? 0xFFE9D5FF : 0x35FFFFFF);
                     drawCleanCenteredText(graphics, cont ? "✔ Endless" : "✕ Stop", btnX + btnW / 2, btnY + 5, 0xFFFFFFFF);
 
-                } else if (i == 10) {
-                    // 11. Audio Cache Storage
+                } else if (i == 11) {
+                    // 12. Audio Cache Storage
                     int btnW = 86;
                     int btnX = x + w - btnW - 14;
 
@@ -1020,27 +1038,24 @@ public class MusicPlayerScreen extends Screen {
                     boolean bHov = mouseX >= btnX && mouseX <= btnX + btnW && mouseY >= btnY && mouseY <= btnY + btnH;
                     drawSoftBox(graphics, btnX, btnY, btnW, btnH, 3, bHov ? 0x90FF3344 : 0x40FF3344, bHov ? 0xFFFF4455 : 0x60FF4455);
                     drawCleanCenteredText(graphics, "🗑 Clear", btnX + btnW / 2, btnY + 5, 0xFFFFFFFF);
-
-                } else if (i == 11) {
-                    // 12. Configurable Hotkey to Open Music Player GUI
-                    com.slowbag.pulse.client.input.KeybindManager km = com.slowbag.pulse.client.input.KeybindManager.getInstance();
-                    int btnW = 96;
-                    int btnX = x + w - btnW - 14;
-
-                    int maxDescW = btnX - (x + 14) - 6;
-                    graphics.text(this.font, Component.literal(truncateToWidth("§f⌨ Open Player Hotkey:", maxDescW)), x + 14, itemY + 3, 0xFFFFFFFF, false);
-                    graphics.text(this.font, Component.literal(truncateToWidth("§8Click to record key or combo (e.g. J, Ctrl+Q)", maxDescW)), x + 14, itemY + 15, 0xFF888888, false);
-
-                    boolean bHov = mouseX >= btnX && mouseX <= btnX + btnW && mouseY >= btnY && mouseY <= btnY + btnH;
-                    boolean listening = km.isListening();
-                    String keyText = listening ? "§e[ Press key... ]" : ("§f[ " + km.getKeybindDisplay() + " ]");
-                    int bgCol = listening ? 0x90F59E0B : (bHov ? 0x80A855F7 : 0x30FFFFFF);
-                    int outlineCol = listening ? 0xFFFBBF24 : (bHov ? 0xFFA855F7 : 0x40FFFFFF);
-                    drawSoftBox(graphics, btnX, btnY, btnW, btnH, 3, bgCol, outlineCol);
-                    drawCleanCenteredText(graphics, keyText, btnX + btnW / 2, btnY + 5, 0xFFFFFFFF);
                 }
 
                 itemY += rowH;
+            }
+
+            // Visible Royal Purple Scrollbar Cue on right edge
+            if (totalSettings > visibleSettings) {
+                int scrollTrackX = x + w - 8;
+                int scrollTrackY = listStartY;
+                int scrollTrackH = Math.min(visibleSettings * rowH - 4, (y + h) - listStartY - 4);
+                // Track groove
+                graphics.fill(scrollTrackX, scrollTrackY, scrollTrackX + 3, scrollTrackY + scrollTrackH, 0x25FFFFFF);
+                // Glowing thumb knob
+                float ratio = (float) startIdx / (float) (totalSettings - visibleSettings);
+                int thumbH = Math.max(16, (int) ((float) visibleSettings / (float) totalSettings * scrollTrackH));
+                int thumbY = scrollTrackY + (int) (ratio * (scrollTrackH - thumbH));
+                graphics.fill(scrollTrackX, thumbY, scrollTrackX + 3, thumbY + thumbH, 0xFFA855F7);
+                graphics.fill(scrollTrackX + 1, thumbY + 1, scrollTrackX + 2, thumbY + thumbH - 1, 0xFFE9D5FF);
             }
         }
     }
@@ -1181,24 +1196,25 @@ public class MusicPlayerScreen extends Screen {
 
         // Clear & Shuffle queue buttons
         if (upNextCount > 0) {
-            int clearX = x + w - 38;
-            int shufX = clearX - 44;
+            int clearX = x + w - 40;
+            int shufX = clearX - 46;
 
             // Shuffle queue button (🔀 Shuf)
-            boolean shufHov = mouseX >= shufX && mouseX <= shufX + 40 && mouseY >= y + 5 && mouseY <= y + 17;
-            drawSoftBox(graphics, shufX, y + 5, 40, 12, 3, shufHov ? 0x80A855F7 : 0x20FFFFFF, shufHov ? 0xFFE9D5FF : 0x40FFFFFF);
-            graphics.centeredText(this.font, Component.literal("§d🔀 Shuf"), shufX + 20, y + 6, 0xFFFFFFFF);
+            boolean shufHov = mouseX >= shufX && mouseX <= shufX + 42 && mouseY >= y + 5 && mouseY <= y + 17;
+            drawSoftBox(graphics, shufX, y + 5, 42, 12, 3, shufHov ? 0x80A855F7 : 0x20FFFFFF, shufHov ? 0xFFE9D5FF : 0x40FFFFFF);
+            graphics.centeredText(this.font, Component.literal("§d🔀 Shuf"), shufX + 21, y + 6, 0xFFFFFFFF);
 
             // Clear queue button
-            boolean clearHov = mouseX >= clearX && mouseX <= clearX + 34 && mouseY >= y + 5 && mouseY <= y + 17;
-            drawSoftBox(graphics, clearX, y + 5, 34, 12, 3, clearHov ? 0x80FF3344 : 0x20FFFFFF, clearHov ? 0xFFFF4455 : 0x40FFFFFF);
-            graphics.centeredText(this.font, Component.literal("§cClear"), clearX + 17, y + 6, 0xFFFFFFFF);
+            boolean clearHov = mouseX >= clearX && mouseX <= clearX + 36 && mouseY >= y + 5 && mouseY <= y + 17;
+            drawSoftBox(graphics, clearX, y + 5, 36, 12, 3, clearHov ? 0x80FF3344 : 0x20FFFFFF, clearHov ? 0xFFFF4455 : 0x40FFFFFF);
+            graphics.centeredText(this.font, Component.literal("§cClear"), clearX + 18, y + 6, 0xFFFFFFFF);
         }
 
         int itemY = y + 24;
         if (upNext.isEmpty()) {
-            graphics.centeredText(this.font, Component.literal("§7Queue is empty."), x + w / 2, itemY + 20, 0xFFA0988E);
-            graphics.centeredText(this.font, Component.literal("§8Click +Q on any song to queue it!"), x + w / 2, itemY + 34, 0xFF706860);
+            graphics.centeredText(this.font, Component.literal("§7Queue is empty."), x + w / 2, itemY + 16, 0xFFA0988E);
+            graphics.centeredText(this.font, Component.literal("§8Click §d+Q §8on any track"), x + w / 2, itemY + 28, 0xFF706860);
+            graphics.centeredText(this.font, Component.literal("§8to play it next!"), x + w / 2, itemY + 40, 0xFF706860);
         } else {
             int visibleRows = Math.max(2, (h - 26) / 26);
             int startIdx = Math.min(queueScrollOffset, Math.max(0, upNext.size() - visibleRows));
@@ -1219,7 +1235,7 @@ public class MusicPlayerScreen extends Screen {
                 graphics.centeredText(this.font, Component.literal("§d" + (i + 1)), thumbX + 7, thumbY + 3, 0xFFFFFFFF);
 
                 // Action buttons on right: [▲] [▼] [✕]
-                int btnW = 15;
+                int btnW = 14;
                 int btnH = 15;
                 int btnY = itemY + 4;
                 int gap = 3;
@@ -1249,7 +1265,10 @@ public class MusicPlayerScreen extends Screen {
                 int textX = thumbX + 19;
                 int textW = upX - textX - 8;
                 graphics.text(this.font, Component.literal("§f" + truncateToWidth(t.getTitle(), textW, false)), textX, itemY + 3, 0xFFFFFFFF, false);
-                String sub = (i == 0 ? "§dNext" : "§8Queued") + " • §7" + truncateToWidth(t.getArtist(), Math.max(20, textW - 35), false);
+                String badge = (i == 0 ? "§dNext" : "§8Queued");
+                int badgeW = this.font.width(badge + " • ");
+                int maxArtistW = Math.max(15, textW - badgeW - 2);
+                String sub = badge + " • §7" + truncateToWidth(t.getArtist(), maxArtistW, false);
                 graphics.text(this.font, Component.literal(sub), textX, itemY + 13, 0xFFA0988E, false);
 
                 itemY += 26;
@@ -1417,6 +1436,9 @@ public class MusicPlayerScreen extends Screen {
     @Override
     public boolean mouseScrolled(double mouseX, double mouseY, double horizontalAmount, double verticalAmount) {
         try {
+            double mx = normalizeX(mouseX);
+            double my = normalizeY(mouseY);
+
             if (isExpanded) {
                 int expStartX = getExpStartX();
                 int leftW = getExpLeftWidth();
@@ -1424,8 +1446,8 @@ public class MusicPlayerScreen extends Screen {
                 int drawerY = getDrawerY();
                 int drawerH = getDrawerHeight();
 
-                // Right column queue scroll
-                if (this.width >= 500 && rightW > 50 && mouseX >= expStartX + leftW + 8 && mouseX <= expStartX + leftW + 8 + rightW) {
+                // Right column queue scroll (Only when hovering over the right column)
+                if (this.width >= 460 && rightW > 40 && mx >= expStartX + leftW + 6 && mx <= expStartX + leftW + 8 + rightW) {
                     List<AudioTrack> upNext = audioManager.getUpcomingQueue();
                     int visibleQ = Math.max(2, (drawerH - 26) / 26);
                     if (verticalAmount > 0) {
@@ -1439,7 +1461,7 @@ public class MusicPlayerScreen extends Screen {
 
                 // Left column tab content scroll
                 int visibleRows = Math.max(3, (drawerH - 54) / 24);
-                if (mouseY >= drawerY + 24 && mouseX >= expStartX && mouseX <= expStartX + leftW) {
+                if (my >= drawerY && mx >= expStartX && mx <= expStartX + leftW + 4) {
                     if (selectedTab == 0) {
                         if (verticalAmount > 0) {
                             searchScrollOffset = Math.max(0, searchScrollOffset - 1);
@@ -1646,7 +1668,7 @@ public class MusicPlayerScreen extends Screen {
 
             int row2Y = heroY + 48;
             // 1. Loop Button
-            if (mx >= ctrlX + 8 && mx <= ctrlX + 56 && my >= row2Y && my <= row2Y + 16) {
+            if (mx >= ctrlX + 8 && mx <= ctrlX + 60 && my >= row2Y && my <= row2Y + 16) {
                 playClickSound();
                 audioManager.toggleLoop();
                 statusMessage = audioManager.isLoopCurrent() ? "§a🔁 Loop: On (Repeating track)" : "§7🔁 Loop: Off";
@@ -1655,7 +1677,7 @@ public class MusicPlayerScreen extends Screen {
             }
 
             // 2. Star / Favorite Button
-            if (mx >= ctrlX + 60 && mx <= ctrlX + 108 && my >= row2Y && my <= row2Y + 16) {
+            if (mx >= ctrlX + 64 && mx <= ctrlX + 116 && my >= row2Y && my <= row2Y + 16) {
                 playClickSound();
                 AudioTrack cur = audioManager.getCurrentTrack();
                 if (cur != null) {
@@ -1670,14 +1692,14 @@ public class MusicPlayerScreen extends Screen {
             }
 
             int row3Y = heroY + 68;
-            // 3. Refresh Button
-            if (mx >= ctrlX + 8 && mx <= ctrlX + 56 && my >= row3Y && my <= row3Y + 16) {
+            // 3. Refresh / Reload Button
+            if (mx >= ctrlX + 8 && mx <= ctrlX + 60 && my >= row3Y && my <= row3Y + 16) {
                 triggerRefresh();
                 return true;
             }
 
             // 4. + Queue Button
-            if (mx >= ctrlX + 60 && mx <= ctrlX + 108 && my >= row3Y && my <= row3Y + 16) {
+            if (mx >= ctrlX + 64 && mx <= ctrlX + 116 && my >= row3Y && my <= row3Y + 16) {
                 playClickSound();
                 AudioTrack cur = audioManager.getCurrentTrack();
                 if (cur != null) {
@@ -2095,31 +2117,21 @@ public class MusicPlayerScreen extends Screen {
                         }
 
                     } else if (i == 1) {
-                        // Mono Audio Downmix
-                        int btnW = 86;
+                        // 1. Configurable Hotkey (Row 2 in UI)
+                        com.slowbag.pulse.client.input.KeybindManager km = com.slowbag.pulse.client.input.KeybindManager.getInstance();
+                        int btnW = 96;
                         int btnX = startX + leftW - btnW - 14;
                         if (rowClicked || (mx >= btnX && mx <= btnX + btnW && my >= btnY && my <= btnY + btnH)) {
                             playClickSound();
-                            boolean mono = SettingsManager.getInstance().toggleMonoAudio();
-                            statusMessage = mono ? "§e🎧 Mono Audio enabled for accessibility! 🎚" : "§a🎧 Stereo Audio restored! 🎶";
+                            boolean listening = !km.isListening();
+                            km.setListening(listening);
+                            statusMessage = listening ? "§e⌨ Press any key or combination (or Escape to clear)..." : "§7⌨ Hotkey recording canceled.";
                             statusMessageTime = System.currentTimeMillis();
                             return true;
                         }
 
                     } else if (i == 2) {
-                        // Reduced Motion
-                        int btnW = 86;
-                        int btnX = startX + leftW - btnW - 14;
-                        if (rowClicked || (mx >= btnX && mx <= btnX + btnW && my >= btnY && my <= btnY + btnH)) {
-                            playClickSound();
-                            boolean red = SettingsManager.getInstance().toggleReducedMotion();
-                            statusMessage = red ? "§e⏸ Reduced motion enabled for comfort! ✨" : "§a🌊 Dynamic waveform motion enabled! 🎶";
-                            statusMessageTime = System.currentTimeMillis();
-                            return true;
-                        }
-
-                    } else if (i == 3) {
-                        // In-Game HUD: [Mode] and [✥ Move]
+                        // 2. In-Game HUD: [Mode] and [✥ Move]
                         int moveBtnW = 44;
                         int moveBtnX = startX + leftW - moveBtnW - 14;
                         int modeBtnW = 54;
@@ -2139,8 +2151,8 @@ public class MusicPlayerScreen extends Screen {
                             return true;
                         }
 
-                    } else if (i == 4) {
-                        // Nametag Music Badge
+                    } else if (i == 3) {
+                        // 3. Nametag Music Badge
                         int btnW = 86;
                         int btnX = startX + leftW - btnW - 14;
                         if (rowClicked || (mx >= btnX && mx <= btnX + btnW && my >= btnY && my <= btnY + btnH)) {
@@ -2151,8 +2163,32 @@ public class MusicPlayerScreen extends Screen {
                             return true;
                         }
 
+                    } else if (i == 4) {
+                        // 4. Mono Audio Downmix
+                        int btnW = 86;
+                        int btnX = startX + leftW - btnW - 14;
+                        if (rowClicked || (mx >= btnX && mx <= btnX + btnW && my >= btnY && my <= btnY + btnH)) {
+                            playClickSound();
+                            boolean mono = SettingsManager.getInstance().toggleMonoAudio();
+                            statusMessage = mono ? "§e🎧 Mono Audio enabled for accessibility! 🎚" : "§a🎧 Stereo Audio restored! 🎶";
+                            statusMessageTime = System.currentTimeMillis();
+                            return true;
+                        }
+
                     } else if (i == 5) {
-                        // Background Playback
+                        // 5. Reduced Motion / Waveform Motion
+                        int btnW = 86;
+                        int btnX = startX + leftW - btnW - 14;
+                        if (rowClicked || (mx >= btnX && mx <= btnX + btnW && my >= btnY && my <= btnY + btnH)) {
+                            playClickSound();
+                            boolean red = SettingsManager.getInstance().toggleReducedMotion();
+                            statusMessage = red ? "§e⏸ Reduced motion enabled for comfort! ✨" : "§a🌊 Dynamic waveform motion enabled! 🎶";
+                            statusMessageTime = System.currentTimeMillis();
+                            return true;
+                        }
+
+                    } else if (i == 6) {
+                        // 6. Background Playback
                         int btnW = 86;
                         int btnX = startX + leftW - btnW - 14;
                         if (rowClicked || (mx >= btnX && mx <= btnX + btnW && my >= btnY && my <= btnY + btnH)) {
@@ -2163,8 +2199,8 @@ public class MusicPlayerScreen extends Screen {
                             return true;
                         }
 
-                    } else if (i == 6) {
-                        // Network Buffer Cushion
+                    } else if (i == 7) {
+                        // 7. Network Buffer Cushion
                         int btnW = 86;
                         int btnX = startX + leftW - btnW - 14;
                         if (rowClicked || (mx >= btnX && mx <= btnX + btnW && my >= btnY && my <= btnY + btnH)) {
@@ -2175,8 +2211,8 @@ public class MusicPlayerScreen extends Screen {
                             return true;
                         }
 
-                    } else if (i == 7) {
-                        // Toast Alerts
+                    } else if (i == 8) {
+                        // 8. Toast Alerts
                         int btnW = 86;
                         int btnX = startX + leftW - btnW - 14;
                         if (rowClicked || (mx >= btnX && mx <= btnX + btnW && my >= btnY && my <= btnY + btnH)) {
@@ -2187,8 +2223,8 @@ public class MusicPlayerScreen extends Screen {
                             return true;
                         }
 
-                    } else if (i == 8) {
-                        // Game Sound Ducking
+                    } else if (i == 9) {
+                        // 9. Game Sound Ducking
                         int btnW = 86;
                         int btnX = startX + leftW - btnW - 14;
                         if (rowClicked || (mx >= btnX && mx <= btnX + btnW && my >= btnY && my <= btnY + btnH)) {
@@ -2199,8 +2235,8 @@ public class MusicPlayerScreen extends Screen {
                             return true;
                         }
 
-                    } else if (i == 9) {
-                        // Continuous Playback
+                    } else if (i == 10) {
+                        // 10. Continuous Playback
                         int btnW = 86;
                         int btnX = startX + leftW - btnW - 14;
                         if (rowClicked || (mx >= btnX && mx <= btnX + btnW && my >= btnY && my <= btnY + btnH)) {
@@ -2211,28 +2247,14 @@ public class MusicPlayerScreen extends Screen {
                             return true;
                         }
 
-                    } else if (i == 10) {
-                        // Clear Cache
+                    } else if (i == 11) {
+                        // 11. Clear Cache
                         int btnW = 86;
                         int btnX = startX + leftW - btnW - 14;
                         if (rowClicked || (mx >= btnX && mx <= btnX + btnW && my >= btnY && my <= btnY + btnH)) {
                             playClickSound();
                             long freed = SettingsManager.getInstance().clearCache();
                             statusMessage = "§a🧹 Audio cache cleaned! Freed storage. ✨";
-                            statusMessageTime = System.currentTimeMillis();
-                            return true;
-                        }
-
-                    } else if (i == 11) {
-                        // 12. Open Player Hotkey
-                        com.slowbag.pulse.client.input.KeybindManager km = com.slowbag.pulse.client.input.KeybindManager.getInstance();
-                        int btnW = 96;
-                        int btnX = startX + leftW - btnW - 14;
-                        if (rowClicked || (mx >= btnX && mx <= btnX + btnW && my >= btnY && my <= btnY + btnH)) {
-                            playClickSound();
-                            boolean listening = !km.isListening();
-                            km.setListening(listening);
-                            statusMessage = listening ? "§e⌨ Press any key or combination (or Escape to clear)..." : "§7⌨ Hotkey recording canceled.";
                             statusMessageTime = System.currentTimeMillis();
                             return true;
                         }
@@ -2275,11 +2297,11 @@ public class MusicPlayerScreen extends Screen {
 
                 // Clear & Shuffle Queue Clicks
                 if (!upNext.isEmpty()) {
-                    int clearX = rightX + rightW - 38;
-                    int shufX = clearX - 44;
+                    int clearX = rightX + rightW - 40;
+                    int shufX = clearX - 46;
 
                     // Shuffle Queue Click
-                    if (mx >= shufX && mx <= shufX + 40 && my >= queueY + 5 && my <= queueY + 17) {
+                    if (mx >= shufX && mx <= shufX + 42 && my >= queueY + 5 && my <= queueY + 17) {
                         playClickSound();
                         if (audioManager.shuffleQueue()) {
                             statusMessage = "§a🔀 Shuffled your queue! 🎶";
@@ -2291,7 +2313,7 @@ public class MusicPlayerScreen extends Screen {
                     }
 
                     // Clear Queue Click
-                    if (mx >= clearX && mx <= clearX + 34 && my >= queueY + 5 && my <= queueY + 17) {
+                    if (mx >= clearX && mx <= clearX + 36 && my >= queueY + 5 && my <= queueY + 17) {
                         playClickSound();
                         int cleared = upNext.size();
                         audioManager.clearQueue();
