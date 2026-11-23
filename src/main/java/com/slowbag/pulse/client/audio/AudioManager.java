@@ -136,8 +136,9 @@ public class AudioManager {
         this.isPaused = false;
         this.isBuffering = true;
         this.lastErrorMessage = null;
-        this.playStartTime = 0; // Recorded when audio output actually begins
+        this.playStartTime = System.currentTimeMillis() - (seekSeconds * 1000L);
         this.accumulatedPauseTime = 0;
+        this.lastPauseStart = 0;
         this.upcomingQueue.remove(track);
 
         int idx = playlist.indexOf(track);
@@ -161,7 +162,7 @@ public class AudioManager {
         // Notify Listen Together party host broadcast
         if (broadcastParty) {
             try {
-                PartyManager.getInstance().broadcastTrackIfHost(track);
+                PartyManager.getInstance().broadcastTrackIfHost(track, seekSeconds);
             } catch (Throwable ignored) {}
         }
 
@@ -759,6 +760,9 @@ public class AudioManager {
 
     private synchronized void stopInternal() {
         this.isBuffering = false;
+        this.playStartTime = 0;
+        this.accumulatedPauseTime = 0;
+        this.lastPauseStart = 0;
         if (currentPlaybackFuture != null) {
             currentPlaybackFuture.cancel(true);
             currentPlaybackFuture = null;

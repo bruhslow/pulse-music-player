@@ -323,7 +323,7 @@ public class HudMoveScreen extends Screen {
     private void close() {
         applySavedPosition();
         if (this.minecraft != null) {
-            this.minecraft.gui.setScreen(parentScreen);
+            ScreenCompat.setScreen(this.minecraft, parentScreen);
         }
     }
 

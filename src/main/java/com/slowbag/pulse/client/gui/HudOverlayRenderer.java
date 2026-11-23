@@ -51,7 +51,8 @@ public class HudOverlayRenderer {
         if (client.player == null || client.level == null) return;
 
         // Hide overlay while main player screen or HUD move screen is open
-        if (client.gui.screen() instanceof MusicPlayerScreen || client.gui.screen() instanceof HudMoveScreen) return;
+        net.minecraft.client.gui.screens.Screen curScr = ScreenCompat.getCurrentScreen(client);
+        if (curScr instanceof MusicPlayerScreen || curScr instanceof HudMoveScreen) return;
 
         HudConfigManager config = HudConfigManager.getInstance();
         if (!config.isHudEnabled()) return;

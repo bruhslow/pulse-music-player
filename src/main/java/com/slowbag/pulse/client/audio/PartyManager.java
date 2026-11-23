@@ -200,13 +200,15 @@ public class PartyManager {
 
             net.fabricmc.fabric.api.client.networking.v1.ClientPlayConnectionEvents.JOIN.register((handler, sender, client) -> {
                 client.execute(() -> {
-                    if (isServerNetworkingActive()) {
-                        JsonObject hello = new JsonObject();
-                        hello.addProperty("action", "client_hello");
-                        hello.addProperty("player", getPlayerName());
-                        ClientPlayNetworking.send(new PulseNetworkPayload(hello.toString()));
-                    }
-                    refreshRooms();
+                    try {
+                        if (isServerNetworkingActive()) {
+                            JsonObject hello = new JsonObject();
+                            hello.addProperty("action", "client_hello");
+                            hello.addProperty("player", getPlayerName());
+                            ClientPlayNetworking.send(new PulseNetworkPayload(hello.toString()));
+                        }
+                        refreshRooms();
+                    } catch (Throwable ignored) {}
                 });
             });
 
@@ -481,7 +483,7 @@ public class PartyManager {
         hb.addProperty("hasPassword", roomPassword != null && !roomPassword.isEmpty());
         hb.addProperty("password", roomPassword != null ? roomPassword : "");
         hb.addProperty("isPaused", am.isPaused() || !am.isPlaying());
-        hb.addProperty("elapsed", am.getElapsedSeconds());
+        hb.addProperty("elapsed", am.isBuffering() ? 0 : am.getElapsedSeconds());
         hb.addProperty("lastHeartbeat", System.currentTimeMillis());
 
         if (t != null) {
@@ -834,6 +836,10 @@ public class PartyManager {
     // ------------------------------------------------------------------------
 
     public void broadcastTrackIfHost(AudioTrack track) {
+        broadcastTrackIfHost(track, 0);
+    }
+
+    public void broadcastTrackIfHost(AudioTrack track, long seekSeconds) {
         if (!isInRoom() || !isHost || track == null) return;
         publishHostRoomState();
 
@@ -848,7 +854,7 @@ public class PartyManager {
         msg.addProperty("url", track.getUrl());
         msg.addProperty("category", track.getCategory());
         msg.addProperty("duration", track.getDurationSeconds());
-        msg.addProperty("elapsed", AudioManager.getInstance().getElapsedSeconds());
+        msg.addProperty("elapsed", seekSeconds);
         msg.addProperty("isPaused", AudioManager.getInstance().isPaused());
         if (track.getArtworkUrl() != null) {
             msg.addProperty("artwork", track.getArtworkUrl());

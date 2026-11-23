@@ -93,6 +93,11 @@ public class MusicPlayerScreen extends Screen {
     private double draggedScrubRatio = -1.0;
     private List<AudioTrack> cachedLocalTracks = new ArrayList<>();
 
+    // Direct input safety tracking across 26.x versions
+    private boolean wasEscDown = false;
+    private boolean wasLeftMouseDown = false;
+    private long lastClickHandledTime = 0;
+
     public MusicPlayerScreen(Screen parentScreen) {
         super(Component.literal("Pulse Music Player"));
         this.parentScreen = parentScreen;
@@ -146,6 +151,11 @@ public class MusicPlayerScreen extends Screen {
         super.init();
         this.openAnimationProgress = 0.0f;
         this.expandProgress = isExpanded ? 1.0f : 0.0f;
+        this.isDraggingScrubber = false;
+        this.isDraggingVolume = false;
+        this.draggedScrubRatio = -1.0;
+        this.wasEscDown = false;
+        this.wasLeftMouseDown = false;
         if (audioManager.getCurrentTrack() != null) {
             AudioTrack cur = audioManager.getCurrentTrack();
             String art = cur.getArtworkUrl();
@@ -332,8 +342,49 @@ public class MusicPlayerScreen extends Screen {
     }
 
     @Override
+    public void onClose() {
+        ScreenCompat.setScreen(this.minecraft, this.parentScreen);
+    }
+
+    public void method_25419() {
+        onClose();
+    }
+
+    private void pollDirectInputSafety(int mouseX, int mouseY) {
+        try {
+            if (this.minecraft == null || this.minecraft.getWindow() == null) return;
+            long handle = this.minecraft.getWindow().handle();
+            if (handle == 0) return;
+
+            // 1. Direct ESC key safety fallback
+            boolean escDown = GLFW.glfwGetKey(handle, GLFW.GLFW_KEY_ESCAPE) == GLFW.GLFW_PRESS;
+            if (escDown && !this.wasEscDown) {
+                this.wasEscDown = true;
+                handleKeyPressed(GLFW.GLFW_KEY_ESCAPE, 0, 0);
+            } else if (!escDown) {
+                this.wasEscDown = false;
+            }
+
+            // 2. Direct Left Mouse Button safety fallback
+            boolean mouseDown = GLFW.glfwGetMouseButton(handle, GLFW.GLFW_MOUSE_BUTTON_LEFT) == GLFW.GLFW_PRESS;
+            if (mouseDown && !this.wasLeftMouseDown) {
+                this.wasLeftMouseDown = true;
+                if (System.currentTimeMillis() - lastClickHandledTime > 150L) {
+                    handleMouseClicked(normalizeX(mouseX), normalizeY(mouseY), GLFW.GLFW_MOUSE_BUTTON_LEFT, false);
+                }
+            } else if (!mouseDown && this.wasLeftMouseDown) {
+                this.wasLeftMouseDown = false;
+                handleMouseReleased(normalizeX(mouseX), normalizeY(mouseY), GLFW.GLFW_MOUSE_BUTTON_LEFT);
+            } else if (mouseDown && (isDraggingScrubber || isDraggingVolume)) {
+                handleMouseDragged(normalizeX(mouseX), normalizeY(mouseY), GLFW.GLFW_MOUSE_BUTTON_LEFT, 0, 0);
+            }
+        } catch (Throwable ignored) {}
+    }
+
+    @Override
     public void extractRenderState(GuiGraphicsExtractor graphics, int mouseX, int mouseY, float delta) {
         try {
+            pollDirectInputSafety(mouseX, mouseY);
             openAnimationProgress = AnimationUtil.lerp(openAnimationProgress, 1.0f, 0.25f);
             float ease = AnimationUtil.easeOutCubic(openAnimationProgress);
 
@@ -889,9 +940,8 @@ public class MusicPlayerScreen extends Screen {
             // LOBBY / BROWSER VIEW
             int topY = y + 2;
 
-            // Header toolbar
-            graphics.text(this.font, Component.literal("§d👥 Music Rooms"), x + 8, topY, 0xFFFFFFFF, true);
-            graphics.text(this.font, Component.literal("§8Browse active parties or host your own synchronized room"), x + 8, topY + 11, 0xFFA0988E, false);
+            // Header toolbar - Row 1: Title on left, Action buttons on right
+            graphics.text(this.font, Component.literal("§d👥 Music Rooms"), x + 8, topY + 4, 0xFFFFFFFF, true);
 
             int btnH = 16;
             int rightEdge = x + w - 8;
@@ -910,8 +960,12 @@ public class MusicPlayerScreen extends Screen {
             drawSoftBox(graphics, modeBtnX, topY, modeBtnW, btnH, 3, isCreatingRoom ? (modeHov ? 0x80FF4455 : 0x30FF4455) : (modeHov ? 0x80A855F7 : 0x40A855F7), isCreatingRoom ? 0xFFFF4455 : 0xFFA855F7);
             drawCleanCenteredText(graphics, isCreatingRoom ? "§f✕ Browse" : "§f＋ Create Room", modeBtnX + modeBtnW / 2, topY + 4, 0xFFFFFFFF);
 
-            int contentY = topY + 24;
-            int contentH = h - 28;
+            // Row 2: Subtitle positioned below the buttons with clean padding to avoid any overlap
+            int subY = topY + 20;
+            graphics.text(this.font, Component.literal(truncateToWidth("§8Browse active parties or host your own synchronized room", w - 16)), x + 8, subY, 0xFFA0988E, false);
+
+            int contentY = subY + 12;
+            int contentH = (y + h) - contentY - 4;
 
             if (isCreatingRoom) {
                 // CREATE ROOM FORM
@@ -1240,8 +1294,8 @@ public class MusicPlayerScreen extends Screen {
                 return true;
             }
 
-            int contentY = topY + 24;
-            int contentH = h - 28;
+            int contentY = topY + 32;
+            int contentH = (y + h) - contentY - 4;
 
             if (isCreatingRoom) {
                 int formY = contentY + 8;
@@ -2136,7 +2190,8 @@ public class MusicPlayerScreen extends Screen {
 
     private boolean handleMouseClicked(double mx, double my, int btn, boolean isDoubleClick) {
         try {
-        if (passwordPromptRoom != null) {
+            lastClickHandledTime = System.currentTimeMillis();
+            if (passwordPromptRoom != null) {
             int mw = 220, mh = 104;
             int mx0 = (this.width - mw) / 2;
             int my0 = (this.height - mh) / 2;
@@ -2188,7 +2243,7 @@ public class MusicPlayerScreen extends Screen {
             // Close button
             if (mx >= closeX && mx <= closeX + 16 && my >= iconY && my <= iconY + 16) {
                 playClickSound();
-                this.minecraft.gui.setScreen(parentScreen);
+                onClose();
                 return true;
             }
 
@@ -2790,7 +2845,7 @@ public class MusicPlayerScreen extends Screen {
 
                         if (mx >= moveBtnX && mx <= moveBtnX + moveBtnW && my >= btnY && my <= btnY + btnH) {
                             playClickSound();
-                            Minecraft.getInstance().gui.setScreen(new HudMoveScreen(this));
+                            ScreenCompat.setScreen(this.minecraft, new HudMoveScreen(this));
                             return true;
                         }
 
@@ -3163,6 +3218,31 @@ public class MusicPlayerScreen extends Screen {
     private boolean handleKeyPressed(int key, int scancode, int modifiers) {
         boolean isPasteKey = (key == GLFW.GLFW_KEY_V && isControlOrSuperDown(modifiers));
 
+        if (key == GLFW.GLFW_KEY_ESCAPE) {
+            playClickSound();
+            if (passwordPromptRoom != null) {
+                passwordPromptRoom = null;
+                promptPasswordText = "";
+                passwordErrorMsg = "";
+                return true;
+            }
+            if (isSearchFocused) {
+                isSearchFocused = false;
+                return true;
+            }
+            if (isUrlFocused) {
+                isUrlFocused = false;
+                return true;
+            }
+            if (isRoomNameFocused || isRoomPasswordFocused) {
+                isRoomNameFocused = false;
+                isRoomPasswordFocused = false;
+                return true;
+            }
+            onClose();
+            return true;
+        }
+
         if (passwordPromptRoom != null) {
             if (key == GLFW.GLFW_KEY_ESCAPE) {
                 playClickSound();
@@ -3412,6 +3492,35 @@ public class MusicPlayerScreen extends Screen {
     @Override
     public boolean isPauseScreen() {
         return false;
+    }
+
+    // Intermediary overrides for Minecraft 26.1 / 1.21.1 and variants
+    public boolean method_25402(double mouseX, double mouseY, int button) {
+        return mouseClicked(mouseX, mouseY, button);
+    }
+
+    public boolean method_25406(double mouseX, double mouseY, int button) {
+        return mouseReleased(mouseX, mouseY, button);
+    }
+
+    public boolean method_25403(double mouseX, double mouseY, int button, double deltaX, double deltaY) {
+        return mouseDragged(mouseX, mouseY, button, deltaX, deltaY);
+    }
+
+    public boolean method_25401(double mouseX, double mouseY, double horizontalAmount, double verticalAmount) {
+        return mouseScrolled(mouseX, mouseY, horizontalAmount, verticalAmount);
+    }
+
+    public boolean method_25404(int keyCode, int scanCode, int modifiers) {
+        return keyPressed(keyCode, scanCode, modifiers);
+    }
+
+    public boolean method_16007(int keyCode, int scanCode, int modifiers) {
+        return false;
+    }
+
+    public boolean method_25400(char chr, int modifiers) {
+        return charTyped(chr, modifiers);
     }
 
     private String cleanPastedUrl(String url) {

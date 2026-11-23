@@ -7,6 +7,7 @@ import com.slowbag.pulse.client.audio.PartyManager;
 import com.slowbag.pulse.client.command.MusicPlayerCommand;
 import com.slowbag.pulse.client.gui.HudOverlayRenderer;
 import com.slowbag.pulse.client.gui.MusicPlayerScreen;
+import com.slowbag.pulse.client.gui.ScreenCompat;
 import net.fabricmc.api.ClientModInitializer;
 import net.fabricmc.fabric.api.client.command.v2.ClientCommandRegistrationCallback;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientLifecycleEvents;
@@ -23,7 +24,11 @@ public class MusicPlayerClientMod implements ClientModInitializer {
         // 1. Register Client Commands (/mp and /musicplayer)
         try {
             ClientCommandRegistrationCallback.EVENT.register((dispatcher, registryAccess) -> {
-                MusicPlayerCommand.register(dispatcher);
+                try {
+                    MusicPlayerCommand.register(dispatcher);
+                } catch (Throwable t) {
+                    MusicPlayerMod.LOGGER.error("[Music Player] Error registering command dispatcher", t);
+                }
             });
             MusicPlayerMod.LOGGER.info("[Music Player] Registered /mp and /musicplayer commands.");
         } catch (Throwable t) {
@@ -102,12 +107,13 @@ public class MusicPlayerClientMod implements ClientModInitializer {
 
                         boolean match = isKeyDown && (ctrlDown == km.isCtrl()) && (altDown == km.isAlt()) && (shiftDown == km.isShift());
                         if (match && !wasHotkeyDown) {
-                            if (client.gui.screen() == null) {
-                                client.gui.setScreen(new MusicPlayerScreen(null));
-                            } else if (client.gui.screen() instanceof MusicPlayerScreen) {
+                            net.minecraft.client.gui.screens.Screen current = ScreenCompat.getCurrentScreen(client);
+                            if (current == null) {
+                                ScreenCompat.setScreen(client, new MusicPlayerScreen(null));
+                            } else if (current instanceof MusicPlayerScreen) {
                                 // If screen is open and not listening to keybind recording, close screen
                                 if (!km.isListening()) {
-                                    client.gui.setScreen(null);
+                                    ScreenCompat.setScreen(client, null);
                                 }
                             }
                         }

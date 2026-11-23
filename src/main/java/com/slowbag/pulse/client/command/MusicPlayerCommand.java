@@ -15,6 +15,7 @@ import com.slowbag.pulse.client.audio.YouTubeResolver;
 import com.slowbag.pulse.client.gui.HudConfigManager;
 import com.slowbag.pulse.client.gui.HudMoveScreen;
 import com.slowbag.pulse.client.gui.MusicPlayerScreen;
+import com.slowbag.pulse.client.gui.ScreenCompat;
 import net.fabricmc.fabric.api.client.command.v2.ClientCommands;
 import net.fabricmc.fabric.api.client.command.v2.FabricClientCommandSource;
 import net.minecraft.client.Minecraft;
@@ -170,8 +171,9 @@ public class MusicPlayerCommand {
                     return 1;
                 });
         hudCmd.then(ClientCommands.literal("move").executes(context -> {
-            Minecraft.getInstance().execute(() -> {
-                Minecraft.getInstance().gui.setScreen(new HudMoveScreen(null));
+            Minecraft client = Minecraft.getInstance();
+            client.execute(() -> {
+                ScreenCompat.setScreen(client, new HudMoveScreen(null));
             });
             return 1;
         }));
@@ -432,13 +434,11 @@ public class MusicPlayerCommand {
     private static int openGui(int defaultTab) {
         Minecraft client = Minecraft.getInstance();
         client.execute(() -> {
-            if (client.gui != null) {
-                MusicPlayerScreen screen = new MusicPlayerScreen(client.gui.screen());
-                if (defaultTab > 0) {
-                    screen.setSelectedTab(defaultTab);
-                }
-                client.gui.setScreen(screen);
+            MusicPlayerScreen screen = new MusicPlayerScreen(ScreenCompat.getCurrentScreen(client));
+            if (defaultTab > 0) {
+                screen.setSelectedTab(defaultTab);
             }
+            ScreenCompat.setScreen(client, screen);
         });
         return 1;
     }
