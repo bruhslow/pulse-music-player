@@ -15,10 +15,10 @@ public abstract class EntityRendererMixin {
 
     @Inject(method = "getNameTag", at = @At("RETURN"), cancellable = true, require = 0)
     private void musicplayer$appendNametagBadge(Entity entity, CallbackInfoReturnable<Component> cir) {
-        if (entity instanceof Player player) {
+        if (entity != null) {
             Component original = cir.getReturnValue();
             if (original != null) {
-                Component decorated = MusicBadgeManager.decorateNametag(player, original);
+                Component decorated = MusicBadgeManager.decorateNametag(entity, original);
                 if (decorated != original) {
                     cir.setReturnValue(decorated);
                 }

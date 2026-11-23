@@ -13,9 +13,8 @@ public class MusicPlayerMod implements ModInitializer {
 
     static {
         try {
-            if (System.getProperty("java.net.preferIPv6Addresses") == null) {
-                System.setProperty("java.net.preferIPv6Addresses", "system");
-            }
+            System.setProperty("java.net.preferIPv4Stack", "true");
+            System.setProperty("java.net.preferIPv6Addresses", "false");
         } catch (Throwable ignored) {}
     }
 

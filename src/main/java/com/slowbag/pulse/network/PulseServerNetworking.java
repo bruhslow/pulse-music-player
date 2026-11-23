@@ -84,6 +84,8 @@ public class PulseServerNetworking {
                 case "sync_request", "request_sync" -> handleSyncRequest(server, player);
                 case "queue_add" -> handleQueueAdd(server, player, obj);
                 case "server_party" -> handleServerParty(server, player);
+                case "presence", "client_hello" -> handleClientPresence(server, player);
+                case "query_mod_users" -> sendModUsersToPlayer(server, player);
             }
         } catch (Throwable t) {
             MusicPlayerMod.LOGGER.debug("[Music Player] Error processing packet from " + player.getName().getString() + ": " + t.getMessage());
@@ -415,6 +417,40 @@ public class PulseServerNetworking {
     private static void sendPacket(ServerPlayer player, JsonObject obj) {
         if (ServerPlayNetworking.canSend(player, PulseNetworkPayload.TYPE)) {
             ServerPlayNetworking.send(player, new PulseNetworkPayload(obj.toString()));
+        }
+    }
+
+    private static void handleClientPresence(MinecraftServer server, ServerPlayer player) {
+        broadcastModUsers(server);
+    }
+
+    public static void sendModUsersToPlayer(MinecraftServer server, ServerPlayer player) {
+        JsonObject listPkt = new JsonObject();
+        listPkt.addProperty("action", "mod_users");
+        JsonArray arr = new JsonArray();
+        for (ServerPlayer p : server.getPlayerList().getPlayers()) {
+            if (ServerPlayNetworking.canSend(p, PulseNetworkPayload.TYPE)) {
+                arr.add(p.getName().getString());
+            }
+        }
+        listPkt.add("users", arr);
+        sendPacket(player, listPkt);
+    }
+
+    public static void broadcastModUsers(MinecraftServer server) {
+        JsonObject listPkt = new JsonObject();
+        listPkt.addProperty("action", "mod_users");
+        JsonArray arr = new JsonArray();
+        for (ServerPlayer p : server.getPlayerList().getPlayers()) {
+            if (ServerPlayNetworking.canSend(p, PulseNetworkPayload.TYPE)) {
+                arr.add(p.getName().getString());
+            }
+        }
+        listPkt.add("users", arr);
+        for (ServerPlayer p : server.getPlayerList().getPlayers()) {
+            if (ServerPlayNetworking.canSend(p, PulseNetworkPayload.TYPE)) {
+                sendPacket(p, listPkt);
+            }
         }
     }
 

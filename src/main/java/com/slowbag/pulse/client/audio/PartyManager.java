@@ -179,6 +179,19 @@ public class PartyManager {
                 String json = payload.json();
                 context.client().execute(() -> handleServerPacket(json));
             });
+
+            net.fabricmc.fabric.api.client.networking.v1.ClientPlayConnectionEvents.JOIN.register((handler, sender, client) -> {
+                client.execute(() -> {
+                    if (isServerNetworkingActive()) {
+                        JsonObject hello = new JsonObject();
+                        hello.addProperty("action", "client_hello");
+                        hello.addProperty("player", getPlayerName());
+                        ClientPlayNetworking.send(new PulseNetworkPayload(hello.toString()));
+                    }
+                    refreshRooms();
+                });
+            });
+
             MusicPlayerMod.LOGGER.info("[Music Player] Registered native client packet receiver for rooms & sync.");
         } catch (Throwable t) {
             MusicPlayerMod.LOGGER.debug("[Music Player] Server networking not available or client-only: " + t.getMessage());
@@ -200,6 +213,16 @@ public class PartyManager {
             String action = obj.has("action") ? obj.get("action").getAsString() : "";
 
             switch (action) {
+                case "mod_users" -> {
+                    if (obj.has("users")) {
+                        JsonArray arr = obj.getAsJsonArray("users");
+                        for (com.google.gson.JsonElement el : arr) {
+                            String u = el.getAsString();
+                            this.serverModUsers.put(u, System.currentTimeMillis());
+                            MusicBadgeManager.getActiveModUsers().put(u.toLowerCase(), System.currentTimeMillis());
+                        }
+                    }
+                }
                 case "room_list" -> {
                     if (obj.has("rooms")) {
                         JsonArray arr = obj.getAsJsonArray("rooms");
@@ -552,6 +575,9 @@ public class PartyManager {
             ClientPlayNetworking.send(new PulseNetworkPayload(obj.toString()));
         }
 
+        // Register in local IPC directory so alts on same PC instantly see room
+        LocalPresenceManager.registerRoom(name, myName, !pass.isEmpty(), pass, 1);
+
         publishHostRoomState();
 
         AudioTrack cur = AudioManager.getInstance().getCurrentTrack();
@@ -675,6 +701,10 @@ public class PartyManager {
             obj.addProperty("action", wasHost ? "disband_room" : "leave_room");
             obj.addProperty("room", curName);
             ClientPlayNetworking.send(new PulseNetworkPayload(obj.toString()));
+        }
+
+        if (curName != null) {
+            LocalPresenceManager.removeRoom(curName);
         }
 
         this.roomName = null;
@@ -1307,6 +1337,23 @@ public class PartyManager {
     }
 
     public void refreshRooms() {
+        // 1. Merge local IPC rooms immediately (0ms delay for alts on same PC)
+        try {
+            List<RoomEntry> localRooms = LocalPresenceManager.getActiveRooms();
+            for (RoomEntry lr : localRooms) {
+                boolean exists = false;
+                for (RoomEntry er : discoveredRooms) {
+                    if (er.name.equalsIgnoreCase(lr.name)) {
+                        exists = true;
+                        break;
+                    }
+                }
+                if (!exists) {
+                    discoveredRooms.add(lr);
+                }
+            }
+        } catch (Throwable ignored) {}
+
         if (isServerNetworkingActive()) {
             JsonObject obj = new JsonObject();
             obj.addProperty("action", "query_rooms");

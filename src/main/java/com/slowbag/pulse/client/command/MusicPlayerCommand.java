@@ -375,6 +375,16 @@ public class MusicPlayerCommand {
                 }
             }
 
+            for (String localUser : com.slowbag.pulse.client.audio.LocalPresenceManager.getActiveLocalUsers()) {
+                for (PlayerInfo p : playerList) {
+                    if (p != null && p.getProfile() != null && localUser.equalsIgnoreCase(p.getProfile().name())) {
+                        if (!modUsersOnServer.contains(p.getProfile().name())) {
+                            modUsersOnServer.add(p.getProfile().name());
+                        }
+                    }
+                }
+            }
+
             // Always ensure local player is included
             if (!modUsersOnServer.contains(localName)) {
                 modUsersOnServer.add(0, localName);

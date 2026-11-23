@@ -4,6 +4,7 @@ import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import net.minecraft.client.Minecraft;
 import net.minecraft.network.chat.Component;
+import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.player.Player;
 
 import java.io.BufferedReader;
@@ -72,6 +73,13 @@ public class MusicBadgeManager {
         saveConfig();
     }
 
+    static {
+        try {
+            System.setProperty("java.net.preferIPv4Stack", "true");
+            System.setProperty("java.net.preferIPv6Addresses", "false");
+        } catch (Throwable ignored) {}
+    }
+
     public static boolean isModUser(String playerName) {
         if (playerName == null || playerName.isBlank()) return false;
         String lower = playerName.toLowerCase();
@@ -84,13 +92,18 @@ public class MusicBadgeManager {
             }
         }
 
-        // 2. Active presence within last 180 seconds (3 minutes)
+        // 2. Local machine / same PC / LAN presence (0ms delay for alts and local tests)
+        if (LocalPresenceManager.isLocalModUser(lower)) {
+            return true;
+        }
+
+        // 3. Active presence within last 180 seconds (3 minutes)
         Long lastSeen = activeModUsers.get(lower);
         if (lastSeen != null && (System.currentTimeMillis() - lastSeen < 180000)) {
             return true;
         }
 
-        // 3. Server party mod users
+        // 4. Server party mod users
         PartyManager pm = PartyManager.getInstance();
         if (pm.getServerModUsers().contains(playerName) || pm.getMembers().contains(playerName)) {
             return true;
@@ -111,13 +124,18 @@ public class MusicBadgeManager {
             }
         }
 
-        // 2. Remote player active listening heartbeat within last 90 seconds
+        // 2. Local machine / alt listening status
+        if (LocalPresenceManager.isLocalPlayerListening(lower)) {
+            return true;
+        }
+
+        // 3. Remote player active listening heartbeat within last 90 seconds
         Long lastAudio = activeListeners.get(lower);
         if (lastAudio != null && (System.currentTimeMillis() - lastAudio < 90000)) {
             return true;
         }
 
-        // 3. Shared party room playback
+        // 4. Shared party room playback
         PartyManager pm = PartyManager.getInstance();
         if (pm.isInRoom() && pm.getMembers().contains(playerName) && AudioManager.getInstance().isPlaying() && !AudioManager.getInstance().isPaused()) {
             return true;
@@ -157,12 +175,17 @@ public class MusicBadgeManager {
         return "§8[" + color + note + "§8] ";
     }
 
-    public static Component decorateNametag(Player player, Component original) {
-        if (!badgeEnabled || player == null || original == null) {
+    public static Component decorateNametag(Entity entity, Component original) {
+        if (!badgeEnabled || entity == null || original == null) {
             return original;
         }
 
-        String playerName = player.getName().getString();
+        String str = original.getString();
+        if (str.contains("♫") || str.contains("♪")) {
+            return original;
+        }
+
+        String playerName = entity.getName().getString();
 
         if (isPlayerListening(playerName)) {
             return Component.literal(getBeatingMusicPrefix()).append(original);
@@ -179,6 +202,10 @@ public class MusicBadgeManager {
         if (client != null && client.player != null && playerName.equalsIgnoreCase(client.player.getName().getString())) {
             AudioTrack cur = AudioManager.getInstance().getCurrentTrack();
             return cur != null ? cur.getTitle() : null;
+        }
+        String localTrack = LocalPresenceManager.getLocalPlayerTrack(playerName);
+        if (localTrack != null && !localTrack.isBlank()) {
+            return localTrack;
         }
         return activeTrackTitles.get(playerName.toLowerCase());
     }
@@ -207,6 +234,10 @@ public class MusicBadgeManager {
             AudioTrack curTrack = AudioManager.getInstance().getCurrentTrack();
             long now = System.currentTimeMillis();
 
+            // 1. Instant local IPC update for alts on the same PC
+            LocalPresenceManager.updatePresence(myName, isPlaying, curTrack != null ? curTrack.getTitle() : null);
+
+            // 2. Global presence payload
             JsonObject payload = new JsonObject();
             payload.addProperty("player", myName);
             payload.addProperty("hasMod", true);
