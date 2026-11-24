@@ -619,30 +619,6 @@ public class MusicPlayerScreen extends Screen {
         graphics.fill(artX + 2, artY + 1, artX + artW - 2, artY + 2, 0x45FFFFFF);
         graphics.fill(artX + 2, artY + 2, artX + Math.max(10, artW / 2), artY + 3, 0x20FFFFFF);
 
-        // Bottom subtle gradient shade
-        graphics.fill(artX + 1, artY + artH - 14, artX + artW - 1, artY + artH - 1, 0x65000000);
-
-        // Live bouncing equalizer indicator or status badge on bottom-left of thumbnail
-        if (isPlaying && !isBuffering) {
-            int badgeW = 20;
-            int badgeH = 9;
-            int badgeX = artX + 4;
-            int badgeY = artY + artH - badgeH - 3;
-            drawSoftBox(graphics, badgeX, badgeY, badgeW, badgeH, 2, 0xB0000000, 0x80A855F7);
-            long nowMs = System.currentTimeMillis();
-            int h1 = 2 + (int) (Math.abs(Math.sin(nowMs * 0.007)) * 4);
-            int h2 = 2 + (int) (Math.abs(Math.sin(nowMs * 0.011 + 1.2)) * 4);
-            int h3 = 2 + (int) (Math.abs(Math.sin(nowMs * 0.009 + 2.4)) * 4);
-            graphics.fill(badgeX + 3, badgeY + badgeH - 1 - h1, badgeX + 5, badgeY + badgeH - 1, 0xFFA855F7);
-            graphics.fill(badgeX + 8, badgeY + badgeH - 1 - h2, badgeX + 10, badgeY + badgeH - 1, 0xFFC084FC);
-            graphics.fill(badgeX + 13, badgeY + badgeH - 1 - h3, badgeX + 15, badgeY + badgeH - 1, 0xFFE9D5FF);
-        } else if (isBuffering) {
-            int badgeX = artX + 4;
-            int badgeY = artY + artH - 12;
-            drawSoftBox(graphics, badgeX, badgeY, 26, 9, 2, 0xB0000000, 0x80FFCC00);
-            graphics.text(this.font, Component.literal("§eLOAD"), badgeX + 2, badgeY + 1, 0xFFFFFFFF, false);
-        }
-
         // 2. Track Info & Source
         int infoX = artX + artW + 8;
         int maxTextW = Math.max(40, leftCardW - (infoX - x) - 14);
