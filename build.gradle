@@ -144,6 +144,16 @@ tasks.register("buildTwoReleases") {
     dependsOn tasks.named("jar")
     dependsOn tasks.named("jar26_1_26_2")
     dependsOn tasks.named("jar26_3")
+    doLast {
+        def libsDir = file("${layout.buildDirectory.get().asFile}/libs")
+        if (libsDir.exists()) {
+            libsDir.listFiles().each { f ->
+                if (f.name.contains("26.x")) {
+                    f.delete()
+                }
+            }
+        }
+    }
 }
 
 tasks.register("deployMod") {

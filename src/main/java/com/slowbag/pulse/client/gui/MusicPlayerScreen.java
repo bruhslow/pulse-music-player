@@ -1,6 +1,7 @@
 package com.slowbag.pulse.client.gui;
 
 import com.slowbag.pulse.MusicPlayerMod;
+import com.slowbag.pulse.client.MusicPlayerClientMod;
 import com.slowbag.pulse.client.audio.AudioManager;
 import com.slowbag.pulse.client.audio.AudioTrack;
 import com.slowbag.pulse.client.audio.LocalMusicScanner;
@@ -385,6 +386,9 @@ public class MusicPlayerScreen extends Screen {
     public void onClose() {
         playClickSound();
         setTextInputFocus(false);
+        try {
+            com.slowbag.pulse.client.input.KeybindManager.getInstance().setListening(false);
+        } catch (Throwable ignored) {}
         try {
             super.onClose();
         } catch (Throwable ignored) {}
@@ -1619,16 +1623,32 @@ public class MusicPlayerScreen extends Screen {
                     } else if (i == 1) {
                         // 2. Configurable Hotkey to Open Music Player GUI (Prominently placed on Row 2)
                         com.slowbag.pulse.client.input.KeybindManager km = com.slowbag.pulse.client.input.KeybindManager.getInstance();
-                        int btnW = 96;
+                        int btnW = 104;
                         int btnX = x + w - btnW - 14;
 
                         int maxDescW = btnX - (x + 14) - 6;
                         graphics.text(this.font, Component.literal(truncateToWidth("§fOpen Player Hotkey:", maxDescW)), x + 14, itemY + 3, 0xFFFFFFFF, false);
-                        graphics.text(this.font, Component.literal(truncateToWidth("§8Click to record key or combo (e.g. J, Ctrl+Q)", maxDescW)), x + 14, itemY + 15, 0xFF888888, false);
+                        graphics.text(this.font, Component.literal(truncateToWidth("§8Click to record key or combo (e.g. J, Ctrl+J, Cmd+J)", maxDescW)), x + 14, itemY + 15, 0xFF888888, false);
 
                         boolean bHov = mouseX >= btnX && mouseX <= btnX + btnW && mouseY >= btnY && mouseY <= btnY + btnH;
                         boolean listening = (km != null && km.isListening());
-                        String keyText = listening ? "§e[ Press key... ]" : ("§f[ " + (km != null ? km.getKeybindDisplay() : "J") + " ]");
+
+                        String keyText;
+                        if (listening) {
+                            StringBuilder activeMod = new StringBuilder();
+                            if (MusicPlayerClientMod.isCtrlDown(this.minecraft)) activeMod.append("Ctrl + ");
+                            if (MusicPlayerClientMod.isSuperDown(this.minecraft)) activeMod.append("Cmd + ");
+                            if (MusicPlayerClientMod.isAltDown(this.minecraft)) activeMod.append("Alt + ");
+                            if (MusicPlayerClientMod.isShiftDown(this.minecraft)) activeMod.append("Shift + ");
+                            if (activeMod.length() > 0) {
+                                keyText = "§e[ " + activeMod.toString() + "... ]";
+                            } else {
+                                keyText = "§e[ Press key... ]";
+                            }
+                        } else {
+                            keyText = "§f[ " + (km != null ? km.getKeybindDisplay() : "J") + " ]";
+                        }
+
                         int bgCol = listening ? 0x90F59E0B : (bHov ? 0x80A855F7 : 0x30FFFFFF);
                         int outlineCol = listening ? 0xFFFBBF24 : (bHov ? 0xFFA855F7 : 0x40FFFFFF);
                         drawSoftBox(graphics, btnX, btnY, btnW, btnH, 3, bgCol, outlineCol);
@@ -2926,7 +2946,7 @@ public class MusicPlayerScreen extends Screen {
                     } else if (i == 1) {
                         // 1. Configurable Hotkey (Row 2 in UI)
                         com.slowbag.pulse.client.input.KeybindManager km = com.slowbag.pulse.client.input.KeybindManager.getInstance();
-                        int btnW = 96;
+                        int btnW = 104;
                         int btnX = startX + leftW - btnW - 14;
                         if (rowClicked || (mx >= btnX && mx <= btnX + btnW && my >= btnY && my <= btnY + btnH)) {
                             playClickSound();
@@ -3299,18 +3319,12 @@ public class MusicPlayerScreen extends Screen {
     }
 
     private boolean isControlOrSuperDown(int modifiers) {
-        if ((modifiers & GLFW.GLFW_MOD_CONTROL) != 0 || (modifiers & GLFW.GLFW_MOD_SUPER) != 0) {
+        if ((modifiers & GLFW.GLFW_MOD_CONTROL) != 0 || (modifiers & GLFW.GLFW_MOD_SUPER) != 0 || (modifiers & 2) != 0 || (modifiers & 8) != 0) {
             return true;
         }
         try {
-            if (this.minecraft != null && this.minecraft.getWindow() != null) {
-                long win = this.minecraft.getWindow().handle();
-                if (win != 0) {
-                    return GLFW.glfwGetKey(win, GLFW.GLFW_KEY_LEFT_CONTROL) == GLFW.GLFW_PRESS ||
-                           GLFW.glfwGetKey(win, GLFW.GLFW_KEY_RIGHT_CONTROL) == GLFW.GLFW_PRESS ||
-                           GLFW.glfwGetKey(win, GLFW.GLFW_KEY_LEFT_SUPER) == GLFW.GLFW_PRESS ||
-                           GLFW.glfwGetKey(win, GLFW.GLFW_KEY_RIGHT_SUPER) == GLFW.GLFW_PRESS;
-                }
+            if (this.minecraft != null) {
+                return MusicPlayerClientMod.isCtrlDown(this.minecraft) || MusicPlayerClientMod.isSuperDown(this.minecraft);
             }
         } catch (Throwable ignored) {}
         return false;
@@ -3430,16 +3444,30 @@ public class MusicPlayerScreen extends Screen {
             }
             if (!com.slowbag.pulse.client.input.KeybindManager.isModifierKey(key)) {
                 int canonicalKey = com.slowbag.pulse.client.input.KeybindManager.normalizeToGlfwKeyCode(key, scancode);
-                boolean ctrl = (modifiers & GLFW.GLFW_MOD_CONTROL) != 0 || isControlOrSuperDown(modifiers) || (modifiers & 2) != 0;
-                boolean alt = (modifiers & GLFW.GLFW_MOD_ALT) != 0 || (modifiers & 4) != 0;
-                boolean shift = (modifiers & GLFW.GLFW_MOD_SHIFT) != 0 || (modifiers & 1) != 0;
-                km.setKeybind(canonicalKey, ctrl, alt, shift);
+                boolean ctrl = (modifiers & GLFW.GLFW_MOD_CONTROL) != 0 || (modifiers & 2) != 0 || MusicPlayerClientMod.isCtrlDown(this.minecraft);
+                boolean alt = (modifiers & GLFW.GLFW_MOD_ALT) != 0 || (modifiers & 4) != 0 || MusicPlayerClientMod.isAltDown(this.minecraft);
+                boolean shift = (modifiers & GLFW.GLFW_MOD_SHIFT) != 0 || (modifiers & 1) != 0 || MusicPlayerClientMod.isShiftDown(this.minecraft);
+                boolean superKey = (modifiers & GLFW.GLFW_MOD_SUPER) != 0 || (modifiers & 8) != 0 || MusicPlayerClientMod.isSuperDown(this.minecraft);
+                km.setKeybind(canonicalKey, ctrl, alt, shift, superKey);
                 playClickSound();
                 statusMessage = "§a✔ Hotkey saved: §f" + km.getKeybindDisplay() + " ✨";
                 statusMessageTime = System.currentTimeMillis();
                 return true;
             }
             return true;
+        }
+
+        // Hotkey toggle-close check when not recording and not typing in text boxes
+        if (!km.isListening() && !isSearchFocused && !isUrlFocused && !isRoomNameFocused && !isRoomPasswordFocused && passwordPromptRoom == null) {
+            int canonicalKey = com.slowbag.pulse.client.input.KeybindManager.normalizeToGlfwKeyCode(key, scancode);
+            boolean ctrl = (modifiers & GLFW.GLFW_MOD_CONTROL) != 0 || (modifiers & 2) != 0 || MusicPlayerClientMod.isCtrlDown(this.minecraft);
+            boolean alt = (modifiers & GLFW.GLFW_MOD_ALT) != 0 || (modifiers & 4) != 0 || MusicPlayerClientMod.isAltDown(this.minecraft);
+            boolean shift = (modifiers & GLFW.GLFW_MOD_SHIFT) != 0 || (modifiers & 1) != 0 || MusicPlayerClientMod.isShiftDown(this.minecraft);
+            boolean superKey = (modifiers & GLFW.GLFW_MOD_SUPER) != 0 || (modifiers & 8) != 0 || MusicPlayerClientMod.isSuperDown(this.minecraft);
+            if (km.matches(canonicalKey, ctrl, alt, shift, superKey)) {
+                onClose();
+                return true;
+            }
         }
 
         // Space bar handler for text inputs (since SDL text input does not emit charTyped for space)

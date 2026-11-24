@@ -24,6 +24,7 @@ public class KeybindManager {
     private boolean ctrl = false;
     private boolean alt = false;
     private boolean shift = false;
+    private boolean superKey = false;
     private boolean isListening = false;
 
     private static File getConfigFile() {
@@ -69,6 +70,10 @@ public class KeybindManager {
         return shift;
     }
 
+    public boolean isSuper() {
+        return superKey;
+    }
+
     public boolean isListening() {
         return isListening;
     }
@@ -77,15 +82,30 @@ public class KeybindManager {
         this.isListening = listening;
     }
 
+    public static int getMinecraftKeyCode(int glfwKey) {
+        try {
+            if (com.slowbag.pulse.client.gui.MusicPlayerScreen.IS_SDL) {
+                return getSdlScancodeFromGlfw(glfwKey);
+            }
+        } catch (Throwable ignored) {}
+        return glfwKey;
+    }
+
     public void setKeybind(int key, boolean ctrl, boolean alt, boolean shift) {
+        setKeybind(key, ctrl, alt, shift, false);
+    }
+
+    public void setKeybind(int key, boolean ctrl, boolean alt, boolean shift, boolean superKey) {
         this.keyCode = key;
         this.ctrl = ctrl;
         this.alt = alt;
         this.shift = shift;
+        this.superKey = superKey;
         this.isListening = false;
         try {
             if (com.slowbag.pulse.client.MusicPlayerClientMod.pulseKeyMapping != null) {
-                com.slowbag.pulse.client.MusicPlayerClientMod.pulseKeyMapping.setKey(com.mojang.blaze3d.platform.InputConstants.Type.KEYSYM.getOrCreate(key));
+                int mcKey = getMinecraftKeyCode(key);
+                com.slowbag.pulse.client.MusicPlayerClientMod.pulseKeyMapping.setKey(com.mojang.blaze3d.platform.InputConstants.Type.KEYSYM.getOrCreate(mcKey));
                 net.minecraft.client.KeyMapping.resetMapping();
             }
         } catch (Throwable ignored) {}
@@ -97,6 +117,7 @@ public class KeybindManager {
         this.ctrl = false;
         this.alt = false;
         this.shift = false;
+        this.superKey = false;
         this.isListening = false;
         try {
             if (com.slowbag.pulse.client.MusicPlayerClientMod.pulseKeyMapping != null) {
@@ -115,6 +136,7 @@ public class KeybindManager {
         if (!isConfigured()) return "None";
         StringBuilder sb = new StringBuilder();
         if (ctrl) sb.append("Ctrl + ");
+        if (superKey) sb.append("Cmd + ");
         if (alt) sb.append("Alt + ");
         if (shift) sb.append("Shift + ");
         sb.append(getKeyName(keyCode));
@@ -212,13 +234,14 @@ public class KeybindManager {
     }
 
     public static boolean isModifierKey(int key) {
-        if (key == GLFW.GLFW_KEY_LEFT_CONTROL || key == GLFW.GLFW_KEY_RIGHT_CONTROL ||
-            key == GLFW.GLFW_KEY_LEFT_ALT || key == GLFW.GLFW_KEY_RIGHT_ALT ||
-            key == GLFW.GLFW_KEY_LEFT_SHIFT || key == GLFW.GLFW_KEY_RIGHT_SHIFT ||
-            key == GLFW.GLFW_KEY_LEFT_SUPER || key == GLFW.GLFW_KEY_RIGHT_SUPER) {
+        int normalized = normalizeToGlfwKeyCode(key, 0);
+        if (normalized == GLFW.GLFW_KEY_LEFT_CONTROL || normalized == GLFW.GLFW_KEY_RIGHT_CONTROL ||
+            normalized == GLFW.GLFW_KEY_LEFT_ALT || normalized == GLFW.GLFW_KEY_RIGHT_ALT ||
+            normalized == GLFW.GLFW_KEY_LEFT_SHIFT || normalized == GLFW.GLFW_KEY_RIGHT_SHIFT ||
+            normalized == GLFW.GLFW_KEY_LEFT_SUPER || normalized == GLFW.GLFW_KEY_RIGHT_SUPER) {
             return true;
         }
-        return (key >= 224 && key <= 231);
+        return (key >= 224 && key <= 231) || (key >= 340 && key <= 347);
     }
 
     public static int getSdlScancodeFromGlfw(int glfwKey) {
@@ -342,11 +365,16 @@ public class KeybindManager {
     }
 
     public boolean matches(int pressedKey, boolean hasCtrl, boolean hasAlt, boolean hasShift) {
+        return matches(pressedKey, hasCtrl, hasAlt, hasShift, false);
+    }
+
+    public boolean matches(int pressedKey, boolean hasCtrl, boolean hasAlt, boolean hasShift, boolean hasSuper) {
         if (!isConfigured()) return false;
         if (pressedKey != this.keyCode) return false;
         if (this.ctrl != hasCtrl) return false;
         if (this.alt != hasAlt) return false;
         if (this.shift != hasShift) return false;
+        if (this.superKey != hasSuper) return false;
         return true;
     }
 
@@ -359,10 +387,13 @@ public class KeybindManager {
             if (json.has("ctrl")) this.ctrl = json.get("ctrl").getAsBoolean();
             if (json.has("alt")) this.alt = json.get("alt").getAsBoolean();
             if (json.has("shift")) this.shift = json.get("shift").getAsBoolean();
+            if (json.has("super")) this.superKey = json.get("super").getAsBoolean();
+            if (json.has("cmd")) this.superKey = json.get("cmd").getAsBoolean();
 
             if (isModifierKey(this.keyCode)) {
                 this.keyCode = GLFW.GLFW_KEY_J;
                 this.ctrl = false;
+                this.superKey = false;
                 saveConfig();
             } else {
                 this.keyCode = normalizeToGlfwKeyCode(this.keyCode, 0);
@@ -381,6 +412,7 @@ public class KeybindManager {
             json.addProperty("ctrl", ctrl);
             json.addProperty("alt", alt);
             json.addProperty("shift", shift);
+            json.addProperty("super", superKey);
             try (FileWriter writer = new FileWriter(file)) {
                 writer.write(json.toString());
             }
