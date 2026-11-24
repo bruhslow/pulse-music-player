@@ -145,3 +145,57 @@ tasks.register("buildTwoReleases") {
     dependsOn tasks.named("jar26_1_26_2")
     dependsOn tasks.named("jar26_3")
 }
+
+tasks.register("deployMod") {
+    dependsOn tasks.named("buildTwoReleases")
+    doLast {
+        def userHome = System.getProperty("user.home")
+        def appData = System.getenv("APPDATA")
+
+        // 1. Minecraft 26.3 -> Modrinth ONLY
+        def modrinth26_3 = file("${appData}/ModrinthApp/profiles/Fabric 26.3/mods")
+        if (modrinth26_3.exists()) {
+            try {
+                modrinth26_3.listFiles().each { f ->
+                    if (f.name.contains("pulse-music-player")) f.delete()
+                }
+                def jar3 = tasks.named("jar26_3").get().archiveFile.get().asFile
+                Files.copy(jar3.toPath(), new File(modrinth26_3, jar3.name).toPath(), StandardCopyOption.REPLACE_EXISTING)
+                println("[Pulse Deploy] Deployed 26.3 JAR to Modrinth: ${jar3.name}")
+            } catch (Throwable t) {
+                println("[Pulse Deploy] Modrinth 26.3 JAR is currently active in-game: ${t.message}")
+            }
+        }
+
+        // 2. Minecraft 26.1-26.2 -> Lunar Client ONLY
+        def lunarProfiles = [
+            file("${userHome}/.lunarclient/profiles/main/mods"),
+            file("${userHome}/.lunarclient/profiles/26/mods")
+        ]
+        def jar1_2 = tasks.named("jar26_1_26_2").get().archiveFile.get().asFile
+        lunarProfiles.each { dir ->
+            if (dir.exists()) {
+                try {
+                    dir.listFiles().each { f ->
+                        if (f.name.contains("pulse-music-player")) f.delete()
+                    }
+                    Files.copy(jar1_2.toPath(), new File(dir, jar1_2.name).toPath(), StandardCopyOption.REPLACE_EXISTING)
+                    println("[Pulse Deploy] Deployed 26.1-26.2 JAR to Lunar: ${dir.parentFile.name}")
+                } catch (Throwable t) {
+                    println("[Pulse Deploy] Lunar Client JAR is currently active in-game: ${t.message}")
+                }
+            }
+        }
+
+        // 3. Ensure .minecraft folder never has pulse-music-player
+        def mcMods = file("${appData}/.minecraft/mods")
+        if (mcMods.exists()) {
+            mcMods.listFiles().each { f ->
+                if (f.name.contains("pulse-music-player")) {
+                    f.delete()
+                    println("[Pulse Deploy] Removed mod from .minecraft: ${f.name}")
+                }
+            }
+        }
+    }
+}
