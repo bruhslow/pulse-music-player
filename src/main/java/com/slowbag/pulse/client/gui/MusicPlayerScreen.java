@@ -45,6 +45,20 @@ public class MusicPlayerScreen extends Screen {
     public static final int HERO_ART_WIDTH = 80;
     public static final int HERO_ART_HEIGHT = 52;
 
+    public static final boolean IS_SDL = checkIsSdl();
+    private static boolean checkIsSdl() {
+        try {
+            Class.forName("com.mojang.blaze3d.platform.SDLEventHandler");
+            return true;
+        } catch (Throwable ignored) {
+            return false;
+        }
+    }
+
+    public static boolean isLeftClick(int btn) {
+        return IS_SDL ? (btn == 1 || btn == 0) : (btn == 0);
+    }
+
     // Notification toast on refresh / actions
     private String statusMessage = null;
     private long statusMessageTime = 0;
@@ -353,13 +367,20 @@ public class MusicPlayerScreen extends Screen {
     }
 
     @Override
+    public boolean shouldCloseOnEsc() {
+        return !isSearchFocused && !isUrlFocused && !isRoomNameFocused && !isRoomPasswordFocused && passwordPromptRoom == null;
+    }
+
+    @Override
     public void onClose() {
         playClickSound();
         try {
             super.onClose();
         } catch (Throwable ignored) {}
         try {
-            ScreenCompat.setScreen(this.minecraft != null ? this.minecraft : Minecraft.getInstance(), this.parentScreen);
+            Minecraft mc = this.minecraft != null ? this.minecraft : Minecraft.getInstance();
+            net.minecraft.client.gui.screens.Screen next = (this.parentScreen instanceof net.minecraft.client.gui.screens.ChatScreen) ? null : this.parentScreen;
+            ScreenCompat.setScreen(mc, next);
         } catch (Throwable ignored) {}
         try {
             if (this.minecraft != null && this.parentScreen == null) {
@@ -379,11 +400,14 @@ public class MusicPlayerScreen extends Screen {
             if (mc.mouseHandler != null) {
                 mc.mouseHandler.releaseMouse();
             }
+            // In SDL environments (Minecraft 26.3+), standard input events handle mouse & key cleanly
+            if (IS_SDL) return;
+
             if (mc.getWindow() == null) return;
             long handle = mc.getWindow().handle();
             if (handle == 0) return;
 
-            // Ensure cursor is unlocked, released and visible (fixes 26.3 screen freeze)
+            // Ensure cursor is unlocked, released and visible (fixes GLFW cursor lock)
             if (GLFW.glfwGetInputMode(handle, GLFW.GLFW_CURSOR) != GLFW.GLFW_CURSOR_NORMAL) {
                 GLFW.glfwSetInputMode(handle, GLFW.GLFW_CURSOR, GLFW.GLFW_CURSOR_NORMAL);
             }
@@ -2298,7 +2322,7 @@ public class MusicPlayerScreen extends Screen {
             return true;
         }
 
-        if (btn == 0) { // Left click
+        if (isLeftClick(btn)) {
             int startX = getStartX();
             int startY = getStartY();
             int leftW = getLeftWidth();
@@ -3191,7 +3215,7 @@ public class MusicPlayerScreen extends Screen {
     }
 
     private boolean handleMouseReleased(double mx, double my, int btn) {
-        if (btn == 0) {
+        if (isLeftClick(btn)) {
             if (isDraggingScrubber && draggedScrubRatio >= 0) {
                 audioManager.seekTo(draggedScrubRatio);
             }
@@ -3484,16 +3508,41 @@ public class MusicPlayerScreen extends Screen {
         return false;
     }
 
+    private static int getScanOrKeyCode(KeyEvent event) {
+        if (event == null) return 0;
+        try {
+            java.lang.reflect.Method m = event.getClass().getMethod("keycode");
+            return ((Number) m.invoke(event)).intValue();
+        } catch (Throwable ignored) {}
+        try {
+            java.lang.reflect.Method m = event.getClass().getMethod("scancode");
+            return ((Number) m.invoke(event)).intValue();
+        } catch (Throwable ignored) {}
+        return event.key();
+    }
+
     @Override
     public boolean keyPressed(KeyEvent event) {
         try {
-            if (handleKeyPressed(event.key(), event.scancode(), event.modifiers())) {
+            if (event == null) return false;
+            int key = event.key();
+            int scan = getScanOrKeyCode(event);
+            int mods = event.modifiers();
+            if (handleKeyPressed(key, scan, mods)) {
+                return true;
+            }
+            if (event.isEscape()) {
+                onClose();
                 return true;
             }
             return super.keyPressed(event);
         } catch (Throwable t) {
             MusicPlayerMod.LOGGER.error("[Pulse] Error in keyPressed", t);
-            return false;
+            if (event != null && event.isEscape()) {
+                onClose();
+                return true;
+            }
+            return super.keyPressed(event);
         }
     }
 

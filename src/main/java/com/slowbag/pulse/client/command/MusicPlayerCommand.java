@@ -434,7 +434,11 @@ public class MusicPlayerCommand {
     private static int openGui(int defaultTab) {
         Minecraft client = Minecraft.getInstance();
         client.execute(() -> {
-            MusicPlayerScreen screen = new MusicPlayerScreen(ScreenCompat.getCurrentScreen(client));
+            net.minecraft.client.gui.screens.Screen parent = ScreenCompat.getCurrentScreen(client);
+            if (parent instanceof net.minecraft.client.gui.screens.ChatScreen) {
+                parent = null;
+            }
+            MusicPlayerScreen screen = new MusicPlayerScreen(parent);
             if (defaultTab > 0) {
                 screen.setSelectedTab(defaultTab);
             }
