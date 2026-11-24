@@ -156,6 +156,9 @@ public class MusicPlayerScreen extends Screen {
         this.draggedScrubRatio = -1.0;
         this.wasEscDown = false;
         this.wasLeftMouseDown = false;
+        if (this.minecraft != null) {
+            ScreenCompat.handleMouseRelease(this.minecraft, this);
+        }
         if (audioManager.getCurrentTrack() != null) {
             AudioTrack cur = audioManager.getCurrentTrack();
             String art = cur.getArtworkUrl();
@@ -360,9 +363,31 @@ public class MusicPlayerScreen extends Screen {
 
     private void pollDirectInputSafety(int mouseX, int mouseY) {
         try {
-            if (this.minecraft == null || this.minecraft.getWindow() == null) return;
+            if (this.minecraft == null) return;
+            if (this.minecraft.mouseHandler != null) {
+                this.minecraft.mouseHandler.releaseMouse();
+            }
+            if (this.minecraft.getWindow() == null) return;
             long handle = this.minecraft.getWindow().handle();
             if (handle == 0) return;
+
+            // Ensure cursor is unlocked, released and visible (fixes 26.3 screen freeze)
+            if (GLFW.glfwGetInputMode(handle, GLFW.GLFW_CURSOR) != GLFW.GLFW_CURSOR_NORMAL) {
+                GLFW.glfwSetInputMode(handle, GLFW.GLFW_CURSOR, GLFW.GLFW_CURSOR_NORMAL);
+            }
+
+            // Accurate mouse coordinates directly from GLFW window
+            double curX = mouseX;
+            double curY = mouseY;
+            int winW = this.minecraft.getWindow().getWidth();
+            int winH = this.minecraft.getWindow().getHeight();
+            if (winW > 0 && winH > 0 && this.width > 0 && this.height > 0) {
+                double[] xPos = new double[1];
+                double[] yPos = new double[1];
+                GLFW.glfwGetCursorPos(handle, xPos, yPos);
+                curX = xPos[0] * (double) this.width / (double) winW;
+                curY = yPos[0] * (double) this.height / (double) winH;
+            }
 
             // 1. Direct ESC key safety fallback
             boolean escDown = GLFW.glfwGetKey(handle, GLFW.GLFW_KEY_ESCAPE) == GLFW.GLFW_PRESS;
@@ -377,20 +402,23 @@ public class MusicPlayerScreen extends Screen {
             boolean mouseDown = GLFW.glfwGetMouseButton(handle, GLFW.GLFW_MOUSE_BUTTON_LEFT) == GLFW.GLFW_PRESS;
             if (mouseDown && !this.wasLeftMouseDown) {
                 this.wasLeftMouseDown = true;
-                if (System.currentTimeMillis() - lastClickHandledTime > 150L) {
-                    handleMouseClicked(normalizeX(mouseX), normalizeY(mouseY), GLFW.GLFW_MOUSE_BUTTON_LEFT, false);
+                if (System.currentTimeMillis() - lastClickHandledTime > 120L) {
+                    handleMouseClicked(curX, curY, GLFW.GLFW_MOUSE_BUTTON_LEFT, false);
                 }
             } else if (!mouseDown && this.wasLeftMouseDown) {
                 this.wasLeftMouseDown = false;
-                handleMouseReleased(normalizeX(mouseX), normalizeY(mouseY), GLFW.GLFW_MOUSE_BUTTON_LEFT);
+                handleMouseReleased(curX, curY, GLFW.GLFW_MOUSE_BUTTON_LEFT);
             } else if (mouseDown && (isDraggingScrubber || isDraggingVolume)) {
-                handleMouseDragged(normalizeX(mouseX), normalizeY(mouseY), GLFW.GLFW_MOUSE_BUTTON_LEFT, 0, 0);
+                handleMouseDragged(curX, curY, GLFW.GLFW_MOUSE_BUTTON_LEFT, 0, 0);
             }
         } catch (Throwable ignored) {}
     }
 
     @Override
     public void extractRenderState(GuiGraphicsExtractor graphics, int mouseX, int mouseY, float delta) {
+        try {
+            super.extractRenderState(graphics, mouseX, mouseY, delta);
+        } catch (Throwable ignored) {}
         try {
             pollDirectInputSafety(mouseX, mouseY);
             openAnimationProgress = AnimationUtil.lerp(openAnimationProgress, 1.0f, 0.25f);
@@ -648,11 +676,12 @@ public class MusicPlayerScreen extends Screen {
 
         graphics.text(this.font, Component.literal("§7" + totalStr), scrubX + scrubW + 4, scrubY - 2, 0xFFA0988E, false);
 
-        // 4. Live Audio Waveform Equalizer (Under scrubber)
+        // 4. Live Audio Waveform Equalizer (Positioned under scrubber, never overlapping album art)
         float[] rawBands = audioManager.getVisualizerBands();
-        int waveX = x + 8;
+        int waveX = infoX;
+        int maxWaveW = Math.max(28, leftCardW - (infoX - x) - 16);
+        int waveBars = Math.max(8, maxWaveW / 7);
         int waveY = y + 74;
-        int waveBars = Math.max(16, (leftCardW - 16) / 7);
         int maxWaveH = 8;
         long timeMs = System.currentTimeMillis();
         double t = timeMs / 1000.0;
@@ -683,6 +712,7 @@ public class MusicPlayerScreen extends Screen {
 
             int barH = Math.max(2, Math.min(maxWaveH, (int) (smoothWaveBars[barIdx] * maxWaveH)));
             int barX = waveX + (i * 7);
+            if (barX + 5 > waveX + maxWaveW) break;
             int barY = waveY - barH;
 
             // Warm amber gradient with bright golden caps

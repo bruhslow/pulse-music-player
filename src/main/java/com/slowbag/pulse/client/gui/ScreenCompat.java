@@ -29,17 +29,26 @@ public final class ScreenCompat {
             }
         } catch (Throwable ignored) {}
 
-        // 2. Try client.screen field (Minecraft 26.1.x / standard Fabric)
+        // 2. Try any field on Minecraft of type Screen (Minecraft 26.1.x / standard Fabric)
         try {
-            Field f = Minecraft.class.getDeclaredField("screen");
-            f.setAccessible(true);
-            return (Screen) f.get(client);
+            for (Field f : Minecraft.class.getDeclaredFields()) {
+                if (Screen.class.isAssignableFrom(f.getType())) {
+                    f.setAccessible(true);
+                    Object s = f.get(client);
+                    if (s != null) return (Screen) s;
+                }
+            }
         } catch (Throwable ignored) {}
 
-        // 3. Try client.getScreen() method
+        // 3. Try any method on Minecraft returning Screen with 0 parameters
         try {
-            Method m = Minecraft.class.getMethod("getScreen");
-            return (Screen) m.invoke(client);
+            for (Method m : Minecraft.class.getMethods()) {
+                if (m.getParameterCount() == 0 && Screen.class.isAssignableFrom(m.getReturnType())) {
+                    m.setAccessible(true);
+                    Object s = m.invoke(client);
+                    if (s != null) return (Screen) s;
+                }
+            }
         } catch (Throwable ignored) {}
 
         return null;
@@ -65,47 +74,71 @@ public final class ScreenCompat {
             return;
         }
 
-        // 1. Try standard Minecraft.setScreen(Screen)
-        try {
-            Method m = Minecraft.class.getMethod("setScreen", Screen.class);
-            m.invoke(c, newScreen);
-            return;
-        } catch (Throwable ignored) {}
-
-        // 2. Try Minecraft.setScreenAndShow(Screen)
-        try {
-            Method m = Minecraft.class.getMethod("setScreenAndShow", Screen.class);
-            m.invoke(c, newScreen);
-            return;
-        } catch (Throwable ignored) {}
-
-        // 3. Try client.gui.setScreen(Screen)
+        // 1. Direct call to c.gui.setScreen (26.2+)
         try {
             if (c.gui != null) {
-                Method m = c.gui.getClass().getMethod("setScreen", Screen.class);
-                m.invoke(c.gui, newScreen);
+                c.gui.setScreen(newScreen);
+                handleMouseRelease(c, newScreen);
                 return;
             }
         } catch (Throwable ignored) {}
 
-        // 4. Direct field assignment fallback as last resort
+        // 2. Search for any method on Minecraft taking (Screen) and returning void (26.1 / standard MC)
         try {
-            Field f = Minecraft.class.getDeclaredField("screen");
-            f.setAccessible(true);
-            Screen old = (Screen) f.get(c);
-            if (old != null) {
-                try { old.removed(); } catch (Throwable ignored) {}
+            for (Method m : Minecraft.class.getMethods()) {
+                if (m.getParameterCount() == 1 && Screen.class.isAssignableFrom(m.getParameterTypes()[0]) && m.getReturnType() == void.class) {
+                    m.setAccessible(true);
+                    m.invoke(c, newScreen);
+                    handleMouseRelease(c, newScreen);
+                    return;
+                }
             }
-            f.set(c, newScreen);
-            if (newScreen != null) {
-                try {
-                    int w = c.getWindow().getGuiScaledWidth();
-                    int h = c.getWindow().getGuiScaledHeight();
-                    newScreen.init(w, h);
-                } catch (Throwable ignored) {}
+        } catch (Throwable ignored) {}
+
+        // 3. Direct field assignment fallback as last resort
+        try {
+            for (Field f : Minecraft.class.getDeclaredFields()) {
+                if (Screen.class.isAssignableFrom(f.getType())) {
+                    f.setAccessible(true);
+                    Screen old = (Screen) f.get(c);
+                    if (old != null) {
+                        try { old.removed(); } catch (Throwable ignored) {}
+                    }
+                    f.set(c, newScreen);
+                    if (newScreen != null) {
+                        try {
+                            int w = c.getWindow().getGuiScaledWidth();
+                            int h = c.getWindow().getGuiScaledHeight();
+                            newScreen.init(w, h);
+                        } catch (Throwable ignored) {}
+                    }
+                    handleMouseRelease(c, newScreen);
+                    return;
+                }
             }
         } catch (Throwable t) {
             MusicPlayerMod.LOGGER.error("[Pulse] Failed to setScreen", t);
         }
+    }
+
+    public static void handleMouseRelease(Minecraft c, Screen newScreen) {
+        if (c == null) return;
+        try {
+            if (newScreen != null) {
+                if (c.mouseHandler != null) {
+                    c.mouseHandler.releaseMouse();
+                }
+                if (c.getWindow() != null) {
+                    long win = c.getWindow().handle();
+                    if (win != 0) {
+                        org.lwjgl.glfw.GLFW.glfwSetInputMode(win, org.lwjgl.glfw.GLFW.GLFW_CURSOR, org.lwjgl.glfw.GLFW.GLFW_CURSOR_NORMAL);
+                    }
+                }
+            } else {
+                if (c.level != null && c.mouseHandler != null) {
+                    c.mouseHandler.grabMouse();
+                }
+            }
+        } catch (Throwable ignored) {}
     }
 }
