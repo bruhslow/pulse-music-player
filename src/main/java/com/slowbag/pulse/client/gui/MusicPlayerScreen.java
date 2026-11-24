@@ -354,7 +354,18 @@ public class MusicPlayerScreen extends Screen {
 
     @Override
     public void onClose() {
-        ScreenCompat.setScreen(this.minecraft, this.parentScreen);
+        playClickSound();
+        try {
+            super.onClose();
+        } catch (Throwable ignored) {}
+        try {
+            ScreenCompat.setScreen(this.minecraft != null ? this.minecraft : Minecraft.getInstance(), this.parentScreen);
+        } catch (Throwable ignored) {}
+        try {
+            if (this.minecraft != null && this.parentScreen == null) {
+                ScreenCompat.handleMouseRelease(this.minecraft, null);
+            }
+        } catch (Throwable ignored) {}
     }
 
     public void method_25419() {
@@ -363,12 +374,13 @@ public class MusicPlayerScreen extends Screen {
 
     private void pollDirectInputSafety(int mouseX, int mouseY) {
         try {
-            if (this.minecraft == null) return;
-            if (this.minecraft.mouseHandler != null) {
-                this.minecraft.mouseHandler.releaseMouse();
+            Minecraft mc = this.minecraft != null ? this.minecraft : Minecraft.getInstance();
+            if (mc == null) return;
+            if (mc.mouseHandler != null) {
+                mc.mouseHandler.releaseMouse();
             }
-            if (this.minecraft.getWindow() == null) return;
-            long handle = this.minecraft.getWindow().handle();
+            if (mc.getWindow() == null) return;
+            long handle = mc.getWindow().handle();
             if (handle == 0) return;
 
             // Ensure cursor is unlocked, released and visible (fixes 26.3 screen freeze)
@@ -376,40 +388,31 @@ public class MusicPlayerScreen extends Screen {
                 GLFW.glfwSetInputMode(handle, GLFW.GLFW_CURSOR, GLFW.GLFW_CURSOR_NORMAL);
             }
 
-            // Accurate mouse coordinates directly from GLFW window
-            double curX = mouseX;
-            double curY = mouseY;
-            int winW = this.minecraft.getWindow().getWidth();
-            int winH = this.minecraft.getWindow().getHeight();
-            if (winW > 0 && winH > 0 && this.width > 0 && this.height > 0) {
-                double[] xPos = new double[1];
-                double[] yPos = new double[1];
-                GLFW.glfwGetCursorPos(handle, xPos, yPos);
-                curX = xPos[0] * (double) this.width / (double) winW;
-                curY = yPos[0] * (double) this.height / (double) winH;
-            }
-
-            // 1. Direct ESC key safety fallback
+            // 1. Direct hardware ESC key: immediate exit
             boolean escDown = GLFW.glfwGetKey(handle, GLFW.GLFW_KEY_ESCAPE) == GLFW.GLFW_PRESS;
-            if (escDown && !this.wasEscDown) {
-                this.wasEscDown = true;
-                handleKeyPressed(GLFW.GLFW_KEY_ESCAPE, 0, 0);
-            } else if (!escDown) {
+            if (escDown) {
+                if (!this.wasEscDown) {
+                    this.wasEscDown = true;
+                    onClose();
+                }
+            } else {
                 this.wasEscDown = false;
             }
 
-            // 2. Direct Left Mouse Button safety fallback
+            // 2. Direct hardware Left Mouse Button: clicks using exact GUI coordinates that hover uses!
             boolean mouseDown = GLFW.glfwGetMouseButton(handle, GLFW.GLFW_MOUSE_BUTTON_LEFT) == GLFW.GLFW_PRESS;
-            if (mouseDown && !this.wasLeftMouseDown) {
-                this.wasLeftMouseDown = true;
-                if (System.currentTimeMillis() - lastClickHandledTime > 120L) {
-                    handleMouseClicked(curX, curY, GLFW.GLFW_MOUSE_BUTTON_LEFT, false);
+            if (mouseDown) {
+                if (!this.wasLeftMouseDown) {
+                    this.wasLeftMouseDown = true;
+                    handleMouseClicked(mouseX, mouseY, GLFW.GLFW_MOUSE_BUTTON_LEFT, false);
+                } else if (isDraggingScrubber || isDraggingVolume) {
+                    handleMouseDragged(mouseX, mouseY, GLFW.GLFW_MOUSE_BUTTON_LEFT, 0, 0);
                 }
-            } else if (!mouseDown && this.wasLeftMouseDown) {
-                this.wasLeftMouseDown = false;
-                handleMouseReleased(curX, curY, GLFW.GLFW_MOUSE_BUTTON_LEFT);
-            } else if (mouseDown && (isDraggingScrubber || isDraggingVolume)) {
-                handleMouseDragged(curX, curY, GLFW.GLFW_MOUSE_BUTTON_LEFT, 0, 0);
+            } else {
+                if (this.wasLeftMouseDown) {
+                    this.wasLeftMouseDown = false;
+                    handleMouseReleased(mouseX, mouseY, GLFW.GLFW_MOUSE_BUTTON_LEFT);
+                }
             }
         } catch (Throwable ignored) {}
     }
@@ -618,11 +621,7 @@ public class MusicPlayerScreen extends Screen {
 
         // 2. Track Info & Source
         int infoX = artX + artW + 8;
-        int starBtnW = 16;
-        int starBtnH = 16;
-        int starX = x + leftCardW - starBtnW - 4;
-        int starY = y + 6;
-        int maxTextW = Math.max(20, (starX - 8) - infoX);
+        int maxTextW = Math.max(40, leftCardW - (infoX - x) - 14);
 
         String title = (track != null) ? track.getTitle() : "No Track Selected";
         String artist = (track != null) ? track.getArtist() : "Select a track from For You, Local, or URL";
@@ -632,13 +631,6 @@ public class MusicPlayerScreen extends Screen {
         graphics.text(this.font, Component.literal(titlePrefix + truncateToWidth(title, maxTextW, true)), infoX, y + 7, 0xFFFFFFFF, true);
         graphics.text(this.font, Component.literal("§7" + truncateToWidth(artist, maxTextW, false)), infoX, y + 19, 0xFFA0988E, false);
         graphics.text(this.font, Component.literal("§8" + sourceTag), infoX, y + 29, 0xFF888888, false);
-
-        // Star / Favorite toggle button on Hero card (isolated from title)
-        boolean isFav = (track != null) && com.slowbag.pulse.client.audio.FavoritesManager.getInstance().isFavorite(track);
-        boolean starHover = mouseX >= starX - 1 && mouseX <= starX + starBtnW + 1 && mouseY >= starY - 1 && mouseY <= starY + starBtnH + 1;
-        drawSoftBox(graphics, starX, starY, starBtnW, starBtnH, 3, isFav ? 0x40A855F7 : (starHover ? 0x30FFFFFF : 0x14FFFFFF), isFav ? 0xFFA855F7 : (starHover ? 0x70FFFFFF : 0x25FFFFFF));
-        String starIcon = isFav ? "§d★" : (starHover ? "§f★" : "§7☆");
-        graphics.centeredText(this.font, Component.literal(starIcon), starX + starBtnW / 2, starY + 4, 0xFFFFFFFF);
 
         // 3. Time Display & Progress Scrubber
         int scrubX = infoX + 26;
@@ -768,7 +760,7 @@ public class MusicPlayerScreen extends Screen {
         // Row 2: Secondary Controls: Loop & Star (Curvy rounded buttons)
         int row2Y = y + 48;
         boolean loop = audioManager.isLoopCurrent();
-        isFav = (track != null) && com.slowbag.pulse.client.audio.FavoritesManager.getInstance().isFavorite(track);
+        boolean isFav = (track != null) && com.slowbag.pulse.client.audio.FavoritesManager.getInstance().isFavorite(track);
         drawGlassButton(graphics, ctrlX + 8, row2Y, 52, 16, loop ? "§d🔁 Loop" : "§7🔁 Loop", loop ? 0xFFA855F7 : 0x25FFFFFF, mouseX, mouseY);
         drawGlassButton(graphics, ctrlX + 64, row2Y, 52, 16, isFav ? "§d★ Star" : "§7☆ Star", isFav ? 0xFFA855F7 : 0x25FFFFFF, mouseX, mouseY);
 
@@ -2377,21 +2369,6 @@ public class MusicPlayerScreen extends Screen {
                 playClickSound();
                 isExpanded = !isExpanded;
                 return true;
-            }
-
-            // Star / Favorite toggle on Hero card
-            int starBtnW = 16;
-            int starBtnH = 16;
-            int starX = heroX + leftCardW - starBtnW - 4;
-            int starY = heroY + 6;
-            if (mx >= starX - 2 && mx <= starX + starBtnW + 2 && my >= starY - 2 && my <= starY + starBtnH + 2) {
-                if (audioManager.getCurrentTrack() != null) {
-                    playClickSound();
-                    boolean fav = com.slowbag.pulse.client.audio.FavoritesManager.getInstance().toggleFavorite(audioManager.getCurrentTrack());
-                    statusMessage = fav ? "§a★ Starred song added with love! ✨" : "§7☆ Removed from your favorites. We'll miss it! 💕";
-                    statusMessageTime = System.currentTimeMillis();
-                    return true;
-                }
             }
 
             // Timeline Progress Scrubber
