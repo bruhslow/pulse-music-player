@@ -173,6 +173,7 @@ public class MusicPlayerScreen extends Screen {
         if (this.minecraft != null) {
             ScreenCompat.handleMouseRelease(this.minecraft, this);
         }
+        setTextInputFocus(true);
         if (audioManager.getCurrentTrack() != null) {
             AudioTrack cur = audioManager.getCurrentTrack();
             String art = cur.getArtworkUrl();
@@ -371,9 +372,18 @@ public class MusicPlayerScreen extends Screen {
         return !isSearchFocused && !isUrlFocused && !isRoomNameFocused && !isRoomPasswordFocused && passwordPromptRoom == null;
     }
 
+    public boolean capturesInput() {
+        return isSearchFocused || isUrlFocused || isRoomNameFocused || isRoomPasswordFocused || passwordPromptRoom != null;
+    }
+
+    public boolean isInputCaptured() {
+        return capturesInput();
+    }
+
     @Override
     public void onClose() {
         playClickSound();
+        setTextInputFocus(false);
         try {
             super.onClose();
         } catch (Throwable ignored) {}
@@ -389,8 +399,57 @@ public class MusicPlayerScreen extends Screen {
         } catch (Throwable ignored) {}
     }
 
+    @Override
+    public void removed() {
+        super.removed();
+        setTextInputFocus(false);
+    }
+
     public void method_25419() {
         onClose();
+    }
+
+    private boolean wasTextInputActive = false;
+
+    public void setTextInputFocus(boolean focused) {
+        this.wasTextInputActive = focused;
+        try {
+            Minecraft mc = this.minecraft != null ? this.minecraft : Minecraft.getInstance();
+            if (mc != null) {
+                try {
+                    java.lang.reflect.Method m = mc.getClass().getMethod("onTextInputFocusChange", net.minecraft.client.gui.components.events.GuiEventListener.class, boolean.class);
+                    m.invoke(mc, this, focused);
+                } catch (Throwable t) {
+                    for (java.lang.reflect.Method m : mc.getClass().getMethods()) {
+                        if (m.getName().equals("onTextInputFocusChange") && m.getParameterCount() == 2) {
+                            m.invoke(mc, this, focused);
+                            break;
+                        }
+                    }
+                }
+            }
+        } catch (Throwable ignored) {}
+
+        // Direct SDL text input trigger for Minecraft 26.3+ (SDLKeyboard.SDL_StartTextInput)
+        try {
+            Minecraft mc = this.minecraft != null ? this.minecraft : Minecraft.getInstance();
+            if (mc != null && mc.getWindow() != null) {
+                long handle = mc.getWindow().handle();
+                if (handle != 0) {
+                    Class<?> sdlKeyboard = Class.forName("org.lwjgl.sdl.SDLKeyboard");
+                    String methodName = focused ? "SDL_StartTextInput" : "SDL_StopTextInput";
+                    java.lang.reflect.Method m = sdlKeyboard.getMethod(methodName, long.class);
+                    m.invoke(null, handle);
+                }
+            }
+        } catch (Throwable ignored) {}
+    }
+
+    private void updateTextInputState() {
+        boolean needsInput = isSearchFocused || isUrlFocused || isRoomNameFocused || isRoomPasswordFocused || passwordPromptRoom != null || (isExpanded && (selectedTab == 0 || selectedTab == 3));
+        if (needsInput != this.wasTextInputActive) {
+            setTextInputFocus(needsInput);
+        }
     }
 
     private void pollDirectInputSafety(int mouseX, int mouseY) {
@@ -421,6 +480,7 @@ public class MusicPlayerScreen extends Screen {
         } catch (Throwable ignored) {}
         try {
             pollDirectInputSafety(mouseX, mouseY);
+            updateTextInputState();
             openAnimationProgress = AnimationUtil.lerp(openAnimationProgress, 1.0f, 0.25f);
             float ease = AnimationUtil.easeOutCubic(openAnimationProgress);
 
@@ -3384,11 +3444,12 @@ public class MusicPlayerScreen extends Screen {
             return true;
         }
 
-        if (isSearchFocused) {
+        if (isSearchFocused || (isExpanded && selectedTab == 0)) {
             if (isPasteKey) {
                 String clip = getClipboardString();
                 if (!clip.isBlank()) {
                     searchQuery += clip;
+                    isSearchFocused = true;
                     statusMessage = "§a📋 Pasted: " + truncate(clip, 20) + " ✨";
                     statusMessageTime = System.currentTimeMillis();
                 }
@@ -3517,6 +3578,22 @@ public class MusicPlayerScreen extends Screen {
         return false;
     }
 
+    private static int getCharacterCodepoint(CharacterEvent event) {
+        if (event == null) return 0;
+        try {
+            return event.codepoint();
+        } catch (Throwable ignored) {}
+        try {
+            java.lang.reflect.Method m = event.getClass().getMethod("codepoint");
+            return ((Number) m.invoke(event)).intValue();
+        } catch (Throwable ignored) {}
+        try {
+            String s = event.codepointAsString();
+            if (s != null && !s.isEmpty()) return s.codePointAt(0);
+        } catch (Throwable ignored) {}
+        return 0;
+    }
+
     private boolean handleCharTyped(char ch, int modifiers) {
         if (Character.isISOControl(ch) || ch < 32 || ch == 127) {
             return false;
@@ -3537,10 +3614,11 @@ public class MusicPlayerScreen extends Screen {
             }
         }
 
-        if (isSearchFocused) {
+        if (isSearchFocused || (isExpanded && selectedTab == 0)) {
             searchQuery += ch;
+            isSearchFocused = true;
             return true;
-        } else if (isUrlFocused || selectedTab == 3) {
+        } else if (isUrlFocused || (isExpanded && selectedTab == 3)) {
             customUrl += ch;
             isUrlFocused = true;
             return true;
@@ -3551,7 +3629,8 @@ public class MusicPlayerScreen extends Screen {
     @Override
     public boolean charTyped(CharacterEvent event) {
         try {
-            if (handleCharTyped((char) event.codepoint(), 0)) {
+            int cp = getCharacterCodepoint(event);
+            if (cp > 0 && handleCharTyped((char) cp, 0)) {
                 return true;
             }
             return super.charTyped(event);
