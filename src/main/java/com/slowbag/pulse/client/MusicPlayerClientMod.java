@@ -22,6 +22,7 @@ public class MusicPlayerClientMod implements ClientModInitializer {
 
     public static KeyMapping pulseKeyMapping;
     private static boolean wasHotkeyDown = false;
+    private static boolean wasInGame = false;
 
     @Override
     public void onInitializeClient() {
@@ -76,7 +77,7 @@ public class MusicPlayerClientMod implements ClientModInitializer {
             MusicPlayerMod.LOGGER.warn("[Music Player] Failed to init badge manager", t);
         }
 
-        // 6. Clean up rooms on server disconnect or client stopping, and query rooms on join
+        // 6. Clean up rooms on server disconnect or client stopping, and stop music
         try {
             ClientPlayConnectionEvents.JOIN.register((handler, sender, client) -> {
                 try {
@@ -85,22 +86,37 @@ public class MusicPlayerClientMod implements ClientModInitializer {
                 } catch (Throwable ignored) {}
             });
             ClientPlayConnectionEvents.DISCONNECT.register((handler, client) -> {
-                PartyManager.getInstance().leaveRoom();
+                try {
+                    PartyManager.getInstance().leaveRoom();
+                    AudioManager.getInstance().forceStop();
+                } catch (Throwable ignored) {}
             });
             ClientLifecycleEvents.CLIENT_STOPPING.register(client -> {
-                PartyManager.getInstance().leaveRoom();
-                AudioManager.getInstance().stop();
+                try {
+                    PartyManager.getInstance().leaveRoom();
+                    AudioManager.getInstance().forceStop();
+                } catch (Throwable ignored) {}
             });
             Runtime.getRuntime().addShutdownHook(new Thread(() -> {
                 try {
                     PartyManager.getInstance().leaveRoom();
-                    AudioManager.getInstance().stop();
+                    AudioManager.getInstance().forceStop();
                 } catch (Throwable ignored) {}
             }, "MusicPlayer-ShutdownHook"));
         } catch (Throwable ignored) {}
 
         // 7. Tick listener for hotkey triggers (works natively across Linux, Windows, macOS, SDL and GLFW)
         ClientTickEvents.END_CLIENT_TICK.register(client -> {
+            boolean inGame = (client != null && client.getConnection() != null && client.level != null);
+            if (wasInGame && !inGame) {
+                // Automatically stop music whenever player leaves game (singleplayer or multiplayer)
+                try {
+                    PartyManager.getInstance().leaveRoom();
+                    AudioManager.getInstance().forceStop();
+                } catch (Throwable ignored) {}
+            }
+            wasInGame = inGame;
+
             if (client == null || client.player == null || client.gui == null) {
                 wasHotkeyDown = false;
                 return;

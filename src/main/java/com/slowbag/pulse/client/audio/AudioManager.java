@@ -841,8 +841,7 @@ public class AudioManager {
         } catch (Throwable ignored) {}
     }
 
-    public synchronized void stop() {
-        if (!checkHostPermission("stop playback")) return;
+    public synchronized void forceStop() {
         sessionCounter.incrementAndGet();
         this.isPlaying = false;
         this.isPaused = false;
@@ -853,6 +852,11 @@ public class AudioManager {
                 l.onPlaybackStateChanged(false, false);
             } catch (Throwable ignored) {}
         }
+    }
+
+    public synchronized void stop() {
+        if (!checkHostPermission("stop playback")) return;
+        forceStop();
     }
 
     public synchronized void next() {
