@@ -411,33 +411,6 @@ public class MusicPlayerScreen extends Screen {
             if (GLFW.glfwGetInputMode(handle, GLFW.GLFW_CURSOR) != GLFW.GLFW_CURSOR_NORMAL) {
                 GLFW.glfwSetInputMode(handle, GLFW.GLFW_CURSOR, GLFW.GLFW_CURSOR_NORMAL);
             }
-
-            // 1. Direct hardware ESC key: immediate exit
-            boolean escDown = GLFW.glfwGetKey(handle, GLFW.GLFW_KEY_ESCAPE) == GLFW.GLFW_PRESS;
-            if (escDown) {
-                if (!this.wasEscDown) {
-                    this.wasEscDown = true;
-                    onClose();
-                }
-            } else {
-                this.wasEscDown = false;
-            }
-
-            // 2. Direct hardware Left Mouse Button: clicks using exact GUI coordinates that hover uses!
-            boolean mouseDown = GLFW.glfwGetMouseButton(handle, GLFW.GLFW_MOUSE_BUTTON_LEFT) == GLFW.GLFW_PRESS;
-            if (mouseDown) {
-                if (!this.wasLeftMouseDown) {
-                    this.wasLeftMouseDown = true;
-                    handleMouseClicked(mouseX, mouseY, GLFW.GLFW_MOUSE_BUTTON_LEFT, false);
-                } else if (isDraggingScrubber || isDraggingVolume) {
-                    handleMouseDragged(mouseX, mouseY, GLFW.GLFW_MOUSE_BUTTON_LEFT, 0, 0);
-                }
-            } else {
-                if (this.wasLeftMouseDown) {
-                    this.wasLeftMouseDown = false;
-                    handleMouseReleased(mouseX, mouseY, GLFW.GLFW_MOUSE_BUTTON_LEFT);
-                }
-            }
         } catch (Throwable ignored) {}
     }
 
@@ -3497,6 +3470,17 @@ public class MusicPlayerScreen extends Screen {
         return event.key();
     }
 
+    private static boolean isEscapeKey(KeyEvent event, int key) {
+        if (key == 256 || key == GLFW.GLFW_KEY_ESCAPE) return true;
+        if (event == null) return false;
+        try {
+            java.lang.reflect.Method m = event.getClass().getMethod("isEscape");
+            return Boolean.TRUE.equals(m.invoke(event));
+        } catch (Throwable ignored) {
+            return false;
+        }
+    }
+
     @Override
     public boolean keyPressed(KeyEvent event) {
         try {
@@ -3507,14 +3491,14 @@ public class MusicPlayerScreen extends Screen {
             if (handleKeyPressed(key, scan, mods)) {
                 return true;
             }
-            if (event.isEscape()) {
+            if (isEscapeKey(event, key)) {
                 onClose();
                 return true;
             }
             return super.keyPressed(event);
         } catch (Throwable t) {
             MusicPlayerMod.LOGGER.error("[Pulse] Error in keyPressed", t);
-            if (event != null && event.isEscape()) {
+            if (event != null && isEscapeKey(event, event.key())) {
                 onClose();
                 return true;
             }
