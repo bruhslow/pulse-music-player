@@ -72,6 +72,7 @@ public class MusicPlayerScreen extends Screen {
 
     // Rooms (Party Rooms) state
     private boolean isCreatingRoom = false;
+    private long lastSpaceTime = 0;
     private String newRoomName = "";
     private boolean isRoomNameFocused = false;
     private String newRoomPassword = "";
@@ -3344,7 +3345,7 @@ public class MusicPlayerScreen extends Screen {
         }
 
         if (passwordPromptRoom != null) {
-            if (key == GLFW.GLFW_KEY_ESCAPE) {
+            if (isEscapeKey(key)) {
                 playClickSound();
                 passwordPromptRoom = null;
                 promptPasswordText = "";
@@ -3358,12 +3359,12 @@ public class MusicPlayerScreen extends Screen {
                 }
                 return true;
             }
-            if (key == GLFW.GLFW_KEY_BACKSPACE) {
+            if (isBackspaceKey(key)) {
                 if (!promptPasswordText.isEmpty()) {
                     promptPasswordText = promptPasswordText.substring(0, promptPasswordText.length() - 1);
                 }
                 return true;
-            } else if (key == GLFW.GLFW_KEY_ENTER || key == GLFW.GLFW_KEY_KP_ENTER) {
+            } else if (isEnterKey(key)) {
                 playClickSound();
                 submitPasswordPrompt();
                 return true;
@@ -3378,10 +3379,10 @@ public class MusicPlayerScreen extends Screen {
                     if (!clip.isBlank()) newRoomName += clip.trim();
                     return true;
                 }
-                if (key == GLFW.GLFW_KEY_BACKSPACE) {
+                if (isBackspaceKey(key)) {
                     if (!newRoomName.isEmpty()) newRoomName = newRoomName.substring(0, newRoomName.length() - 1);
                     return true;
-                } else if (key == GLFW.GLFW_KEY_ENTER || key == GLFW.GLFW_KEY_TAB) {
+                } else if (isEnterKey(key) || key == GLFW.GLFW_KEY_TAB || key == 43) {
                     isRoomNameFocused = false;
                     isRoomPasswordFocused = true;
                     return true;
@@ -3392,10 +3393,10 @@ public class MusicPlayerScreen extends Screen {
                     if (!clip.isBlank()) newRoomPassword += clip.trim();
                     return true;
                 }
-                if (key == GLFW.GLFW_KEY_BACKSPACE) {
+                if (isBackspaceKey(key)) {
                     if (!newRoomPassword.isEmpty()) newRoomPassword = newRoomPassword.substring(0, newRoomPassword.length() - 1);
                     return true;
-                } else if (key == GLFW.GLFW_KEY_ENTER || key == GLFW.GLFW_KEY_KP_ENTER) {
+                } else if (isEnterKey(key)) {
                     String finalName = newRoomName.trim();
                     if (finalName.isEmpty()) {
                         try {
@@ -3420,28 +3421,50 @@ public class MusicPlayerScreen extends Screen {
         // Hotkey recording listener
         com.slowbag.pulse.client.input.KeybindManager km = com.slowbag.pulse.client.input.KeybindManager.getInstance();
         if (km.isListening()) {
-            if (key == GLFW.GLFW_KEY_ESCAPE || key == GLFW.GLFW_KEY_BACKSPACE) {
+            if (isEscapeKey(key) || isBackspaceKey(key)) {
                 km.clearKeybind();
                 playClickSound();
                 statusMessage = "§c⌨ Hotkey cleared (None)";
                 statusMessageTime = System.currentTimeMillis();
                 return true;
             }
-            boolean isMod = (key == GLFW.GLFW_KEY_LEFT_CONTROL || key == GLFW.GLFW_KEY_RIGHT_CONTROL ||
-                             key == GLFW.GLFW_KEY_LEFT_ALT || key == GLFW.GLFW_KEY_RIGHT_ALT ||
-                             key == GLFW.GLFW_KEY_LEFT_SHIFT || key == GLFW.GLFW_KEY_RIGHT_SHIFT ||
-                             key == GLFW.GLFW_KEY_LEFT_SUPER || key == GLFW.GLFW_KEY_RIGHT_SUPER);
-            if (!isMod) {
-                boolean ctrl = (modifiers & GLFW.GLFW_MOD_CONTROL) != 0 || isControlOrSuperDown(modifiers);
-                boolean alt = (modifiers & GLFW.GLFW_MOD_ALT) != 0;
-                boolean shift = (modifiers & GLFW.GLFW_MOD_SHIFT) != 0;
-                km.setKeybind(key, ctrl, alt, shift);
+            if (!com.slowbag.pulse.client.input.KeybindManager.isModifierKey(key)) {
+                int canonicalKey = com.slowbag.pulse.client.input.KeybindManager.normalizeToGlfwKeyCode(key, scancode);
+                boolean ctrl = (modifiers & GLFW.GLFW_MOD_CONTROL) != 0 || isControlOrSuperDown(modifiers) || (modifiers & 2) != 0;
+                boolean alt = (modifiers & GLFW.GLFW_MOD_ALT) != 0 || (modifiers & 4) != 0;
+                boolean shift = (modifiers & GLFW.GLFW_MOD_SHIFT) != 0 || (modifiers & 1) != 0;
+                km.setKeybind(canonicalKey, ctrl, alt, shift);
                 playClickSound();
                 statusMessage = "§a✔ Hotkey saved: §f" + km.getKeybindDisplay() + " ✨";
                 statusMessageTime = System.currentTimeMillis();
                 return true;
             }
             return true;
+        }
+
+        // Space bar handler for text inputs (since SDL text input does not emit charTyped for space)
+        if (isSpaceKey(key)) {
+            lastSpaceTime = System.currentTimeMillis();
+            if (isSearchFocused || (isExpanded && selectedTab == 0)) {
+                searchQuery += " ";
+                isSearchFocused = true;
+                return true;
+            } else if (isUrlFocused || (isExpanded && selectedTab == 3)) {
+                customUrl += " ";
+                isUrlFocused = true;
+                return true;
+            } else if (passwordPromptRoom != null) {
+                promptPasswordText += " ";
+                return true;
+            } else if (selectedTab == 4 && isCreatingRoom) {
+                if (isRoomNameFocused) {
+                    newRoomName += " ";
+                    return true;
+                } else if (isRoomPasswordFocused) {
+                    newRoomPassword += " ";
+                    return true;
+                }
+            }
         }
 
         if (isSearchFocused || (isExpanded && selectedTab == 0)) {
@@ -3455,7 +3478,7 @@ public class MusicPlayerScreen extends Screen {
                 }
                 return true;
             }
-            if (key == GLFW.GLFW_KEY_BACKSPACE) {
+            if (isBackspaceKey(key)) {
                 if (!searchQuery.isEmpty()) {
                     searchQuery = searchQuery.substring(0, searchQuery.length() - 1);
                     if (searchQuery.isEmpty()) {
@@ -3465,7 +3488,7 @@ public class MusicPlayerScreen extends Screen {
                     }
                 }
                 return true;
-            } else if (key == GLFW.GLFW_KEY_ENTER || key == GLFW.GLFW_KEY_KP_ENTER) {
+            } else if (isEnterKey(key)) {
                 performSearch(searchQuery);
                 return true;
             }
@@ -3486,12 +3509,12 @@ public class MusicPlayerScreen extends Screen {
                 }
                 return true;
             }
-            if (key == GLFW.GLFW_KEY_BACKSPACE) {
+            if (isBackspaceKey(key)) {
                 if (!customUrl.isEmpty()) {
                     customUrl = customUrl.substring(0, customUrl.length() - 1);
                 }
                 return true;
-            } else if (key == GLFW.GLFW_KEY_ENTER || key == GLFW.GLFW_KEY_KP_ENTER) {
+            } else if (isEnterKey(key)) {
                 if (!customUrl.isBlank()) {
                     playClickSound();
                     statusMessage = "§e⚡ Resolving YouTube link / playlist with love... 💖";
@@ -3532,7 +3555,7 @@ public class MusicPlayerScreen extends Screen {
     }
 
     private static boolean isEscapeKey(KeyEvent event, int key) {
-        if (key == 256 || key == GLFW.GLFW_KEY_ESCAPE) return true;
+        if (key == 256 || key == GLFW.GLFW_KEY_ESCAPE || key == 41) return true;
         if (event == null) return false;
         try {
             java.lang.reflect.Method m = event.getClass().getMethod("isEscape");
@@ -3540,6 +3563,22 @@ public class MusicPlayerScreen extends Screen {
         } catch (Throwable ignored) {
             return false;
         }
+    }
+
+    private static boolean isEscapeKey(int key) {
+        return key == 256 || key == GLFW.GLFW_KEY_ESCAPE || key == 41;
+    }
+
+    private static boolean isBackspaceKey(int key) {
+        return key == 259 || key == GLFW.GLFW_KEY_BACKSPACE || key == 42;
+    }
+
+    private static boolean isSpaceKey(int key) {
+        return key == 32 || key == GLFW.GLFW_KEY_SPACE || key == 44;
+    }
+
+    private static boolean isEnterKey(int key) {
+        return key == 257 || key == 335 || key == GLFW.GLFW_KEY_ENTER || key == GLFW.GLFW_KEY_KP_ENTER || key == 40 || key == 88;
     }
 
     @Override
@@ -3597,6 +3636,13 @@ public class MusicPlayerScreen extends Screen {
     private boolean handleCharTyped(char ch, int modifiers) {
         if (Character.isISOControl(ch) || ch < 32 || ch == 127) {
             return false;
+        }
+
+        if (ch == ' ') {
+            if (System.currentTimeMillis() - lastSpaceTime < 100) {
+                return true; // Already processed via keyPressed
+            }
+            lastSpaceTime = System.currentTimeMillis();
         }
 
         if (passwordPromptRoom != null) {

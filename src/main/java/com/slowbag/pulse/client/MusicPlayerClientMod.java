@@ -157,10 +157,12 @@ public class MusicPlayerClientMod implements ClientModInitializer {
 
     public static boolean isKeyPhysicallyDown(Minecraft client, int keyCode) {
         if (keyCode <= 0) return false;
+        int sdlCode = com.slowbag.pulse.client.input.KeybindManager.getSdlScancodeFromGlfw(keyCode);
         try {
             // Minecraft 26.3 (SDL): InputConstants.isKeyDown(int)
             java.lang.reflect.Method m1 = InputConstants.class.getMethod("isKeyDown", int.class);
-            return (boolean) m1.invoke(null, keyCode);
+            if ((boolean) m1.invoke(null, keyCode)) return true;
+            if (sdlCode != keyCode && (boolean) m1.invoke(null, sdlCode)) return true;
         } catch (Throwable t1) {
             try {
                 // Minecraft 26.1 / 26.2 (GLFW): InputConstants.isKeyDown(long, int)

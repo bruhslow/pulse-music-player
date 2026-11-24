@@ -121,8 +121,135 @@ public class KeybindManager {
         return sb.toString();
     }
 
+    public static int normalizeToGlfwKeyCode(int rawKey, int scancode) {
+        int code = rawKey;
+        if (code <= 0 && scancode > 0) {
+            code = scancode;
+        }
+
+        // Already GLFW standard key?
+        if (code >= GLFW.GLFW_KEY_A && code <= GLFW.GLFW_KEY_Z) {
+            return code;
+        }
+        if (code >= GLFW.GLFW_KEY_0 && code <= GLFW.GLFW_KEY_9) {
+            return code;
+        }
+        if (code >= GLFW.GLFW_KEY_ESCAPE && code <= GLFW.GLFW_KEY_MENU) {
+            return code;
+        }
+        if (code == GLFW.GLFW_KEY_SPACE) {
+            return code;
+        }
+
+        // SDL Scancodes (USB HID codes used by SDL in Minecraft 26.3):
+        if (code >= 4 && code <= 29) {
+            // A-Z: 4 -> 65 (A), 13 -> 74 (J), 14 -> 75 (K), 29 -> 90 (Z)
+            return GLFW.GLFW_KEY_A + (code - 4);
+        }
+        if (code >= 30 && code <= 38) {
+            // 1-9: 30 -> 49 ('1')
+            return GLFW.GLFW_KEY_1 + (code - 30);
+        }
+        if (code == 39) return GLFW.GLFW_KEY_0; // '0'
+        if (code == 40) return GLFW.GLFW_KEY_ENTER;
+        if (code == 41) return GLFW.GLFW_KEY_ESCAPE;
+        if (code == 42) return GLFW.GLFW_KEY_BACKSPACE;
+        if (code == 43) return GLFW.GLFW_KEY_TAB;
+        if (code == 44) return GLFW.GLFW_KEY_SPACE;
+        if (code == 45) return GLFW.GLFW_KEY_MINUS;
+        if (code == 46) return GLFW.GLFW_KEY_EQUAL;
+        if (code == 47) return GLFW.GLFW_KEY_LEFT_BRACKET;
+        if (code == 48) return GLFW.GLFW_KEY_RIGHT_BRACKET;
+        if (code == 49) return GLFW.GLFW_KEY_BACKSLASH;
+        if (code == 51) return GLFW.GLFW_KEY_SEMICOLON;
+        if (code == 52) return GLFW.GLFW_KEY_APOSTROPHE;
+        if (code == 53) return GLFW.GLFW_KEY_GRAVE_ACCENT;
+        if (code == 54) return GLFW.GLFW_KEY_COMMA;
+        if (code == 55) return GLFW.GLFW_KEY_PERIOD;
+        if (code == 56) return GLFW.GLFW_KEY_SLASH;
+        if (code == 57) return GLFW.GLFW_KEY_CAPS_LOCK;
+        if (code >= 58 && code <= 69) {
+            // F1-F12
+            return GLFW.GLFW_KEY_F1 + (code - 58);
+        }
+        if (code == 70) return GLFW.GLFW_KEY_PRINT_SCREEN;
+        if (code == 71) return GLFW.GLFW_KEY_SCROLL_LOCK;
+        if (code == 72) return GLFW.GLFW_KEY_PAUSE;
+        if (code == 73) return GLFW.GLFW_KEY_INSERT;
+        if (code == 74) return GLFW.GLFW_KEY_HOME;
+        if (code == 75) return GLFW.GLFW_KEY_PAGE_UP;
+        if (code == 76) return GLFW.GLFW_KEY_DELETE;
+        if (code == 77) return GLFW.GLFW_KEY_END;
+        if (code == 78) return GLFW.GLFW_KEY_PAGE_DOWN;
+        if (code == 79) return GLFW.GLFW_KEY_RIGHT;
+        if (code == 80) return GLFW.GLFW_KEY_LEFT;
+        if (code == 81) return GLFW.GLFW_KEY_DOWN;
+        if (code == 82) return GLFW.GLFW_KEY_UP;
+
+        if (code == 83) return GLFW.GLFW_KEY_NUM_LOCK;
+        if (code == 84) return GLFW.GLFW_KEY_KP_DIVIDE;
+        if (code == 85) return GLFW.GLFW_KEY_KP_MULTIPLY;
+        if (code == 86) return GLFW.GLFW_KEY_KP_SUBTRACT;
+        if (code == 87) return GLFW.GLFW_KEY_KP_ADD;
+        if (code == 88) return GLFW.GLFW_KEY_KP_ENTER;
+        if (code >= 89 && code <= 97) {
+            return GLFW.GLFW_KEY_KP_1 + (code - 89);
+        }
+        if (code == 98) return GLFW.GLFW_KEY_KP_0;
+        if (code == 99) return GLFW.GLFW_KEY_KP_DECIMAL;
+
+        // SDL modifier scancodes (224-231)
+        if (code == 224) return GLFW.GLFW_KEY_LEFT_CONTROL;
+        if (code == 225) return GLFW.GLFW_KEY_LEFT_SHIFT;
+        if (code == 226) return GLFW.GLFW_KEY_LEFT_ALT;
+        if (code == 227) return GLFW.GLFW_KEY_LEFT_SUPER;
+        if (code == 228) return GLFW.GLFW_KEY_RIGHT_CONTROL;
+        if (code == 229) return GLFW.GLFW_KEY_RIGHT_SHIFT;
+        if (code == 230) return GLFW.GLFW_KEY_RIGHT_ALT;
+        if (code == 231) return GLFW.GLFW_KEY_RIGHT_SUPER;
+
+        return code;
+    }
+
+    public static boolean isModifierKey(int key) {
+        if (key == GLFW.GLFW_KEY_LEFT_CONTROL || key == GLFW.GLFW_KEY_RIGHT_CONTROL ||
+            key == GLFW.GLFW_KEY_LEFT_ALT || key == GLFW.GLFW_KEY_RIGHT_ALT ||
+            key == GLFW.GLFW_KEY_LEFT_SHIFT || key == GLFW.GLFW_KEY_RIGHT_SHIFT ||
+            key == GLFW.GLFW_KEY_LEFT_SUPER || key == GLFW.GLFW_KEY_RIGHT_SUPER) {
+            return true;
+        }
+        return (key >= 224 && key <= 231);
+    }
+
+    public static int getSdlScancodeFromGlfw(int glfwKey) {
+        if (glfwKey >= GLFW.GLFW_KEY_A && glfwKey <= GLFW.GLFW_KEY_Z) {
+            return 4 + (glfwKey - GLFW.GLFW_KEY_A);
+        }
+        if (glfwKey >= GLFW.GLFW_KEY_1 && glfwKey <= GLFW.GLFW_KEY_9) {
+            return 30 + (glfwKey - GLFW.GLFW_KEY_1);
+        }
+        if (glfwKey == GLFW.GLFW_KEY_0) return 39;
+        if (glfwKey == GLFW.GLFW_KEY_ENTER) return 40;
+        if (glfwKey == GLFW.GLFW_KEY_ESCAPE) return 41;
+        if (glfwKey == GLFW.GLFW_KEY_BACKSPACE) return 42;
+        if (glfwKey == GLFW.GLFW_KEY_TAB) return 43;
+        if (glfwKey == GLFW.GLFW_KEY_SPACE) return 44;
+        if (glfwKey == GLFW.GLFW_KEY_LEFT_CONTROL) return 224;
+        if (glfwKey == GLFW.GLFW_KEY_LEFT_SHIFT) return 225;
+        if (glfwKey == GLFW.GLFW_KEY_LEFT_ALT) return 226;
+        if (glfwKey == GLFW.GLFW_KEY_LEFT_SUPER) return 227;
+        if (glfwKey == GLFW.GLFW_KEY_RIGHT_CONTROL) return 228;
+        if (glfwKey == GLFW.GLFW_KEY_RIGHT_SHIFT) return 229;
+        if (glfwKey == GLFW.GLFW_KEY_RIGHT_ALT) return 230;
+        if (glfwKey == GLFW.GLFW_KEY_RIGHT_SUPER) return 231;
+        return glfwKey;
+    }
+
     public static String getKeyName(int keyCode) {
         if (keyCode <= 0 || keyCode == GLFW.GLFW_KEY_UNKNOWN) return "None";
+
+        // Normalize SDL scancode to canonical GLFW key
+        keyCode = normalizeToGlfwKeyCode(keyCode, 0);
 
         // 1. Letters A-Z (Standard Latin on any OS/Linux/Windows)
         if (keyCode >= GLFW.GLFW_KEY_A && keyCode <= GLFW.GLFW_KEY_Z) {
@@ -232,6 +359,14 @@ public class KeybindManager {
             if (json.has("ctrl")) this.ctrl = json.get("ctrl").getAsBoolean();
             if (json.has("alt")) this.alt = json.get("alt").getAsBoolean();
             if (json.has("shift")) this.shift = json.get("shift").getAsBoolean();
+
+            if (isModifierKey(this.keyCode)) {
+                this.keyCode = GLFW.GLFW_KEY_J;
+                this.ctrl = false;
+                saveConfig();
+            } else {
+                this.keyCode = normalizeToGlfwKeyCode(this.keyCode, 0);
+            }
         } catch (Throwable ignored) {}
     }
 
