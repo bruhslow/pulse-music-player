@@ -1145,32 +1145,38 @@ public class MusicPlayerScreen extends Screen {
             // Header Banner
             drawSoftBox(graphics, x + 8, topY, w - 16, 36, 4, 0x25A855F7, 0x60A855F7);
             String rCode = partyManager.getRoomCode();
-            String codeBadge = (rCode != null && !rCode.isEmpty()) ? " §e[Code: §f§l" + rCode + "§e]" : "";
-            graphics.text(this.font, Component.literal("§d👥 Room: §f§l" + truncateToWidth(partyManager.getRoomName(), w - 210) + codeBadge), x + 14, topY + 4, 0xFFFFFFFF, true);
 
-            String roleInfo = partyManager.isHost()
-                    ? "§e👑 Host §8• You broadcast music to all members"
-                    : "§a🎧 Synced with Host §f(" + partyManager.getCurrentHost() + ")";
-            graphics.text(this.font, Component.literal(roleInfo), x + 14, topY + 18, 0xFFA0988E, false);
-
-            // Copy Code Pill Button & Exit Button
-            int copyBtnW = 68;
-            int exitBtnW = partyManager.isHost() ? 76 : 64;
+            // Action Buttons on Right: [ ⎘ #Code ] and [ ✕ Disband / Leave ]
+            int copyBtnW = 62;
+            int exitBtnW = partyManager.isHost() ? 66 : 56;
             int exitBtnX = x + w - exitBtnW - 14;
-            int copyBtnX = exitBtnX - copyBtnW - 6;
-            int exitBtnY = topY + 8;
-            int exitBtnH = 20;
+            int copyBtnX = exitBtnX - copyBtnW - 4;
+            int exitBtnY = topY + 9;
+            int exitBtnH = 18;
+
+            int maxLeftW = copyBtnX - (x + 14) - 6;
+
+            // Row 1: Room Name (safely truncated before button margin)
+            String rName = partyManager.getRoomName();
+            if (rName == null || rName.isBlank()) rName = "Music Room";
+            graphics.text(this.font, Component.literal("§d👥 §f§l" + truncateToWidth(rName, maxLeftW)), x + 14, topY + 5, 0xFFFFFFFF, true);
+
+            // Row 2: Role Info (safely truncated before button margin)
+            String roleInfo = partyManager.isHost()
+                    ? "§e👑 Host §8• Broadcasting to room"
+                    : "§a🎧 Synced §8• §f" + truncate(partyManager.getCurrentHost(), 12);
+            graphics.text(this.font, Component.literal(truncateToWidth(roleInfo, maxLeftW)), x + 14, topY + 18, 0xFFA0988E, false);
 
             if (rCode != null && !rCode.isEmpty()) {
                 boolean cpHov = mouseX >= copyBtnX && mouseX <= copyBtnX + copyBtnW && mouseY >= exitBtnY && mouseY <= exitBtnY + exitBtnH;
                 drawSoftBox(graphics, copyBtnX, exitBtnY, copyBtnW, exitBtnH, 3, cpHov ? 0x90A855F7 : 0x40A855F7, cpHov ? 0xFFFFFFFF : 0xFFA855F7);
-                drawCleanCenteredText(graphics, "§e📋 #" + rCode, copyBtnX + copyBtnW / 2, exitBtnY + 6, 0xFFFFFFFF);
+                drawCleanCenteredText(graphics, "§e#" + rCode, copyBtnX + copyBtnW / 2, exitBtnY + 5, 0xFFFFFFFF);
             }
 
             // Right Action Button: [ ✕ Disband ] (if Host) or [ ✕ Leave ] (if Member)
             boolean exitHov = mouseX >= exitBtnX && mouseX <= exitBtnX + exitBtnW && mouseY >= exitBtnY && mouseY <= exitBtnY + exitBtnH;
             drawSoftBox(graphics, exitBtnX, exitBtnY, exitBtnW, exitBtnH, 3, exitHov ? 0x90FF3344 : 0x35FF3344, exitHov ? 0xFFFF4455 : 0x80FF3344);
-            drawCleanCenteredText(graphics, partyManager.isHost() ? "§c✕ Disband" : "§c✕ Leave", exitBtnX + exitBtnW / 2, exitBtnY + 6, 0xFFFFFFFF);
+            drawCleanCenteredText(graphics, partyManager.isHost() ? "§c✕ Disband" : "§c✕ Leave", exitBtnX + exitBtnW / 2, exitBtnY + 5, 0xFFFFFFFF);
 
             // Sync Status Card
             int syncCardY = topY + 42;
@@ -1444,12 +1450,12 @@ public class MusicPlayerScreen extends Screen {
         } else {
             // In-Room Click Handling
             int topY = y + 2;
-            int copyBtnW = 68;
-            int exitBtnW = partyManager.isHost() ? 76 : 64;
+            int copyBtnW = 62;
+            int exitBtnW = partyManager.isHost() ? 66 : 56;
             int exitBtnX = x + w - exitBtnW - 14;
-            int copyBtnX = exitBtnX - copyBtnW - 6;
-            int exitBtnY = topY + 8;
-            int exitBtnH = 20;
+            int copyBtnX = exitBtnX - copyBtnW - 4;
+            int exitBtnY = topY + 9;
+            int exitBtnH = 18;
 
             // Copy Code button
             String rCode = partyManager.getRoomCode();
