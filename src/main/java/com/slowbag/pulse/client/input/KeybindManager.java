@@ -83,6 +83,12 @@ public class KeybindManager {
         this.alt = alt;
         this.shift = shift;
         this.isListening = false;
+        try {
+            if (com.slowbag.pulse.client.MusicPlayerClientMod.pulseKeyMapping != null) {
+                com.slowbag.pulse.client.MusicPlayerClientMod.pulseKeyMapping.setKey(com.mojang.blaze3d.platform.InputConstants.Type.KEYSYM.getOrCreate(key));
+                net.minecraft.client.KeyMapping.resetMapping();
+            }
+        } catch (Throwable ignored) {}
         saveConfig();
     }
 
@@ -92,6 +98,12 @@ public class KeybindManager {
         this.alt = false;
         this.shift = false;
         this.isListening = false;
+        try {
+            if (com.slowbag.pulse.client.MusicPlayerClientMod.pulseKeyMapping != null) {
+                com.slowbag.pulse.client.MusicPlayerClientMod.pulseKeyMapping.setKey(com.mojang.blaze3d.platform.InputConstants.UNKNOWN);
+                net.minecraft.client.KeyMapping.resetMapping();
+            }
+        } catch (Throwable ignored) {}
         saveConfig();
     }
 
@@ -105,47 +117,101 @@ public class KeybindManager {
         if (ctrl) sb.append("Ctrl + ");
         if (alt) sb.append("Alt + ");
         if (shift) sb.append("Shift + ");
+        sb.append(getKeyName(keyCode));
+        return sb.toString();
+    }
 
-        String name = null;
+    public static String getKeyName(int keyCode) {
+        if (keyCode <= 0 || keyCode == GLFW.GLFW_KEY_UNKNOWN) return "None";
+
+        // 1. Letters A-Z (Standard Latin on any OS/Linux/Windows)
+        if (keyCode >= GLFW.GLFW_KEY_A && keyCode <= GLFW.GLFW_KEY_Z) {
+            return String.valueOf((char) keyCode);
+        }
+
+        // 2. Numbers 0-9
+        if (keyCode >= GLFW.GLFW_KEY_0 && keyCode <= GLFW.GLFW_KEY_9) {
+            return String.valueOf((char) keyCode);
+        }
+
+        // 3. Keypad numbers 0-9
+        if (keyCode >= GLFW.GLFW_KEY_KP_0 && keyCode <= GLFW.GLFW_KEY_KP_9) {
+            return "Num " + (keyCode - GLFW.GLFW_KEY_KP_0);
+        }
+
+        // 4. Try Minecraft's native InputConstants translation (handles OS locale, layout, Linux X11/Wayland, SDL)
         try {
-            name = GLFW.glfwGetKeyName(keyCode, 0);
+            var key = com.mojang.blaze3d.platform.InputConstants.Type.KEYSYM.getOrCreate(keyCode);
+            if (key != null) {
+                String disp = key.getDisplayName().getString();
+                if (disp != null && !disp.isBlank() && !disp.toLowerCase().startsWith("key.keyboard")) {
+                    return disp.toUpperCase();
+                }
+            }
         } catch (Throwable ignored) {}
 
-        if (name != null && !name.isBlank()) {
-            sb.append(name.toUpperCase());
-        } else {
-            switch (keyCode) {
-                case GLFW.GLFW_KEY_TAB: sb.append("Tab"); break;
-                case GLFW.GLFW_KEY_CAPS_LOCK: sb.append("Caps Lock"); break;
-                case GLFW.GLFW_KEY_SPACE: sb.append("Space"); break;
-                case GLFW.GLFW_KEY_ENTER: sb.append("Enter"); break;
-                case GLFW.GLFW_KEY_F1: sb.append("F1"); break;
-                case GLFW.GLFW_KEY_F2: sb.append("F2"); break;
-                case GLFW.GLFW_KEY_F3: sb.append("F3"); break;
-                case GLFW.GLFW_KEY_F4: sb.append("F4"); break;
-                case GLFW.GLFW_KEY_F5: sb.append("F5"); break;
-                case GLFW.GLFW_KEY_F6: sb.append("F6"); break;
-                case GLFW.GLFW_KEY_F7: sb.append("F7"); break;
-                case GLFW.GLFW_KEY_F8: sb.append("F8"); break;
-                case GLFW.GLFW_KEY_F9: sb.append("F9"); break;
-                case GLFW.GLFW_KEY_F10: sb.append("F10"); break;
-                case GLFW.GLFW_KEY_F11: sb.append("F11"); break;
-                case GLFW.GLFW_KEY_F12: sb.append("F12"); break;
-                case GLFW.GLFW_KEY_GRAVE_ACCENT: sb.append("~"); break;
-                case GLFW.GLFW_KEY_MINUS: sb.append("-"); break;
-                case GLFW.GLFW_KEY_EQUAL: sb.append("="); break;
-                case GLFW.GLFW_KEY_LEFT_BRACKET: sb.append("["); break;
-                case GLFW.GLFW_KEY_RIGHT_BRACKET: sb.append("]"); break;
-                case GLFW.GLFW_KEY_BACKSLASH: sb.append("\\"); break;
-                case GLFW.GLFW_KEY_SEMICOLON: sb.append(";"); break;
-                case GLFW.GLFW_KEY_APOSTROPHE: sb.append("'"); break;
-                case GLFW.GLFW_KEY_COMMA: sb.append(","); break;
-                case GLFW.GLFW_KEY_PERIOD: sb.append("."); break;
-                case GLFW.GLFW_KEY_SLASH: sb.append("/"); break;
-                default: sb.append("Key #").append(keyCode); break;
+        // 5. Try GLFW key name
+        try {
+            String name = GLFW.glfwGetKeyName(keyCode, 0);
+            if (name != null && !name.isBlank()) {
+                return name.toUpperCase();
             }
-        }
-        return sb.toString();
+        } catch (Throwable ignored) {}
+
+        // 6. Comprehensive fallback dictionary
+        return switch (keyCode) {
+            case GLFW.GLFW_KEY_TAB -> "Tab";
+            case GLFW.GLFW_KEY_CAPS_LOCK -> "Caps Lock";
+            case GLFW.GLFW_KEY_SPACE -> "Space";
+            case GLFW.GLFW_KEY_ENTER -> "Enter";
+            case GLFW.GLFW_KEY_BACKSPACE -> "Backspace";
+            case GLFW.GLFW_KEY_ESCAPE -> "Esc";
+            case GLFW.GLFW_KEY_INSERT -> "Insert";
+            case GLFW.GLFW_KEY_DELETE -> "Delete";
+            case GLFW.GLFW_KEY_RIGHT -> "Right Arrow";
+            case GLFW.GLFW_KEY_LEFT -> "Left Arrow";
+            case GLFW.GLFW_KEY_DOWN -> "Down Arrow";
+            case GLFW.GLFW_KEY_UP -> "Up Arrow";
+            case GLFW.GLFW_KEY_PAGE_UP -> "Page Up";
+            case GLFW.GLFW_KEY_PAGE_DOWN -> "Page Down";
+            case GLFW.GLFW_KEY_HOME -> "Home";
+            case GLFW.GLFW_KEY_END -> "End";
+            case GLFW.GLFW_KEY_SCROLL_LOCK -> "Scroll Lock";
+            case GLFW.GLFW_KEY_NUM_LOCK -> "Num Lock";
+            case GLFW.GLFW_KEY_PRINT_SCREEN -> "Print Screen";
+            case GLFW.GLFW_KEY_PAUSE -> "Pause";
+            case GLFW.GLFW_KEY_F1 -> "F1";
+            case GLFW.GLFW_KEY_F2 -> "F2";
+            case GLFW.GLFW_KEY_F3 -> "F3";
+            case GLFW.GLFW_KEY_F4 -> "F4";
+            case GLFW.GLFW_KEY_F5 -> "F5";
+            case GLFW.GLFW_KEY_F6 -> "F6";
+            case GLFW.GLFW_KEY_F7 -> "F7";
+            case GLFW.GLFW_KEY_F8 -> "F8";
+            case GLFW.GLFW_KEY_F9 -> "F9";
+            case GLFW.GLFW_KEY_F10 -> "F10";
+            case GLFW.GLFW_KEY_F11 -> "F11";
+            case GLFW.GLFW_KEY_F12 -> "F12";
+            case GLFW.GLFW_KEY_GRAVE_ACCENT -> "~";
+            case GLFW.GLFW_KEY_MINUS -> "-";
+            case GLFW.GLFW_KEY_EQUAL -> "=";
+            case GLFW.GLFW_KEY_LEFT_BRACKET -> "[";
+            case GLFW.GLFW_KEY_RIGHT_BRACKET -> "]";
+            case GLFW.GLFW_KEY_BACKSLASH -> "\\";
+            case GLFW.GLFW_KEY_SEMICOLON -> ";";
+            case GLFW.GLFW_KEY_APOSTROPHE -> "'";
+            case GLFW.GLFW_KEY_COMMA -> ",";
+            case GLFW.GLFW_KEY_PERIOD -> ".";
+            case GLFW.GLFW_KEY_SLASH -> "/";
+            case GLFW.GLFW_KEY_KP_DECIMAL -> "Num .";
+            case GLFW.GLFW_KEY_KP_DIVIDE -> "Num /";
+            case GLFW.GLFW_KEY_KP_MULTIPLY -> "Num *";
+            case GLFW.GLFW_KEY_KP_SUBTRACT -> "Num -";
+            case GLFW.GLFW_KEY_KP_ADD -> "Num +";
+            case GLFW.GLFW_KEY_KP_ENTER -> "Num Enter";
+            case GLFW.GLFW_KEY_KP_EQUAL -> "Num =";
+            default -> "Key #" + keyCode;
+        };
     }
 
     public boolean matches(int pressedKey, boolean hasCtrl, boolean hasAlt, boolean hasShift) {

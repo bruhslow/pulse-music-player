@@ -317,6 +317,26 @@ public class PartyManager {
                             AudioTrack qt = new AudioTrack(title, artist, url, false, dur, "Room", art);
                             AudioManager.getInstance().enqueueTrackDirect(qt);
                             sendPlayerMessage("§a[Pulse] 📥 " + sender + " added '§f" + title + "§a' to the Room Queue!");
+                            publishHostRoomState();
+                        }
+                    }
+                }
+                case "queue_remove" -> {
+                    if (isHost) {
+                        int idx = obj.has("index") ? obj.get("index").getAsInt() : -1;
+                        if (idx >= 0) {
+                            AudioManager.getInstance().removeFromQueueDirect(idx);
+                            publishHostRoomState();
+                        }
+                    }
+                }
+                case "queue_move" -> {
+                    if (isHost) {
+                        int from = obj.has("fromIndex") ? obj.get("fromIndex").getAsInt() : -1;
+                        int to = obj.has("toIndex") ? obj.get("toIndex").getAsInt() : -1;
+                        if (from >= 0 && to >= 0) {
+                            AudioManager.getInstance().moveQueueItemDirect(from, to);
+                            publishHostRoomState();
                         }
                     }
                 }
@@ -560,6 +580,59 @@ public class PartyManager {
         }
 
         sendPlayerMessage("§a[Pulse] 🎵 Added '" + track.getTitle() + "' to the Room Queue!");
+    }
+
+    public void removeTrackFromRoomQueue(int index) {
+        if (!isInRoom() || index < 0) return;
+        if (isHost) {
+            AudioManager.getInstance().removeFromQueueDirect(index);
+            publishHostRoomState();
+            return;
+        }
+
+        JsonObject qObj = new JsonObject();
+        qObj.addProperty("type", "queue_remove");
+        qObj.addProperty("action", "queue_remove");
+        qObj.addProperty("code", roomCode != null ? roomCode : "");
+        qObj.addProperty("room", roomName != null ? roomName : "");
+        qObj.addProperty("index", index);
+        qObj.addProperty("sender", getPlayerName());
+
+        if (isServerNetworkingActive()) {
+            ClientPlayNetworking.send(new PulseNetworkPayload(qObj.toString()));
+        }
+        if (roomCode != null && !roomCode.isEmpty()) {
+            sendNtfyMessage("pulse_room_" + roomCode.toLowerCase(), qObj);
+        }
+
+        AudioManager.getInstance().removeFromQueueDirect(index);
+    }
+
+    public boolean moveTrackInRoomQueue(int fromIndex, int toIndex) {
+        if (!isInRoom() || fromIndex < 0 || toIndex < 0) return false;
+        if (isHost) {
+            boolean ok = AudioManager.getInstance().moveQueueItemDirect(fromIndex, toIndex);
+            if (ok) publishHostRoomState();
+            return ok;
+        }
+
+        JsonObject qObj = new JsonObject();
+        qObj.addProperty("type", "queue_move");
+        qObj.addProperty("action", "queue_move");
+        qObj.addProperty("code", roomCode != null ? roomCode : "");
+        qObj.addProperty("room", roomName != null ? roomName : "");
+        qObj.addProperty("fromIndex", fromIndex);
+        qObj.addProperty("toIndex", toIndex);
+        qObj.addProperty("sender", getPlayerName());
+
+        if (isServerNetworkingActive()) {
+            ClientPlayNetworking.send(new PulseNetworkPayload(qObj.toString()));
+        }
+        if (roomCode != null && !roomCode.isEmpty()) {
+            sendNtfyMessage("pulse_room_" + roomCode.toLowerCase(), qObj);
+        }
+
+        return AudioManager.getInstance().moveQueueItemDirect(fromIndex, toIndex);
     }
 
     // ------------------------------------------------------------------------
@@ -1122,6 +1195,25 @@ public class PartyManager {
                     AudioTrack qt = new AudioTrack(title, artist, url, false, dur, "Room", art);
                     AudioManager.getInstance().enqueueTrackDirect(qt);
                     sendPlayerMessage("§d[Pulse] ➕ §f" + senderName + " §aadded '§f" + title + "§a' to the Room Queue! 🎶");
+                    publishHostRoomState();
+                }
+                return;
+            }
+
+            if ("queue_remove".equals(type) && isHost) {
+                int idx = obj.has("index") ? obj.get("index").getAsInt() : -1;
+                if (idx >= 0) {
+                    AudioManager.getInstance().removeFromQueueDirect(idx);
+                    publishHostRoomState();
+                }
+                return;
+            }
+
+            if ("queue_move".equals(type) && isHost) {
+                int from = obj.has("fromIndex") ? obj.get("fromIndex").getAsInt() : -1;
+                int to = obj.has("toIndex") ? obj.get("toIndex").getAsInt() : -1;
+                if (from >= 0 && to >= 0) {
+                    AudioManager.getInstance().moveQueueItemDirect(from, to);
                     publishHostRoomState();
                 }
                 return;

@@ -1010,8 +1010,27 @@ public class AudioManager {
         return list;
     }
 
+    public synchronized void removeFromQueueDirect(int index) {
+        if (index >= 0 && index < upcomingQueue.size()) {
+            upcomingQueue.remove(index);
+        }
+    }
+
+    public synchronized boolean moveQueueItemDirect(int fromIndex, int toIndex) {
+        if (fromIndex < 0 || fromIndex >= upcomingQueue.size() || toIndex < 0 || toIndex >= upcomingQueue.size()) {
+            return false;
+        }
+        AudioTrack track = upcomingQueue.remove(fromIndex);
+        upcomingQueue.add(toIndex, track);
+        return true;
+    }
+
     public synchronized void removeFromQueue(int index) {
-        if (!checkHostPermission("manage the queue")) return;
+        PartyManager pm = PartyManager.getInstance();
+        if (pm.isInRoom()) {
+            pm.removeTrackFromRoomQueue(index);
+            return;
+        }
         if (index >= 0 && index < upcomingQueue.size()) {
             upcomingQueue.remove(index);
             return;
@@ -1030,13 +1049,11 @@ public class AudioManager {
     }
 
     public synchronized boolean moveQueueItem(int fromIndex, int toIndex) {
-        if (!checkHostPermission("manage the queue")) return false;
-        if (fromIndex < 0 || fromIndex >= upcomingQueue.size() || toIndex < 0 || toIndex >= upcomingQueue.size()) {
-            return false;
+        PartyManager pm = PartyManager.getInstance();
+        if (pm.isInRoom()) {
+            return pm.moveTrackInRoomQueue(fromIndex, toIndex);
         }
-        AudioTrack track = upcomingQueue.remove(fromIndex);
-        upcomingQueue.add(toIndex, track);
-        return true;
+        return moveQueueItemDirect(fromIndex, toIndex);
     }
 
     public synchronized boolean moveQueueItemUp(int index) {
@@ -1054,17 +1071,23 @@ public class AudioManager {
     }
 
     public synchronized boolean shuffleQueue() {
-        if (!checkHostPermission("shuffle the queue")) return false;
         if (upcomingQueue.size() > 1) {
             java.util.Collections.shuffle(upcomingQueue);
+            PartyManager pm = PartyManager.getInstance();
+            if (pm.isInRoom() && pm.isHost()) {
+                pm.publishHostRoomState();
+            }
             return true;
         }
         return false;
     }
 
     public synchronized void clearQueue() {
-        if (!checkHostPermission("clear the queue")) return;
         upcomingQueue.clear();
+        PartyManager pm = PartyManager.getInstance();
+        if (pm.isInRoom() && pm.isHost()) {
+            pm.publishHostRoomState();
+        }
     }
 
     public void setPlaylist(List<AudioTrack> newPlaylist) {

@@ -12,11 +12,15 @@ import net.fabricmc.api.ClientModInitializer;
 import net.fabricmc.fabric.api.client.command.v2.ClientCommandRegistrationCallback;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientLifecycleEvents;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
+import net.fabricmc.fabric.api.client.keymapping.v1.KeyMappingHelper;
 import net.fabricmc.fabric.api.client.networking.v1.ClientPlayConnectionEvents;
+import net.minecraft.client.KeyMapping;
+import net.minecraft.client.Minecraft;
 import org.lwjgl.glfw.GLFW;
 
 public class MusicPlayerClientMod implements ClientModInitializer {
 
+    public static KeyMapping pulseKeyMapping;
     private static boolean wasHotkeyDown = false;
 
     @Override
@@ -35,7 +39,21 @@ public class MusicPlayerClientMod implements ClientModInitializer {
             MusicPlayerMod.LOGGER.error("[Music Player] Failed to register commands", t);
         }
 
-        // 2. Register HUD Overlay
+        // 2. Register Native KeyMapping for cross-platform hotkey (Linux Wayland/X11, macOS, Windows SDL/GLFW)
+        try {
+            com.slowbag.pulse.client.input.KeybindManager km = com.slowbag.pulse.client.input.KeybindManager.getInstance();
+            int initialKey = (km != null && km.isConfigured()) ? km.getKeyCode() : GLFW.GLFW_KEY_J;
+            pulseKeyMapping = KeyMappingHelper.registerKeyMapping(new KeyMapping(
+                    "key.musicplayer.open",
+                    InputConstants.Type.KEYSYM,
+                    initialKey,
+                    KeyMapping.Category.MISC
+            ));
+        } catch (Throwable t) {
+            MusicPlayerMod.LOGGER.error("[Music Player] Failed to register key mapping", t);
+        }
+
+        // 3. Register HUD Overlay
         try {
             HudOverlayRenderer.register();
             com.slowbag.pulse.client.gui.HudConfigManager.getInstance().setHudEnabled(true);
@@ -43,21 +61,21 @@ public class MusicPlayerClientMod implements ClientModInitializer {
             MusicPlayerMod.LOGGER.error("[Music Player] Failed to register HUD overlay", t);
         }
 
-        // 3. Initialize Rooms & Group System
+        // 4. Initialize Rooms & Group System
         try {
             com.slowbag.pulse.client.audio.PartyManager.getInstance().init();
         } catch (Throwable t) {
             MusicPlayerMod.LOGGER.warn("[Music Player] Failed to init party manager", t);
         }
 
-        // 4. Initialize Nametag Music Badge System
+        // 5. Initialize Nametag Music Badge System
         try {
             com.slowbag.pulse.client.audio.MusicBadgeManager.getInstance();
         } catch (Throwable t) {
             MusicPlayerMod.LOGGER.warn("[Music Player] Failed to init badge manager", t);
         }
 
-        // 5. Clean up rooms on server disconnect or client stopping, and query rooms on join
+        // 6. Clean up rooms on server disconnect or client stopping, and query rooms on join
         try {
             ClientPlayConnectionEvents.JOIN.register((handler, sender, client) -> {
                 try {
@@ -80,7 +98,7 @@ public class MusicPlayerClientMod implements ClientModInitializer {
             }, "MusicPlayer-ShutdownHook"));
         } catch (Throwable ignored) {}
 
-        // 6. Register Configurable Hotkey for Opening GUI (default: 'J', modifiers supported)
+        // 7. Tick listener for hotkey triggers (works natively across Linux, Windows, macOS, SDL and GLFW)
         ClientTickEvents.END_CLIENT_TICK.register(client -> {
             if (client == null || client.player == null || client.gui == null) {
                 wasHotkeyDown = false;
@@ -95,22 +113,27 @@ public class MusicPlayerClientMod implements ClientModInitializer {
                     }
                 }
 
-                // If user pressed configured hotkey combo
+                boolean trigger = false;
+
+                // Native Minecraft KeyMapping click check (100% reliable on Linux Wayland/X11 and SDL)
+                if (pulseKeyMapping != null) {
+                    while (pulseKeyMapping.consumeClick()) {
+                        trigger = true;
+                    }
+                }
+
+                // Configurable combo check with modifiers (Ctrl, Alt, Shift)
                 try {
                     com.slowbag.pulse.client.input.KeybindManager km = com.slowbag.pulse.client.input.KeybindManager.getInstance();
-                    if (km != null && km.isConfigured() && client.getWindow() != null) {
-                        long win = client.getWindow().handle();
-                        boolean isKeyDown = GLFW.glfwGetKey(win, km.getKeyCode()) == GLFW.GLFW_PRESS;
-                        boolean ctrlDown = (GLFW.glfwGetKey(win, GLFW.GLFW_KEY_LEFT_CONTROL) == GLFW.GLFW_PRESS || GLFW.glfwGetKey(win, GLFW.GLFW_KEY_RIGHT_CONTROL) == GLFW.GLFW_PRESS);
-                        boolean altDown = (GLFW.glfwGetKey(win, GLFW.GLFW_KEY_LEFT_ALT) == GLFW.GLFW_PRESS || GLFW.glfwGetKey(win, GLFW.GLFW_KEY_RIGHT_ALT) == GLFW.GLFW_PRESS);
-                        boolean shiftDown = (GLFW.glfwGetKey(win, GLFW.GLFW_KEY_LEFT_SHIFT) == GLFW.GLFW_PRESS || GLFW.glfwGetKey(win, GLFW.GLFW_KEY_RIGHT_SHIFT) == GLFW.GLFW_PRESS);
+                    if (km != null && km.isConfigured()) {
+                        boolean isKeyDown = isKeyPhysicallyDown(client, km.getKeyCode());
+                        boolean ctrlDown = isCtrlDown(client);
+                        boolean altDown = isAltDown(client);
+                        boolean shiftDown = isShiftDown(client);
 
                         boolean match = isKeyDown && (ctrlDown == km.isCtrl()) && (altDown == km.isAlt()) && (shiftDown == km.isShift());
                         if (match && !wasHotkeyDown) {
-                            net.minecraft.client.gui.screens.Screen current = ScreenCompat.getCurrentScreen(client);
-                            if (current == null) {
-                                ScreenCompat.setScreen(client, new MusicPlayerScreen(null));
-                            }
+                            trigger = true;
                         }
                         wasHotkeyDown = match;
                     } else {
@@ -119,31 +142,58 @@ public class MusicPlayerClientMod implements ClientModInitializer {
                 } catch (Throwable ignored) {
                     wasHotkeyDown = false;
                 }
+
+                if (trigger) {
+                    net.minecraft.client.gui.screens.Screen current = ScreenCompat.getCurrentScreen(client);
+                    if (current == null) {
+                        ScreenCompat.setScreen(client, new MusicPlayerScreen(null));
+                    }
+                }
             } catch (Throwable ignored) {}
         });
 
-        // 4. Auto-stop audio when quitting/disconnecting from a world or closing Minecraft
-        try {
-            ClientLifecycleEvents.CLIENT_STOPPING.register(client -> {
-                MusicPlayerMod.LOGGER.info("[Music Player] Game stopping. Stopping audio playback.");
-                AudioManager.getInstance().stop();
-                PartyManager.getInstance().leaveRoom();
-            });
-
-            ClientPlayConnectionEvents.DISCONNECT.register((handler, client) -> {
-                MusicPlayerMod.LOGGER.info("[Music Player] Disconnected from server. Stopping audio playback.");
-                AudioManager.getInstance().stop();
-                PartyManager.getInstance().leaveRoom();
-            });
-
-            // JVM Shutdown Hook safety
-            Runtime.getRuntime().addShutdownHook(new Thread(() -> {
-                AudioManager.getInstance().stop();
-            }, "MusicPlayer-ShutdownHook"));
-        } catch (Throwable t) {
-            MusicPlayerMod.LOGGER.warn("[Music Player] Failed to hook lifecycle events", t);
-        }
-
         MusicPlayerMod.LOGGER.info("[Music Player] Client v2.0 initialized successfully.");
+    }
+
+    public static boolean isKeyPhysicallyDown(Minecraft client, int keyCode) {
+        if (keyCode <= 0) return false;
+        try {
+            // Minecraft 26.3 (SDL): InputConstants.isKeyDown(int)
+            java.lang.reflect.Method m1 = InputConstants.class.getMethod("isKeyDown", int.class);
+            return (boolean) m1.invoke(null, keyCode);
+        } catch (Throwable t1) {
+            try {
+                // Minecraft 26.1 / 26.2 (GLFW): InputConstants.isKeyDown(long, int)
+                if (client != null && client.getWindow() != null) {
+                    long handle = client.getWindow().handle();
+                    if (handle != 0) {
+                        java.lang.reflect.Method m2 = InputConstants.class.getMethod("isKeyDown", long.class, int.class);
+                        return (boolean) m2.invoke(null, handle, keyCode);
+                    }
+                }
+            } catch (Throwable t2) {
+                try {
+                    if (client != null && client.getWindow() != null) {
+                        long handle = client.getWindow().handle();
+                        if (handle != 0) {
+                            return GLFW.glfwGetKey(handle, keyCode) == GLFW.GLFW_PRESS;
+                        }
+                    }
+                } catch (Throwable ignored) {}
+            }
+        }
+        return false;
+    }
+
+    private static boolean isCtrlDown(Minecraft client) {
+        return isKeyPhysicallyDown(client, GLFW.GLFW_KEY_LEFT_CONTROL) || isKeyPhysicallyDown(client, GLFW.GLFW_KEY_RIGHT_CONTROL);
+    }
+
+    private static boolean isAltDown(Minecraft client) {
+        return isKeyPhysicallyDown(client, GLFW.GLFW_KEY_LEFT_ALT) || isKeyPhysicallyDown(client, GLFW.GLFW_KEY_RIGHT_ALT);
+    }
+
+    private static boolean isShiftDown(Minecraft client) {
+        return isKeyPhysicallyDown(client, GLFW.GLFW_KEY_LEFT_SHIFT) || isKeyPhysicallyDown(client, GLFW.GLFW_KEY_RIGHT_SHIFT);
     }
 }
