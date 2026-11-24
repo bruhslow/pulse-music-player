@@ -76,11 +76,17 @@ public class AudioManager {
     }
 
     private AudioManager() {
-        // Pre-populate with curated stations
-        playlist.addAll(PresetStations.getStations());
-        if (!playlist.isEmpty()) {
-            this.currentTrack = playlist.get(0);
+        AudioTrack last = LastTrackManager.getInstance().getLastTrack();
+        if (last != null) {
+            this.currentTrack = last;
+            if (last.getArtworkUrl() != null && !last.getArtworkUrl().isBlank()) {
+                AlbumArtManager.getInstance().loadArtworkAsync(last.getArtworkUrl());
+            }
+        } else {
+            this.currentTrack = null;
         }
+        this.isPlaying = false;
+        this.isPaused = false;
     }
 
     public void addListener(TrackChangeListener listener) {
@@ -132,6 +138,7 @@ public class AudioManager {
         final int sessionId = sessionCounter.incrementAndGet();
 
         this.currentTrack = track;
+        LastTrackManager.getInstance().setLastTrack(track);
         this.isPlaying = true;
         this.isPaused = false;
         this.isBuffering = true;
@@ -803,11 +810,6 @@ public class AudioManager {
                 playTrack(currentTrack);
             } else if (!playlist.isEmpty()) {
                 playTrack(playlist.get(0));
-            } else {
-                List<AudioTrack> hits = PresetStations.getStations();
-                if (!hits.isEmpty()) {
-                    playTrack(hits.get(0));
-                }
             }
             return;
         }

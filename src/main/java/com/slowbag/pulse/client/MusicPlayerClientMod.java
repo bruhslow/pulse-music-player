@@ -110,11 +110,6 @@ public class MusicPlayerClientMod implements ClientModInitializer {
                             net.minecraft.client.gui.screens.Screen current = ScreenCompat.getCurrentScreen(client);
                             if (current == null) {
                                 ScreenCompat.setScreen(client, new MusicPlayerScreen(null));
-                            } else if (current instanceof MusicPlayerScreen) {
-                                // If screen is open and not listening to keybind recording, close screen
-                                if (!km.isListening()) {
-                                    ScreenCompat.setScreen(client, null);
-                                }
                             }
                         }
                         wasHotkeyDown = match;

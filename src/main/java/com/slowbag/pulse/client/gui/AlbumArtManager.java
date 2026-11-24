@@ -297,47 +297,65 @@ public class AlbumArtManager {
 
     private void initDefaultArtwork() {
         try {
-            int sz = 256;
-            BufferedImage img = new BufferedImage(sz, sz, BufferedImage.TYPE_INT_ARGB);
+            int targetW = 256;
+            int targetH = 178;
+            BufferedImage img = new BufferedImage(targetW, targetH, BufferedImage.TYPE_INT_ARGB);
             Graphics2D g = img.createGraphics();
             g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
             g.setRenderingHint(RenderingHints.KEY_RENDERING, RenderingHints.VALUE_RENDER_QUALITY);
+            g.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING, RenderingHints.VALUE_TEXT_ANTIALIAS_ON);
 
-            // Sleek deep obsidian violet background
-            g.setColor(new Color(0x14, 0x12, 0x1C, 0xFF));
-            g.fillRoundRect(0, 0, sz, sz, 32, 32);
+            // 1. Sleek deep obsidian purple gradient card
+            java.awt.GradientPaint bgGrad = new java.awt.GradientPaint(0, 0, new Color(0x11, 0x0E, 0x1A), targetW, targetH, new Color(0x22, 0x15, 0x33));
+            g.setPaint(bgGrad);
+            g.fillRoundRect(0, 0, targetW, targetH, 20, 20);
 
-            // Vinyl outer rim
-            g.setColor(new Color(0x22, 0x1A, 0x2C, 0xFF));
-            g.fillOval(12, 12, sz - 24, sz - 24);
-
-            // Concentric vinyl grooves
-            for (int r = 24; r < sz / 2 - 20; r += 12) {
-                g.setColor(new Color(0x3A, 0x2A, 0x48, 0x60));
-                g.drawOval(sz / 2 - r, sz / 2 - r, r * 2, r * 2);
+            // 2. Subtle ambient purple aura in center
+            int cx = targetW / 2;
+            int cy = targetH / 2 - 8;
+            for (int r = 70; r >= 30; r -= 10) {
+                g.setColor(new Color(0xA8, 0x55, 0xF7, 18));
+                g.fillOval(cx - r, cy - r, r * 2, r * 2);
             }
 
-            // Royal electric purple center label
-            int labelR = 48;
-            g.setColor(new Color(0xA8, 0x55, 0xF7, 0xFF));
-            g.fillOval(sz / 2 - labelR, sz / 2 - labelR, labelR * 2, labelR * 2);
+            // 3. Concentric soundwave / vinyl rings
+            for (int r = 58; r >= 28; r -= 10) {
+                g.setColor(new Color(0xC0, 0x84, 0xFC, 45));
+                g.drawOval(cx - r, cy - r, r * 2, r * 2);
+            }
 
-            // Outer ring on label
-            g.setColor(new Color(0xC0, 0x84, 0xFC, 0xAA));
-            g.drawOval(sz / 2 - labelR, sz / 2 - labelR, labelR * 2, labelR * 2);
+            // 4. Center Glowing Disc
+            int discR = 26;
+            g.setColor(new Color(0xA8, 0x55, 0xF7, 220));
+            g.fillOval(cx - discR, cy - discR, discR * 2, discR * 2);
+            g.setColor(new Color(0xE9, 0xD5, 0xFF, 180));
+            g.drawOval(cx - discR, cy - discR, discR * 2, discR * 2);
 
-            // Center spindle hole
-            int holeR = 12;
-            g.setColor(new Color(0x12, 0x10, 0x18, 0xFF));
-            g.fillOval(sz / 2 - holeR, sz / 2 - holeR, holeR * 2, holeR * 2);
+            // Center spindle dot
+            g.setColor(new Color(0x10, 0x0E, 0x1A));
+            g.fillOval(cx - 5, cy - 5, 10, 10);
 
-            // Subtle glowing purple musical note
-            g.setColor(new Color(0xFF, 0xFF, 0xFF, 0xEE));
-            g.setFont(new Font("SansSerif", Font.BOLD, 22));
-            java.awt.FontMetrics fm = g.getFontMetrics();
+            // White musical note inside disc
+            g.setColor(Color.WHITE);
+            g.setFont(new Font("SansSerif", Font.BOLD, 20));
+            java.awt.FontMetrics fmNote = g.getFontMetrics();
             String note = "♪";
-            int nw = fm.stringWidth(note);
-            g.drawString(note, (sz - nw) / 2, sz / 2 - labelR / 2 + 4);
+            g.drawString(note, cx - (fmNote.stringWidth(note) / 2), cy + 7);
+
+            // 5. Modern "PULSE" brand label below disc
+            g.setFont(new Font("SansSerif", Font.BOLD, 14));
+            java.awt.FontMetrics fmLbl = g.getFontMetrics();
+            String brand = "P U L S E";
+            int bx = cx - (fmLbl.stringWidth(brand) / 2);
+            int by = cy + discR + 26;
+            g.setColor(new Color(0x00, 0x00, 0x00, 120));
+            g.drawString(brand, bx + 1, by + 1);
+            g.setColor(new Color(0xE9, 0xD5, 0xFF));
+            g.drawString(brand, bx, by);
+
+            // 6. Top glass gloss reflection sheen
+            g.setColor(new Color(255, 255, 255, 28));
+            g.fillRoundRect(4, 4, targetW - 8, targetH / 3, 14, 14);
 
             g.dispose();
 

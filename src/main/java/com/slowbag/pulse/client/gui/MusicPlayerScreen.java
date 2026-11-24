@@ -341,6 +341,14 @@ public class MusicPlayerScreen extends Screen {
         return getHeroY();
     }
 
+    private int getArtWidth() {
+        return (int) AnimationUtil.lerp(104.0f, 72.0f, getEasedExpand());
+    }
+
+    private int getArtHeight() {
+        return (int) AnimationUtil.lerp(70.0f, 48.0f, getEasedExpand());
+    }
+
     @Override
     public void onClose() {
         ScreenCompat.setScreen(this.minecraft, this.parentScreen);
@@ -529,28 +537,63 @@ public class MusicPlayerScreen extends Screen {
         drawSoftBox(graphics, x + 3, y + 3, leftCardW, 83, 4, 0x30181A1D, 0x25FFFFFF);
         graphics.fill(x + 8, y + 4, x + leftCardW - 2, y + 5, 0x15FFFFFF);
 
-        // 1. Album Art Thumbnail (Left - 16:9 aspect frame: 80x52)
-        int artW = HERO_ART_WIDTH;
-        int artH = HERO_ART_HEIGHT;
+        // 1. Dynamic Album Art Thumbnail & Glassmorphic Container
+        int artW = getArtWidth();
+        int artH = getArtHeight();
         int artX = x + 7;
-        int artY = y + 7;
+        int artY = (int) AnimationUtil.lerp(y + 7, y + 8, getEasedExpand());
 
         Identifier artId = AlbumArtManager.getInstance().getAlbumArtId();
-        int borderColor = isBuffering ? 0xFFFFCC00 : (isPlaying ? 0xFFA855F7 : 0x50FFFFFF);
+        int glowColor = isBuffering ? 0x60FFCC00 : (isPlaying ? 0x50A855F7 : 0x20FFFFFF);
+        int borderColor = isBuffering ? 0xFFFFD700 : (isPlaying ? 0xFFA855F7 : 0x50FFFFFF);
+
+        // Ambient outer glow & depth shadow
+        drawSoftBox(graphics, artX - 1, artY - 1, artW + 2, artH + 2, 5, 0x1A000000, glowColor);
+
+        // Obsidian container with rounded bevel
+        drawSoftBox(graphics, artX, artY, artW, artH, 4, 0xFF121418, borderColor);
+
+        // Blit texture with clean 1px border inset
         if (artId != null) {
-            drawSoftBox(graphics, artX, artY, artW, artH, 4, 0xFF141618, borderColor);
             graphics.blit(artId, artX + 1, artY + 1, artX + artW - 1, artY + artH - 1, 0.0f, 1.0f, 0.0f, 1.0f);
         } else {
-            drawSoftBox(graphics, artX, artY, artW, artH, 4, 0xFF141618, 0x40FFFFFF);
             graphics.blit(AlbumArtManager.getInstance().getDefaultAlbumArtId(), artX + 1, artY + 1, artX + artW - 1, artY + artH - 1, 0.0f, 1.0f, 0.0f, 1.0f);
+        }
+
+        // Top glossy acrylic sheen
+        graphics.fill(artX + 2, artY + 1, artX + artW - 2, artY + 2, 0x45FFFFFF);
+        graphics.fill(artX + 2, artY + 2, artX + Math.max(10, artW / 2), artY + 3, 0x20FFFFFF);
+
+        // Bottom subtle gradient shade
+        graphics.fill(artX + 1, artY + artH - 14, artX + artW - 1, artY + artH - 1, 0x65000000);
+
+        // Live bouncing equalizer indicator or status badge on bottom-left of thumbnail
+        if (isPlaying && !isBuffering) {
+            int badgeW = 20;
+            int badgeH = 9;
+            int badgeX = artX + 4;
+            int badgeY = artY + artH - badgeH - 3;
+            drawSoftBox(graphics, badgeX, badgeY, badgeW, badgeH, 2, 0xB0000000, 0x80A855F7);
+            long nowMs = System.currentTimeMillis();
+            int h1 = 2 + (int) (Math.abs(Math.sin(nowMs * 0.007)) * 4);
+            int h2 = 2 + (int) (Math.abs(Math.sin(nowMs * 0.011 + 1.2)) * 4);
+            int h3 = 2 + (int) (Math.abs(Math.sin(nowMs * 0.009 + 2.4)) * 4);
+            graphics.fill(badgeX + 3, badgeY + badgeH - 1 - h1, badgeX + 5, badgeY + badgeH - 1, 0xFFA855F7);
+            graphics.fill(badgeX + 8, badgeY + badgeH - 1 - h2, badgeX + 10, badgeY + badgeH - 1, 0xFFC084FC);
+            graphics.fill(badgeX + 13, badgeY + badgeH - 1 - h3, badgeX + 15, badgeY + badgeH - 1, 0xFFE9D5FF);
+        } else if (isBuffering) {
+            int badgeX = artX + 4;
+            int badgeY = artY + artH - 12;
+            drawSoftBox(graphics, badgeX, badgeY, 26, 9, 2, 0xB0000000, 0x80FFCC00);
+            graphics.text(this.font, Component.literal("§eLOAD"), badgeX + 2, badgeY + 1, 0xFFFFFFFF, false);
         }
 
         // 2. Track Info & Source
         int infoX = artX + artW + 8;
         int maxTextW = leftCardW - artW - 24;
-        String title = (track != null) ? track.getTitle() : "No Song Selected";
-        String artist = (track != null) ? track.getArtist() : "Search or pick a song below & play";
-        String sourceTag = isBuffering ? "§e⏳ Buffering audio..." : ((track != null) ? (track.isLiveStream() ? "§c🔴 LIVE Stream" : "Source: " + track.getCategory()) : "Ready to play");
+        String title = (track != null) ? track.getTitle() : "No Track Selected";
+        String artist = (track != null) ? track.getArtist() : "Select a track from For You, Local, or URL";
+        String sourceTag = isBuffering ? "§e⏳ Buffering audio..." : ((track != null) ? (track.isLiveStream() ? "§c🔴 LIVE Stream" : "Source: " + track.getCategory()) : "Ready");
 
         String titlePrefix = isPlaying ? "§d§l" : "§f§l";
         graphics.text(this.font, Component.literal(titlePrefix + truncateToWidth(title, maxTextW - 16)), infoX, y + 7, 0xFFFFFFFF, true);
@@ -2310,7 +2353,7 @@ public class MusicPlayerScreen extends Screen {
             }
 
             // Timeline Progress Scrubber
-            int artW = HERO_ART_WIDTH;
+            int artW = getArtWidth();
             int infoX = heroX + 7 + artW + 8;
             int scrubX = infoX + 26;
             int scrubY = heroY + 42;
@@ -2346,8 +2389,13 @@ public class MusicPlayerScreen extends Screen {
                 if (notifyIfGuestInRoom()) return true;
                 playClickSound();
                 if (audioManager.isBuffering()) return true;
-                if (audioManager.getCurrentTrack() == null && !searchResults.isEmpty()) {
-                    audioManager.playTrack(searchResults.get(0));
+                if (audioManager.getCurrentTrack() == null) {
+                    if (!searchResults.isEmpty()) {
+                        audioManager.playTrack(searchResults.get(0));
+                    } else {
+                        statusMessage = "§eSelect a track below to play! 🎵";
+                        statusMessageTime = System.currentTimeMillis();
+                    }
                 } else {
                     audioManager.togglePause();
                 }
@@ -3159,7 +3207,7 @@ public class MusicPlayerScreen extends Screen {
             int heroW = getHeroWidth();
             int ctrlAreaW = 118;
             int leftCardW = heroW - ctrlAreaW - 6;
-            int artW = HERO_ART_WIDTH;
+            int artW = getArtWidth();
             int infoX = heroX + 7 + artW + 8;
             int scrubX = infoX + 26;
             int scrubW = (leftCardW - (scrubX - heroX)) - 32;
