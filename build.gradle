@@ -81,3 +81,67 @@ jar {
         println("  -> " + builtJar.name + " (Minecraft 26.x series: 26.1, 26.1.1, 26.1.2, 26.2, 26.3, 26.4+)")
     }
 }
+
+tasks.register("jar26_1_26_2", Jar) {
+    archiveBaseName.set("pulse-music-player")
+    archiveVersion.set("${mod_version}+26.1-26.2")
+    dependsOn tasks.named("jar")
+
+    from(zipTree(tasks.named("jar").get().archiveFile)) {
+        exclude 'fabric.mod.json'
+    }
+
+    def mcDep = ">=26.1 <=26.2"
+    def tempDir = file("${layout.buildDirectory.get().asFile}/tmp/jar26_1_26_2")
+
+    doFirst {
+        tempDir.mkdirs()
+        def baseJson = zipTree(tasks.named("jar").get().archiveFile).matching { include 'fabric.mod.json' }.singleFile.text
+        def modJson = baseJson.replace('"minecraft": "*"', '"minecraft": "' + mcDep + '"')
+                              .replace('"minecraft":"*"', '"minecraft":"' + mcDep + '"')
+        file("${tempDir}/fabric.mod.json").text = modJson
+    }
+
+    from(tempDir) {
+        include 'fabric.mod.json'
+    }
+
+    doLast {
+        println("[Pulse Build] Created JAR for Minecraft 26.1 - 26.2: ${archiveFile.get().asFile.name}")
+    }
+}
+
+tasks.register("jar26_3", Jar) {
+    archiveBaseName.set("pulse-music-player")
+    archiveVersion.set("${mod_version}+26.3")
+    dependsOn tasks.named("jar")
+
+    from(zipTree(tasks.named("jar").get().archiveFile)) {
+        exclude 'fabric.mod.json'
+    }
+
+    def mcDep = "~26.3"
+    def tempDir = file("${layout.buildDirectory.get().asFile}/tmp/jar26_3")
+
+    doFirst {
+        tempDir.mkdirs()
+        def baseJson = zipTree(tasks.named("jar").get().archiveFile).matching { include 'fabric.mod.json' }.singleFile.text
+        def modJson = baseJson.replace('"minecraft": "*"', '"minecraft": "' + mcDep + '"')
+                              .replace('"minecraft":"*"', '"minecraft":"' + mcDep + '"')
+        file("${tempDir}/fabric.mod.json").text = modJson
+    }
+
+    from(tempDir) {
+        include 'fabric.mod.json'
+    }
+
+    doLast {
+        println("[Pulse Build] Created standalone JAR for Minecraft 26.3: ${archiveFile.get().asFile.name}")
+    }
+}
+
+tasks.register("buildTwoReleases") {
+    dependsOn tasks.named("jar")
+    dependsOn tasks.named("jar26_1_26_2")
+    dependsOn tasks.named("jar26_3")
+}

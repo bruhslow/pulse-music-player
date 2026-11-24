@@ -618,23 +618,27 @@ public class MusicPlayerScreen extends Screen {
 
         // 2. Track Info & Source
         int infoX = artX + artW + 8;
-        int maxTextW = leftCardW - artW - 24;
+        int starBtnW = 16;
+        int starBtnH = 16;
+        int starX = x + leftCardW - starBtnW - 4;
+        int starY = y + 6;
+        int maxTextW = Math.max(20, (starX - 8) - infoX);
+
         String title = (track != null) ? track.getTitle() : "No Track Selected";
         String artist = (track != null) ? track.getArtist() : "Select a track from For You, Local, or URL";
         String sourceTag = isBuffering ? "§e⏳ Buffering audio..." : ((track != null) ? (track.isLiveStream() ? "§c🔴 LIVE Stream" : "Source: " + track.getCategory()) : "Ready");
 
         String titlePrefix = isPlaying ? "§d§l" : "§f§l";
-        graphics.text(this.font, Component.literal(titlePrefix + truncateToWidth(title, maxTextW - 16)), infoX, y + 7, 0xFFFFFFFF, true);
-        graphics.text(this.font, Component.literal("§7" + truncateToWidth(artist, maxTextW - 16)), infoX, y + 19, 0xFFA0988E, false);
+        graphics.text(this.font, Component.literal(titlePrefix + truncateToWidth(title, maxTextW, true)), infoX, y + 7, 0xFFFFFFFF, true);
+        graphics.text(this.font, Component.literal("§7" + truncateToWidth(artist, maxTextW, false)), infoX, y + 19, 0xFFA0988E, false);
         graphics.text(this.font, Component.literal("§8" + sourceTag), infoX, y + 29, 0xFF888888, false);
 
-        // Heart favorite toggle on Hero card
-        int heartX = x + leftCardW - 14;
-        int heartY = y + 7;
-        boolean isFav = com.slowbag.pulse.client.audio.FavoritesManager.getInstance().isFavorite(track);
-        boolean heartHover = mouseX >= heartX && mouseX <= heartX + 14 && mouseY >= heartY && mouseY <= heartY + 14;
-        String heartIcon = isFav ? "§d♥" : (heartHover ? "§d♡" : "§7♡");
-        graphics.text(this.font, Component.literal(heartIcon), heartX, heartY, isFav || heartHover ? 0xFFA855F7 : 0xFFFFFFFF, false);
+        // Star / Favorite toggle button on Hero card (isolated from title)
+        boolean isFav = (track != null) && com.slowbag.pulse.client.audio.FavoritesManager.getInstance().isFavorite(track);
+        boolean starHover = mouseX >= starX - 1 && mouseX <= starX + starBtnW + 1 && mouseY >= starY - 1 && mouseY <= starY + starBtnH + 1;
+        drawSoftBox(graphics, starX, starY, starBtnW, starBtnH, 3, isFav ? 0x40A855F7 : (starHover ? 0x30FFFFFF : 0x14FFFFFF), isFav ? 0xFFA855F7 : (starHover ? 0x70FFFFFF : 0x25FFFFFF));
+        String starIcon = isFav ? "§d★" : (starHover ? "§f★" : "§7☆");
+        graphics.centeredText(this.font, Component.literal(starIcon), starX + starBtnW / 2, starY + 4, 0xFFFFFFFF);
 
         // 3. Time Display & Progress Scrubber
         int scrubX = infoX + 26;
@@ -2375,10 +2379,12 @@ public class MusicPlayerScreen extends Screen {
                 return true;
             }
 
-            // Heart favorite on Hero
-            int heartX = heroX + leftCardW - 14;
-            int heartY = heroY + 7;
-            if (mx >= heartX && mx <= heartX + 14 && my >= heartY && my <= heartY + 14) {
+            // Star / Favorite toggle on Hero card
+            int starBtnW = 16;
+            int starBtnH = 16;
+            int starX = heroX + leftCardW - starBtnW - 4;
+            int starY = heroY + 6;
+            if (mx >= starX - 2 && mx <= starX + starBtnW + 2 && my >= starY - 2 && my <= starY + starBtnH + 2) {
                 if (audioManager.getCurrentTrack() != null) {
                     playClickSound();
                     boolean fav = com.slowbag.pulse.client.audio.FavoritesManager.getInstance().toggleFavorite(audioManager.getCurrentTrack());
